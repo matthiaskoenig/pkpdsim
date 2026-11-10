@@ -276,28 +276,31 @@ def layer_flow(layer: Layer | str) -> str:
     return f"Q_{layer}_li"
 
 
-def zone_flow(layer: Layer | str | None, zone: str) -> str:
-    """Get the flow of a layer in a zone, `Q_<layer>_li_<zone>` (l/min).
+def zone_flow(layer: Layer | str | None, site: str) -> str:
+    """Get the flow of a layer across the face of a site, `Q_<layer>_li_<site>` (l/min).
 
-    A pressure-driven sinusoid has a flow which depends on the position, so
-    every zone has its own flow. `None` (and the vascular site of the
-    well-stirred geometry) is the blood flow of the zone, `Q_li_<zone>`.
+    A pressure-driven sinusoid has a flow which depends on the position, and
+    the chain evaluates it at the faces of its zones: the site is `INFLOW`
+    for the periportal face of the chain (`Q_li_in`, the flow the organ
+    receives) and a zone for its pericentral face, the flow it passes on.
+    `None` (and the vascular site of the well-stirred geometry) is the blood
+    flow there, `Q_li_<site>`.
     """
     if layer is None or layer == VASCULAR:
-        return f"Q_li_{zone}"
-    return f"Q_{layer}_li_{zone}"
+        return f"Q_li_{site}"
+    return f"Q_{layer}_li_{site}"
 
 
-def sinusoid_flow(zone: str) -> str:
-    """Get the flow of one sinusoid in a zone, `Q_sin_<zone>` (m**3/s)."""
-    return f"Q_sin_{zone}"
+def sinusoid_flow(site: str) -> str:
+    """Get the flow of one sinusoid across the face of a site, `Q_sin_<site>` (m**3/s)."""
+    return f"Q_sin_{site}"
 
 
 def filtrate_flow(zone: str) -> str:
     """Get the filtrate flow the space of Disse carries out of a zone, `Q_fil_<zone>` (l/min).
 
     The water which has left the lumen through the fenestrae up to the
-    pericentral face of the zone, `Q_plasma_li_z1 - Q_plasma_li_<zone>` of a
+    pericentral face of the zone, `Q_plasma_li_in - Q_plasma_li_<zone>` of a
     pressure-driven sinusoid: it flows along the space of Disse and is
     reabsorbed where the lumen regains flow.
     """

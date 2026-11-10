@@ -474,20 +474,27 @@ def test_the_fenestral_clearance_is_p_times_a_in_litres_per_minute(
 # not hinder, enriched by `Q(z1)/Q(zk)` for one they stop.
 
 _PRESSURE_PROFILE = (
-    1.0,
-    1.094652,
-    1.175702,
-    1.235407,
-    1.267174,
-    1.267174,
-    1.235407,
-    1.175702,
-    1.094652,
+    1.103812,
+    1.197322,
+    1.272394,
+    1.321264,
+    1.338251,
+    1.321264,
+    1.272394,
+    1.197322,
+    1.103812,
     1.0,
 )
-"""`Q(z1)/Q(z<k>)` of a default pressure flow at ten zones, the enrichment of a
-solute which stays in the lumen (the flow falls to the middle of the sinusoid
-and rises back, `pkpdsim.zonation.flow`)."""
+"""`Q(0)/Q(x_k)` of a default pressure flow at ten zones, the enrichment of a
+solute which stays in the lumen: the flux through every face is the one of the
+inflow, so the concentration of a zone is the inflow flow over the flow of its
+pericentral face (the flow falls to the middle of the sinusoid and rises back,
+`pkpdsim.zonation.flow`). The last zone is back at the concentration of the
+inflow, the pericentral face carrying the flow the periportal one received.
+
+Measured again when the chain moved its flows from the centres of the zones to
+their faces; over the centres it was a hump of 26 % with the first and the last
+zone at 1.0 (1.0, 1.094652, 1.175702, 1.235407, 1.267174, ...)."""
 
 
 def _steady(
@@ -582,26 +589,40 @@ def test_a_well_stirred_zone_carries_the_whole_axial_water_flux(
 
 
 @pytest.mark.parametrize(
-    "p_onc,lymph", [(None, False), (0.0, True), (2000.0, True)], ids=str
+    ("p_onc", "lymph", "flatness"),
+    [(None, False, 1e-7), (0.0, True, 2e-7), (2000.0, True, 2e-4)],
+    ids=str,
 )
 def test_only_a_net_filtration_leaves_at_the_pericentral_end(
-    p_onc: float | None, lymph: bool, tmp_path: Path
+    p_onc: float | None, lymph: bool, flatness: float, tmp_path: Path
 ) -> None:
     """The default oncotic pressure filters and reabsorbs the same amount.
 
-    It is the mean of the two pressures, so `Q(z<n>)` is `Q(z1)` and the space
-    of Disse gives everything back to the lumen: no reaction takes the
-    filtrate out of the organ. A lower or a higher oncotic pressure filters or
-    reabsorbs on balance, and that remainder leaves (or enters) at the
-    pericentral end and is in the outflow ledger, which keeps the mass balance
-    exact (`tests/zonation/test_observers.py`).
+    It is the mean of the two pressures, so the flow is symmetric about the
+    middle of the sinusoid, `Q(L)` is `Q(0)` and the space of Disse gives
+    everything back to the lumen: no reaction takes the filtrate out of the
+    organ. A lower or a higher oncotic pressure filters or reabsorbs on
+    balance, and that remainder leaves (or enters) at the pericentral end and
+    is in the outflow ledger, which keeps the mass balance exact
+    (`tests/zonation/test_observers.py`).
+
+    The profile of the tracer stays that of the inflow in all three, and the
+    tolerance is the sieving of the tracer and not a numerical error: a radius
+    of 1e-12 m is a reflection coefficient of 7.67e-5 and not 0, and the
+    deviation is 1.9 times it wherever the water crosses the endothelium, so
+    the flatness measures 2.1e-8 at the default pressure, 1.2e-7 at the
+    filtering one and 1.46e-4 at the reabsorbing one, whose plasma flow grows
+    320-fold along the tube. It is proportional to the coefficient (1.46e-4,
+    1.46e-5 and 1.45e-6 at a radius of 1e-12, 1e-13 and 1e-14 m) and neither
+    the zone count (1.46e-4 at ten zones, 1.53e-4 at forty) nor a longer
+    simulation moves it.
     """
     r = _steady(tmp_path, radius=1e-12, p_onc=p_onc)
     out = ids.flow(
         "tr", ids.site(Layer.DISSE, ids.zone(10)), ids.site(Layer.DISSE, ids.OUTFLOW)
     )
     assert (out in r.model.getReactionIds()) is lymph
-    assert _profile(r, Layer.PLASMA) == pytest.approx([1.0] * 10, rel=1e-4)
+    assert _profile(r, Layer.PLASMA) == pytest.approx([1.0] * 10, rel=flatness)
 
 
 def test_an_imposed_flow_filters_nothing(tmp_path: Path) -> None:

@@ -21,18 +21,25 @@ lambda`,
 when the leak vanishes (`lambda` diverges, and the flow tends to the
 Poiseuille flow `(p_pp - p_pc) / (W L)` of a tube without a leak).
 
-**The flow depends on the position.** What leaks through the fenestrae leaves
-the lumen, so a pressure-driven sinusoid has a position-dependent flow and the
-convection of the chain no longer carries one `Q` through all zones: every
-zone `k` has the flow `Q_sin_<zone>` (m**3/s of one sinusoid) at its own
-position `zone_positions(n)[k - 1]`, the same position the zonal profiles
-use, and `Q_li_<zone>` (l/min, the liver has `N_sin` sinusoids, which follows
-the liver mass). The convection out of a zone, and the inflow into the first
-zone, read the flow of that zone (`ids.zone_flow`). spt evaluated the flow at
-`x = 0` only (its `FLOW: Q dependent on position`); this finishes it. The
-chain does not move the leaking fluid out of the lumen: the convection carries
-the solute with the local flow from zone to zone, and the leak of the solute
-is the fenestral exchange of the radial barrier.
+**The flow depends on the position, and the chain evaluates it at the faces of
+its zones.** What leaks through the fenestrae leaves the lumen, so a
+pressure-driven sinusoid has a position-dependent flow and the convection of
+the chain no longer carries one `Q` through all zones. A flow crosses a face,
+not a volume, so the engine is a cell-centred finite volume chain: the `n + 1`
+faces of the zones (`profiles.face_positions`) each have the flow
+`Q_sin_<site>` (m**3/s of one sinusoid) and `Q_li_<site>` (l/min, the liver has
+`N_sin` sinusoids, which follows the liver mass), where the site is `in` for
+the periportal face of the chain (`x = 0`) and the zone for its pericentral
+face (`x = k L / n`, `ids.zone_flow`). The inflow of the chain reads the flow
+of the periportal face, the convection out of a zone the flow of the face it
+crosses, and the outflow the flow at `x = L`, so the organ receives the flow at
+the portal face which the calibration targets, at every zone count. The
+volumes, the zonal profiles and the concentrations stay at the centres of the
+zones (`profiles.zone_positions`). spt evaluated the flow at `x = 0` only (its
+`FLOW: Q dependent on position`); this finishes it. The chain does not move the
+leaking fluid out of the lumen: the convection carries the solute with the flow
+of the face from zone to zone, and the leak of the solute is the fenestral
+exchange of the radial barrier.
 
 **The count of the fenestrae is derived from the porosity.** `w` needs the
 number of fenestrae per area, `N_fen`. The table gives `n_fen = 1e13 /m**2`
@@ -68,8 +75,12 @@ the **reference** liver at the default pressures is the reference flow of the
 settings (`ZonationSettings.reference_flow`, which the PBPK library fills with
 the total liver flow of its reference individual,
 `pkpdsim.pbpk.physiology.reference_flow`), the flow an imposed flow
-takes by default: switching between the two modes does not change the flow
-the organ receives. Both modes follow the liver mass from there - the pressure
+takes by default: switching between the two modes does not change the flow the
+organ receives. The chain evaluates its flows at the faces of its zones, so
+the flow it receives is the one at the portal face the factor is calibrated to
+and the guarantee holds at every zone count, which
+`test_the_chain_receives_the_reference_flow_in_both_modes` pins to 1e-12.
+Both modes follow the liver mass from there - the pressure
 flow because the number of sinusoids in parallel does
 (`sinusoid_count`), the imposed one because it scales the reference flow with
 `mass / reference_liver_mass` (`imposed_flow`) - so they agree at every liver
@@ -83,9 +94,12 @@ periportal inflow, what the portal vein and the hepatic artery deliver. `Q_li`,
 the mean over the zones, sets the velocity and the Peclet number and is not the
 reference flow: with `p_onc` at the mean pressure the fluid filters out of the
 first half and is reabsorbed in the second, so the mean throughput is 17 %
-below the inflow at 10 zones (`Q_li` is 0.829 of the reference flow) and 25 %
-below at one zone (0.747), and the residence time is correspondingly longer
-than `V / QH`.
+below the inflow at 10 zones (`Q_li` is 0.8315 of the reference flow, 0.8298 at
+40 zones and 0.8297 in the continuum), and the residence time is
+correspondingly longer than `V / QH`. It is the mean over the zones of the mean
+of the two faces of a zone, the trapezoidal rule over the faces (`mean_flow`),
+which is the inflow itself for a single zone, whose two faces are the two ends
+of the chain and carry the same flow.
 
 A pressure which gives a negative flow in a zone is refused: the chain does
 not run backwards.
@@ -123,7 +137,7 @@ from pkpdsim.zonation.geometry import (
     reference_liver_mass,
     sinusoid_count,
 )
-from pkpdsim.zonation.profiles import zone_positions
+from pkpdsim.zonation.profiles import face_positions
 
 if TYPE_CHECKING:
     from pkpdsim.zonation.settings import ZonationSettings
@@ -133,11 +147,12 @@ __all__ = [
     "LeakyTube",
     "PressureFlow",
     "calibrated_resistance_factor",
+    "face_flows",
     "fenestra_counts",
     "flow_objects",
     "imposed_flow",
     "leaky_tube",
-    "zone_flows",
+    "mean_flow",
 ]
 
 PA = UnitDefinition("Pa", "pascal", name="pascal")
@@ -434,10 +449,12 @@ def calibrated_resistance_factor(
     defaults only.
 
     The inflow is calibrated, not the mean over the zones: `Q_li`, which sets
-    the velocity and the Peclet number, is 0.829 of the reference flow at 10
-    zones and 0.747 at one zone, because with `P0` at the mean pressure fluid
+    the velocity and the Peclet number, is 0.8315 of the reference flow at 10
+    zones and 0.8298 at 40, because with `P0` at the mean pressure fluid
     filters out of the first half of the tube and returns in the second, so
-    the residence time is longer than `V / QH`.
+    the residence time is longer than `V / QH`. What the chain receives is
+    this inflow, the flow of the periportal face of its first zone, at every
+    zone count.
 
     Args:
         species: the species.
@@ -514,10 +531,15 @@ def leaky_tube(
     )
 
 
-def zone_flows(
+def face_flows(
     settings: "ZonationSettings", geo: SinusoidGeometry, mass: Q
 ) -> tuple[float, ...]:
-    """Get the flow of the liver at every zone of a pressure flow (l/min).
+    """Get the flow of the liver at every face of the zones of a pressure flow (l/min).
+
+    The `n + 1` faces of `n` zones (`profiles.face_positions`), periportal
+    first: the chain carries the flow of a face across it, so the first entry
+    is the flow the organ receives (`x = 0`, the target of the calibration)
+    and the last the flow it releases (`x = L`).
 
     Args:
         settings: the settings, with a `PressureFlow`.
@@ -525,18 +547,18 @@ def zone_flows(
         mass: the liver mass.
 
     Returns:
-        The flow of the sinusoids of the liver at the position of each zone.
+        The flow of the sinusoids of the liver at every face, `n + 1` values.
 
     Raises:
         ValueError: for a pressure drop which gives a negative flow.
     """
     flow = settings.flow
     if not isinstance(flow, PressureFlow):
-        raise TypeError("Only a pressure flow has a flow per zone.")
+        raise TypeError("Only a pressure flow has a flow per face.")
     tube = leaky_tube(flow, geo, settings.species, settings.reference_flow)
     n_sin = sinusoid_count(mass, geo, fractions(settings.species, settings.haematocrit))
     out = tuple(
-        tube.flow(x) * n_sin * 1e3 * 60.0 for x in zone_positions(settings.n_zones)
+        tube.flow(x) * n_sin * 1e3 * 60.0 for x in face_positions(settings.n_zones)
     )
     if min(out) < 0.0:
         raise ValueError(
@@ -546,6 +568,28 @@ def zone_flows(
             "is not a flow of the chain."
         )
     return out
+
+
+def mean_flow(flows: Sequence[float]) -> float:
+    """Get the mean flow of the chain over its zones from the flows of its faces.
+
+    The mean over the zones of the mean of the two faces of a zone, which is
+    the trapezoidal rule over the faces: `(Q(0)/2 + Q(1/n) + ... + Q(1 -
+    1/n) + Q(1)/2) / n`. This is `Q_li` of a pressure flow, the flow which
+    sets the velocity and the Peclet number of the chain, and it is below the
+    inflow `Q(0)` at the default oncotic pressure (0.8315 of it at 10 zones,
+    0.8298 at 40), and equal to it for a single zone, whose two faces are the
+    two ends of the chain.
+
+    Args:
+        flows: the flows of the `n + 1` faces (`face_flows`), periportal
+            first.
+
+    Returns:
+        The mean flow, in the unit of `flows`.
+    """
+    n = len(flows) - 1
+    return (0.5 * (flows[0] + flows[-1]) + sum(flows[1:-1])) / n
 
 
 def _constant(pid: str, q: Q, unit: UnitDefinition, name: str) -> Parameter:
@@ -699,7 +743,7 @@ def _pressure_objects(
     factor = resolved_resistance_factor(
         flow, geo, settings.species, settings.reference_flow
     )
-    flows = zone_flows(settings, geo, mass)
+    flows = face_flows(settings, geo, mass)
     n = settings.n_zones
     fr = fractions(settings.species, settings.haematocrit)
     f_lumen = derived(
@@ -868,17 +912,22 @@ def _pressure_objects(
                 "length over which the pressure of the leaky tube relaxes",
             ),
         ]
-    for k, (x, q_li) in enumerate(zip(zone_positions(n), flows, strict=True), start=1):
-        zone = ids.zone(k)
-        out += _zone_objects(zone, x, tube.flow(x), q_li, flat)
+    sites = (ids.INFLOW, *(ids.zone(k) for k in range(1, n + 1)))
+    for site, x, q_li in zip(sites, face_positions(n), flows, strict=True):
+        out += _face_objects(site, x, tube.flow(x), q_li, flat)
     out += _mean_flow(n, flows)
     return out
 
 
-def _zone_objects(
-    zone: str, x: float, q_sin: float, q_li: float, flat: bool
+def _face_objects(
+    site: str, x: float, q_sin: float, q_li: float, flat: bool
 ) -> list[Parameter | AssignmentRule]:
-    """The flow of one sinusoid and of the liver at the position of a zone."""
+    """The flow of one sinusoid and of the liver at the face of a site.
+
+    The face of a site is the one the chain carries its flow across: the
+    periportal face of the chain for `ids.INFLOW` (`x = 0`), the pericentral
+    face of the zone for a zone.
+    """
     if flat:
         formula = (
             f"({ids.PRESSURE_PORTAL} - {ids.PRESSURE_CENTRAL}) / "
@@ -892,8 +941,12 @@ def _zone_objects(
             f"({ids.PRESSURE_CENTRAL} - {ids.PRESSURE_ONCOTIC}) * cosh({s})) / "
             f"({ids.RESISTANCE_LUMEN} * {ids.DECAY_LENGTH} * sinh({big}))"
         )
-    sin_id, li_id = ids.sinusoid_flow(zone), ids.zone_flow(None, zone)
-    where = f"at the position {x:.3g} of zone {zone[1:]}"
+    sin_id, li_id = ids.sinusoid_flow(site), ids.zone_flow(None, site)
+    where = (
+        f"at the periportal face of the chain (position {x:.3g})"
+        if site == ids.INFLOW
+        else f"at the pericentral face of zone {site[1:]} (position {x:.3g})"
+    )
     return [
         _ruled(sin_id, q_sin, M3_PER_S, f"flow of one sinusoid {where}"),
         assignment_rule(sin_id, formula, M3_PER_S, f"flow of one sinusoid {where}"),
@@ -908,19 +961,20 @@ def _zone_objects(
 
 
 def _mean_flow(n: int, flows: Sequence[float]) -> list[Parameter | AssignmentRule]:
-    """The flow of the liver, the mean of the flows of its zones."""
-    terms = " + ".join(ids.zone_flow(None, ids.zone(k)) for k in range(1, n + 1))
+    """The flow of the liver, the mean over the zones of the flows of its faces.
+
+    The mean of the two faces of a zone, averaged over the zones, which is the
+    trapezoidal rule over the faces (`mean_flow`): the ends count half,
+    because each belongs to one zone only.
+    """
+    ends = (
+        f"0.5 dimensionless * ({ids.zone_flow(None, ids.INFLOW)} + "
+        f"{ids.zone_flow(None, ids.zone(n))})"
+    )
+    inner = [ids.zone_flow(None, ids.zone(k)) for k in range(1, n)]
+    terms = " + ".join([ends, *inner])
+    name = "blood flow through the liver (mean over the zones)"
     return [
-        _ruled(
-            ids.FLOW,
-            sum(flows) / n,
-            U.l_per_min,
-            "blood flow through the liver (mean of the zones)",
-        ),
-        assignment_rule(
-            ids.FLOW,
-            f"({terms}) / {n} dimensionless",
-            U.l_per_min,
-            "blood flow through the liver (mean of the zones)",
-        ),
+        _ruled(ids.FLOW, mean_flow(flows), U.l_per_min, name),
+        assignment_rule(ids.FLOW, f"({terms}) / {n} dimensionless", U.l_per_min, name),
     ]

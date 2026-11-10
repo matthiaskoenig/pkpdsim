@@ -68,6 +68,7 @@ __all__ = [
     "Sigmoid",
     "Weight",
     "Weights",
+    "face_positions",
     "lobular_area",
     "lobular_edge",
     "lobular_radius",
@@ -287,6 +288,29 @@ def zone_positions(n: int) -> tuple[float, ...]:
     if n < 1:
         raise ValueError(f"A lobule has at least one zone, not {n}.")
     return tuple((k - 0.5) / n for k in range(1, n + 1))
+
+
+def face_positions(n: int) -> tuple[float, ...]:
+    """Get the lobular positions of the faces of the zones.
+
+    The `n + 1` faces of `n` zones, `j / n` from the periportal face of the
+    first zone (0) to the pericentral face of the last (1): the positions at
+    which the chain evaluates its flows, where `zone_positions` gives the
+    centres at which it evaluates the volumes, the profiles and the
+    concentrations.
+
+    Args:
+        n: the number of zones.
+
+    Returns:
+        The position `j / n` of every face, `j` from 0 (periportal).
+
+    Raises:
+        ValueError: for less than one zone.
+    """
+    if n < 1:
+        raise ValueError(f"A lobule has at least one zone, not {n}.")
+    return tuple(j / n for j in range(n + 1))
 
 
 def zone_areas(n: int) -> tuple[float, ...]:

@@ -662,7 +662,13 @@ def test_the_observers_of_a_composed_model_close_the_balance(tmp_path: Path) -> 
 def test_the_boundary_ledgers_integrate_the_flows_of_their_zones(
     tmp_path: Path, flow: ImposedFlow | PressureFlow
 ) -> None:
-    """`cum_in` grows with the carrier flows of z1 and `cum_out` with those of the last zone."""
+    """`cum_in` grows with the carrier flows of the inflow and `cum_out` with those of the last zone.
+
+    The chain evaluates its flows at the faces of its zones, so the ledger of
+    the inflow integrates the flows across the periportal face of the chain
+    (`in`) and the one of the outflow those across the pericentral face of the
+    last zone.
+    """
     n = 5
     settings = _settings(n, flow=flow)
     r = _runner(tmp_path, settings)
@@ -672,20 +678,20 @@ def test_the_boundary_ledgers_integrate_the_flows_of_their_zones(
         for k in range(1, n + 1):
             r[f"[drg_{layer}_z{k}]"] = c * (1.0 + 0.1 * k)
 
-    def carrier_flow(layer: Layer, k: int) -> float:
+    def carrier_flow(layer: Layer, site: str) -> float:
         sid = (
             ids.layer_flow(layer)
             if isinstance(flow, ImposedFlow)
-            else ids.zone_flow(layer, ids.zone(k))
+            else ids.zone_flow(layer, site)
         )
         return float(r[sid])
 
     expected_in = sum(
-        carrier_flow(layer, 1) * c
+        carrier_flow(layer, ids.INFLOW) * c
         for layer, c in ((Layer.PLASMA, 1.0), (Layer.RBC, 2.0))
     )
     expected_out = sum(
-        carrier_flow(layer, n) * r[f"[drg_{layer}_z{n}]"]
+        carrier_flow(layer, ids.zone(n)) * r[f"[drg_{layer}_z{n}]"]
         for layer in (Layer.PLASMA, Layer.RBC)
     )
     assert r[observers.ledger("in", "drg") + "'"] == pytest.approx(
@@ -695,9 +701,10 @@ def test_the_boundary_ledgers_integrate_the_flows_of_their_zones(
         expected_out, rel=1e-12, abs=0
     )
     if not isinstance(flow, ImposedFlow):
-        # the first and the last zone differ, so a swapped zone is seen
-        first, last = carrier_flow(Layer.PLASMA, 1), carrier_flow(Layer.PLASMA, n)
-        print(f"Q_plasma z1 {first!r} z{n} {last!r}")
+        # the two ends differ, so a swapped site is seen
+        first = carrier_flow(Layer.PLASMA, ids.INFLOW)
+        last = carrier_flow(Layer.PLASMA, ids.zone(n))
+        print(f"Q_plasma in {first!r} z{n} {last!r}")
         if flow.p_onc is not None:
             assert first != pytest.approx(last, rel=1e-3, abs=0)
 

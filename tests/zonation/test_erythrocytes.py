@@ -130,8 +130,15 @@ def _profile(r: roadrunner.RoadRunner, layer: Layer | str) -> list[float]:
 
 
 def _flows(r: roadrunner.RoadRunner, layer: Layer | None) -> list[float]:
-    """The flow (l/min) of a layer in every zone, the blood flow for `None`."""
-    return [r[ids.zone_flow(layer, ids.zone(k))] for k in range(1, N + 1)]
+    """The flow (l/min) of a layer across every face, the blood flow for `None`.
+
+    The chain evaluates its flows at the faces of its zones, so the first
+    entry is the flow the chain receives at its periportal face (`in`) and the
+    others the flow which leaves every zone at its pericentral face: `N + 1`
+    values.
+    """
+    sites = (ids.INFLOW, *(ids.zone(k) for k in range(1, N + 1)))
+    return [r[ids.zone_flow(layer, site)] for site in sites]
 
 
 # --- the flow of the two conduits -------------------------------------------
@@ -143,21 +150,24 @@ def test_the_erythrocytes_keep_their_flow_along_a_pressure_driven_sinusoid(
     """An erythrocyte does not pass a fenestra, so its conduit loses no water.
 
     The flow of the erythrocytes is the share `Hct` of the blood entering the
-    chain in every zone, the plasma carries the rest of the local flow of the
-    leaky tube, and the two plus the filtrate of the space of Disse add up to
-    the inflow. The engine split the local flow of every zone into `Hct` and
-    `1 - Hct` before, which let the erythrocyte conduit lose water to nowhere.
+    chain across every face, the plasma carries the rest of the flow of the
+    leaky tube there, and the two plus the filtrate of the space of Disse add
+    up to the inflow. The engine split the local flow of every zone into `Hct`
+    and `1 - Hct` before, which let the erythrocyte conduit lose water to
+    nowhere.
     """
     r = _steady(tmp_path, None)
     blood = _flows(r, None)
     rbc = _flows(r, Layer.RBC)
     plasma = _flows(r, Layer.PLASMA)
-    assert blood[4] < blood[0]  # the tube leaks, so there is something to lose
-    assert rbc == pytest.approx([HCT * blood[0]] * N, rel=1e-12)
+    assert blood[5] < blood[0]  # the tube leaks, so there is something to lose
+    assert rbc == pytest.approx([HCT * blood[0]] * (N + 1), rel=1e-12)
     assert plasma == pytest.approx([q - HCT * blood[0] for q in blood], rel=1e-12)
-    filtrate = [0.0] + [r[ids.filtrate_flow(ids.zone(k))] for k in range(2, N + 1)]
+    # the filtrate across the periportal face of the chain is 0, nothing having
+    # filtered yet, and every zone filters what its lumen loses over its length
+    filtrate = [0.0] + [r[ids.filtrate_flow(ids.zone(k))] for k in range(1, N + 1)]
     total = [p + b + f for p, b, f in zip(plasma, rbc, filtrate, strict=True)]
-    assert total == pytest.approx([blood[0]] * N, rel=1e-12)
+    assert total == pytest.approx([blood[0]] * (N + 1), rel=1e-12)
 
 
 def test_a_solute_in_the_erythrocytes_is_not_enriched_by_the_filtration(
@@ -257,15 +267,19 @@ def test_the_two_conduits_carry_the_blood_flux_of_the_pbpk_library(
     r = _steady(tmp_path, EQUILIBRIUM)
     bp = blood_to_plasma(_tracer(EQUILIBRIUM), HCT)
     assert bp == pytest.approx(1.0 - HCT + HCT * 5.0, rel=1e-12)
-    first = ids.zone(1)
+    # across the periportal face of the chain, where the blood enters at the
+    # haematocrit of the settings; from there on the plasma carries the leak
+    # of the leaky tube alone, so the split of a face inside the chain is not
+    # that of the haematocrit
+    face = ids.INFLOW
     flux = (
-        r[ids.zone_flow(Layer.PLASMA, first)]
+        r[ids.zone_flow(Layer.PLASMA, face)]
         * r[ids.species("tr", Layer.PLASMA, ids.INFLOW)]
-        + r[ids.zone_flow(Layer.RBC, first)]
+        + r[ids.zone_flow(Layer.RBC, face)]
         * r[ids.species("tr", Layer.RBC, ids.INFLOW)]
     )
     expected = (
-        r[ids.zone_flow(None, first)]
+        r[ids.zone_flow(None, face)]
         * bp
         * r[ids.species("tr", Layer.PLASMA, ids.INFLOW)]
     )
@@ -345,8 +359,7 @@ def test_a_kinetic_exchange_fills_the_erythrocytes_along_the_zones(
         r[ids.zone_flow(Layer.PLASMA, last)] * plasma[-1]
         + r[ids.zone_flow(Layer.RBC, last)] * rbc[-1]
     )
-    first = ids.zone(1)
-    into = r[ids.zone_flow(Layer.PLASMA, first)] * 1.0
+    into = r[ids.zone_flow(Layer.PLASMA, ids.INFLOW)] * 1.0
     assert out == pytest.approx(into, rel=1e-6)
 
 

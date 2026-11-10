@@ -64,13 +64,16 @@ compartment. The zones are a chain from periportal to pericentral:
   is reabsorbed where the lumen regains flow. The water is conserved term by
   term, so a freely sieved solute keeps the concentration of the inflow through
   the whole chain and a solute no fenestra lets through is enriched by
-  `Q(z1)/Q(z<k>)`, which is the physics of the two. The transmural flux is the
-  leak of the lumen, `Q_li_<z<k-1>> - Q_li_<z<k>>`: an erythrocyte does not
-  pass a fenestra, so the whole leak of the tube is the plasma's. The
+  `Q(0)/Q(x_k)`, which is the physics of the two. The chain evaluates its flows
+  at the faces of its zones, so the transmural flux of a zone is the leak of
+  its lumen between its two faces, `Q_li_<z<k-1>> - Q_li_<z<k>>` (`Q_li_in -
+  Q_li_z1` for the first): an erythrocyte does not pass a fenestra, so the
+  whole leak of the tube is the plasma's. The
   erythrocytes therefore keep their flow, the share `Hct` of the blood which
-  enters the chain, in every zone (`Q_rbc_li_<zone>`), and the plasma carries
-  the rest of the local flow of the tube (`Q_plasma_li_<zone> = Q_li_<zone> -
-  Hct * Q_li_z1`); the three add up to the inflow in every zone. The static
+  enters the chain, across every face (`Q_rbc_li_<site>`), and the plasma
+  carries the rest of the flow of the tube there (`Q_plasma_li_<site> =
+  Q_li_<site> - Hct * Q_li_in`); the three add up to the inflow at every
+  face. The static
   haematocrit, the ratio of the two volumes, stays the one of the inflow while
   the flow haematocrit rises towards the pericentral end: the engine does not
   zone the volumes of the two conduits.
@@ -125,9 +128,10 @@ from pkpdsim.zonation.flow import (
     PER_M2,
     PressureFlow,
     assignment_rule,
+    face_flows,
     flow_objects,
     imposed_flow,
-    zone_flows,
+    mean_flow,
 )
 from pkpdsim.zonation.geometry import (
     Layer,
@@ -180,7 +184,7 @@ FILTRATION_FLOOR = 1e-9
 """The net filtration of a sinusoid below this share of the inflow of its lumen is none.
 
 The symmetric filtration of the default oncotic pressure cancels exactly in
-the physics and to 2e-16 of the inflow in floating point, a genuine net
+the physics and to a few 1e-16 of the inflow in floating point, a genuine net
 filtration is tens of percent of it (`ZonationBuilder._net_filtration`)."""
 
 POROSITY = "porosity"
@@ -540,7 +544,9 @@ class ZonationBuilder:
         """The blood flow through the whole liver (l/min), not negative.
 
         A pressure flow has a flow which depends on the position: this is
-        the mean of the flows of the zones, the flow which sets the velocity.
+        the mean over the zones of the flows of their faces (`flow.mean_flow`),
+        the flow which sets the velocity, and not the flow the organ receives
+        (which is the flow of the periportal face, `_blood_flows()[0]`).
 
         Raises:
             ValueError: for a flow which is no number, has no flow unit or is
@@ -548,8 +554,7 @@ class ZonationBuilder:
         """
         flow = self.settings.flow
         if isinstance(flow, PressureFlow):
-            flows = self._zone_flows()
-            return sum(flows) / len(flows)
+            return mean_flow(self._blood_flows())
         q = imposed_flow(
             flow,
             self.settings.reference_flow,
@@ -564,9 +569,9 @@ class ZonationBuilder:
             )
         return q
 
-    def _zone_flows(self) -> tuple[float, ...]:
-        """The flow of the liver (l/min) at every zone of a pressure flow."""
-        return zone_flows(self.settings, self._geo(), self._mass())
+    def _face_flows(self) -> tuple[float, ...]:
+        """The flow of the liver (l/min) at every face of a pressure flow, `n + 1` values."""
+        return face_flows(self.settings, self._geo(), self._mass())
 
     def _haematocrit_value(self) -> Value:
         """The haematocrit of the lumen with the provenance of the two fractions."""
@@ -593,7 +598,7 @@ class ZonationBuilder:
         """The haematocrit of the lumen entering the chain, 0 without an erythrocyte layer.
 
         The volume fractions of the two conduits give it. It is the
-        haematocrit of the blood which enters the first zone: the plasma of a
+        haematocrit of the blood which enters the chain: the plasma of a
         pressure-driven sinusoid filters out along the lobule and the
         erythrocytes do not, so the flow haematocrit rises towards the
         pericentral end (`_plasma_flows`) while the static one, the ratio of
@@ -604,36 +609,42 @@ class ZonationBuilder:
         return rbc / (rbc + fr[Layer.PLASMA].value)
 
     def _blood_flows(self) -> tuple[float, ...]:
-        """The blood flow of the lumen (l/min) at every zone.
+        """The blood flow of the lumen (l/min) at every face of the chain, `n + 1` values.
 
-        The flow of the position of the zone for a pressure flow, the one
-        imposed flow in every zone otherwise.
+        The chain is a cell-centred finite volume chain: it evaluates its
+        flows at the faces of the zones and not at their centres, so the
+        first entry is the flow the organ receives at the periportal face
+        (`x = 0`, which a calibrated pressure flow makes the reference flow)
+        and the last the flow it releases at `x = L`. A pressure flow has the
+        flow of the leaky tube at each of them (`flow.face_flows`), an
+        imposed flow the one number everywhere.
         """
         if isinstance(self.settings.flow, PressureFlow):
-            return self._zone_flows()
-        return (self._flow(),) * self.settings.n_zones
+            return self._face_flows()
+        return (self._flow(),) * (self.settings.n_zones + 1)
 
     def _erythrocyte_flow(self) -> float:
         """The flow of the erythrocytes (l/min), the same in every zone.
 
         An erythrocyte does not pass a fenestra, so the erythrocyte conduit
         neither loses nor gains water along the sinusoid: its flow is the
-        share `Hct` of the blood which enters the chain, in every zone. The
-        plasma carries the whole leak of the leaky tube, which is what makes
-        the chain conservative; the share `Hct` of the local flow, which the
-        engine carried before, let the erythrocytes lose water to nowhere and
-        enriched a solute in them by `Q(z1)/Q(z<k>)`.
+        share `Hct` of the blood which enters the chain at its periportal
+        face, across every face of it. The plasma carries the whole leak of
+        the leaky tube, which is what makes the chain conservative; the share
+        `Hct` of the local flow, which the engine carried before, let the
+        erythrocytes lose water to nowhere and enriched a solute in them by
+        `Q(0)/Q(x)`.
         """
         return self._haematocrit() * self._blood_flows()[0]
 
     def _plasma_flows(self) -> tuple[float, ...]:
-        """The flow of the plasma (l/min) at every zone.
+        """The flow of the plasma (l/min) across every face, `n + 1` values.
 
-        The lumen of a zone carries the flow of the leaky tube at its
-        position, of which the erythrocytes carry a constant share, so the
-        plasma carries the rest: `Q_li_<zone> - Hct * Q_li_z1`. The three
-        add up to the inflow in every zone, with the filtrate of the space of
-        Disse (`_filtrate_flows`), so no water is lost.
+        The lumen carries the flow of the leaky tube at the face, of which
+        the erythrocytes carry a constant share, so the plasma carries the
+        rest: `Q_li_<site> - Hct * Q_li_in`. The three add up to the inflow
+        at every face, with the filtrate of the space of Disse
+        (`_filtrate_flows`), so no water is lost.
 
         Raises:
             ValueError: for a flow which leaves the plasma conduit nothing:
@@ -734,26 +745,30 @@ class ZonationBuilder:
             return [ids.VASCULAR]
         return [layer for layer in _CARRIERS if layer in self._fractions()]
 
-    def carrier_flow(self, layer: Layer | str, zone: str) -> str:
-        """The id of the flow of a carrier layer out of a zone.
+    def carrier_flow(self, layer: Layer | str, site: str) -> str:
+        """The id of the flow of a carrier layer across the face of a site.
 
-        An imposed flow is one number for all zones; a pressure flow has the
-        flow of the position of the zone.
+        The face of a site is the downstream one: the periportal face of the
+        chain for `ids.INFLOW` (`x = 0`, the flow the organ receives) and the
+        pericentral face of a zone for a zone (the flow it passes on, that of
+        the last zone the flow the organ releases). An imposed flow is one
+        number at all of them; a pressure flow has the flow of the leaky tube
+        at each face.
 
         A **well-stirred** zone of a pressure flow is the exception: its one
         vascular compartment holds the lumen and the space of Disse, so the
         plasma which filters out of the lumen stays in it and flows on with
         it. The axial water flux of the compartment is the sum of the two,
-        which is the flow entering the chain, the same in every zone
-        (`Q_li_z1`); the position-dependent `Q_li_<zone>` of the lumen alone
+        which is the flow entering the chain, the same across every face
+        (`Q_li_in`); the position-dependent `Q_li_<zone>` of the lumen alone
         would make the zones lose water to nowhere and enrich every interior
-        zone by `Q(z1)/Q(zk)`. The sinusoid geometry has the two conduits
+        zone by `Q(0)/Q(x)`. The sinusoid geometry has the two conduits
         apart and carries the filtrate explicitly (`filtrate`).
         """
         if isinstance(self.settings.flow, PressureFlow):
             if self.settings.geometry is Geometry.WELL_STIRRED:
-                return ids.zone_flow(layer, ids.zone(1))
-            return ids.zone_flow(layer, zone)
+                return ids.zone_flow(layer, ids.INFLOW)
+            return ids.zone_flow(layer, site)
         return ids.FLOW if layer == ids.VASCULAR else ids.layer_flow(layer)
 
     def _species(self) -> list[Species]:
@@ -805,11 +820,11 @@ class ZonationBuilder:
                 )
             )
             for layer in self.carriers():
-                for zone, flow, formula in self._carrier_flows(Layer(layer)):
+                for site, flow, formula in self._carrier_flows(Layer(layer)):
                     pid = (
                         ids.layer_flow(layer)
-                        if zone is None
-                        else ids.zone_flow(layer, zone)
+                        if site is None
+                        else ids.zone_flow(layer, site)
                     )
                     params.append(
                         Parameter(
@@ -848,18 +863,19 @@ class ZonationBuilder:
     def _carrier_flows(self, layer: Layer) -> list[tuple[str | None, float, str]]:
         """The flow of a carrier layer: the zone, the value and the formula.
 
-        One entry without a zone for an imposed flow, which is the same in
-        every zone, and one per zone for a pressure flow. The erythrocytes
-        carry the share `Hct` of the blood entering the chain, which no zone
-        changes (`_erythrocyte_flow`), and the plasma the rest of the local
-        flow of the tube (`_plasma_flows`); the two shares of one flow are
-        the same thing where the flow is the same in every zone.
+        One entry without a site for an imposed flow, which is the same at
+        every face, and one per face for a pressure flow (the periportal face
+        of the chain, `ids.INFLOW`, and the pericentral face of every zone).
+        The erythrocytes carry the share `Hct` of the blood entering the
+        chain, which no zone changes (`_erythrocyte_flow`), and the plasma the
+        rest of the local flow of the tube (`_plasma_flows`); the two shares
+        of one flow are the same thing where the flow is the same everywhere.
 
         Args:
             layer: the carrier, the plasma or the erythrocytes.
 
         Returns:
-            The entries, each the zone (`None` for all of them), the value
+            The entries, each the site (`None` for all of them), the value
             (l/min) and the formula of its assignment rule.
         """
         if not isinstance(self.settings.flow, PressureFlow):
@@ -874,15 +890,18 @@ class ZonationBuilder:
                     f"{ids.FLOW} * (1 dimensionless - {ids.HAEMATOCRIT})",
                 )
             ]
-        rbc = f"{ids.zone_flow(None, ids.zone(1))} * {ids.HAEMATOCRIT}"
+        rbc = f"{ids.zone_flow(None, ids.INFLOW)} * {ids.HAEMATOCRIT}"
         flows = self._plasma_flows() if layer is Layer.PLASMA else None
         out: list[tuple[str | None, float, str]] = []
-        for k in range(1, self.settings.n_zones + 1):
-            zone = ids.zone(k)
+        sites = (
+            ids.INFLOW,
+            *(ids.zone(k) for k in range(1, self.settings.n_zones + 1)),
+        )
+        for j, site in enumerate(sites):
             if flows is None:
-                out.append((zone, self._erythrocyte_flow(), rbc))
+                out.append((site, self._erythrocyte_flow(), rbc))
             else:
-                out.append((zone, flows[k - 1], f"{ids.zone_flow(None, zone)} - {rbc}"))
+                out.append((site, flows[j], f"{ids.zone_flow(None, site)} - {rbc}"))
         return out
 
     def _diffusion_parameters(self) -> list[Parameter]:
@@ -1037,11 +1056,14 @@ class ZonationBuilder:
         edge = target if source == ids.INFLOW else source
         left = "" if source == ids.INFLOW else a
         right = "" if target == ids.OUTFLOW else b
+        # the flux crosses the face downstream of its source (the periportal
+        # face of the chain for the inflow), the compartment it is written in
+        # is the zone it touches
         return Reaction(
             flow_id(substance.sid, ids.site(layer, source), ids.site(layer, target)),
             f"{left} -> {right}",
             formula=(
-                f"{self.carrier_flow(layer, edge)} * {upstream}",
+                f"{self.carrier_flow(layer, source)} * {upstream}",
                 U.mmole_per_min,
             ),
             compartment=ids.volume(layer, edge),
@@ -1316,16 +1338,16 @@ class ZonationBuilder:
         )
 
     def _filtrate_flows(self) -> tuple[float, ...]:
-        """The filtrate flow (l/min) the space of Disse carries out of every zone.
+        """The filtrate flow (l/min) the space of Disse carries across every face.
 
-        The plasma which has left the lumen up to the pericentral face of the
-        zone, `Q_plasma(z1) - Q_plasma(zk)`: the lumen of the first zone
-        receives the inflow at its own flow and so neither filters nor
-        reabsorbs, which makes the first entry 0, and every further zone
-        filters the flow its lumen loses. What filters is plasma: an
-        erythrocyte does not pass a fenestra, so the whole leak of the tube
-        is the plasma conduit's (`_plasma_flows`) and the filtrate is
-        `Q_li_z1 - Q_li_<zone>`, the leak of the lumen.
+        The plasma which has left the lumen up to the face, `Q_plasma(0) -
+        Q_plasma(x)`, `n + 1` values: the first is 0 at the periportal face
+        of the chain, where nothing has filtered yet, and every zone filters
+        the flow its lumen loses between its two faces, the first zone
+        included. What filters is plasma: an erythrocyte does not pass a
+        fenestra, so the whole leak of the tube is the plasma conduit's
+        (`_plasma_flows`) and the filtrate is `Q_plasma_li_in -
+        Q_plasma_li_<site>`, the leak of the lumen.
         """
         flows = self._plasma_flows()
         return tuple(flows[0] - q for q in flows)
@@ -1333,15 +1355,16 @@ class ZonationBuilder:
     def _net_filtration(self) -> float:
         """The filtrate flow (l/min) which leaves at the pericentral end, 0 for none.
 
-        The last entry of `_filtrate_flows`, with a flow below
-        `FILTRATION_FLOOR` of the inflow of the lumen read as none: at the
-        default oncotic pressure the tube filters and reabsorbs the same
-        amount by the symmetry of the zone positions, so the balance is zero
-        and nothing leaves, and the cancellation of the two is exact in the
-        physics and not in floating point (2e-16 of the inflow at the table
-        geometry of the rat). A genuine net filtration is tens of percent of
-        the inflow, so the floor separates the two by seven orders of
-        magnitude and the decision does not hang on the last bit.
+        The last entry of `_filtrate_flows`, `Q_plasma(0) - Q_plasma(L)`,
+        with a flow below `FILTRATION_FLOOR` of the inflow of the lumen read
+        as none: at the default oncotic pressure the flow of the leaky tube is
+        symmetric about the middle, so the two faces of the chain carry the
+        same flow, the tube filters and reabsorbs the same amount and nothing
+        leaves. The cancellation is exact in the physics and not in floating
+        point (a few 1e-16 of the inflow at the table geometry of the rat). A
+        genuine net filtration is tens of percent of the inflow, so the floor
+        separates the two by seven orders of magnitude and the decision does
+        not hang on the last bit.
         """
         flows = self._filtrate_flows()
         inflow = self._plasma_flows()[0]
@@ -1352,18 +1375,19 @@ class ZonationBuilder:
     def _filtrate_objects(self) -> tuple[list[Parameter], list[AssignmentRule]]:
         """The filtrate flow of every zone and the reflection of every substance.
 
-        `Q_fil_<zone>` is an assignment rule of the plasma flows, so it follows
-        a change of the pressures as the flows do; the first zone has none (it
-        is 0 by construction).
+        `Q_fil_<zone>` is an assignment rule of the plasma flows, so it
+        follows a change of the pressures as the flows do; every zone has one,
+        the first included (the flow across the periportal face of the chain
+        is the zero the cumulation starts from and is no parameter).
         """
         if not self._has_filtrate():
             return [], []
         n = self.settings.n_zones
         flows = self._filtrate_flows()
-        first = ids.zone_flow(Layer.PLASMA, ids.zone(1))
+        first = ids.zone_flow(Layer.PLASMA, ids.INFLOW)
         params: list[Parameter] = []
         rules: list[AssignmentRule] = []
-        for k in range(2, n + 1):
+        for k in range(1, n + 1):
             zone = ids.zone(k)
             pid = ids.filtrate_flow(zone)
             name = (
@@ -1373,7 +1397,7 @@ class ZonationBuilder:
             params.append(
                 Parameter(
                     pid,
-                    flows[k - 1],
+                    flows[k],
                     unit=U.l_per_min,
                     name=name,
                     constant=False,
@@ -1742,9 +1766,10 @@ class ZonationBuilder:
     def _transit(self) -> float:
         """The shortest residence time of the blood in a zone (min), 0 without a flow.
 
-        The volume of the lumen of a zone over the largest flow any zone
-        carries: the time in which the erythrocytes of the fastest zone have
-        to reach their equilibrium.
+        The volume of the lumen of a zone over the largest flow any face of
+        the chain carries (the periportal one of a pressure flow, the flow the
+        organ receives): the time in which the erythrocytes of the fastest
+        zone have to reach their equilibrium.
         """
         q = max(self._blood_flows())
         if q <= 0.0:
@@ -1984,14 +2009,14 @@ class ZonationBuilder:
           (`sigma = 1`) stays in the lumen and is enriched by the filtration,
           which is the physics; a freely sieved one (`sigma = 0`) is carried
           with the water and keeps the concentration of the inflow.
-        - `FLOW_<s>_disse_z<k>_disse_z<k+1>`: `Q_fil_<z<k>> * c` of the space
+        - `FLOW_<s>_disse_z<k>_disse_z<k+1>`: `Q_fil_z<k> * c` of the space
           of Disse, upwind, the filtrate flowing along the barrier. Without it
           the space of Disse of a zone would be a dead end, the net transmural
           flux would be zero at steady state whatever the drag, and the lumen
           would keep the whole enrichment (the defect this fixes).
         - `FLOW_<s>_disse_z<n>_disse_out` at the pericentral end, the filtrate
           which the lumen has not taken back (the hepatic lymph): the net
-          filtration of the whole sinusoid, `Q_fil_<z<n>>`, which is 0 at the
+          filtration of the whole sinusoid, `Q_fil_z<n>`, which is 0 at the
           default oncotic pressure (the mean of the two pressures, where what
           filters out of the first half returns in the second) and is then not
           emitted. The reaction is the zero-gradient boundary of the space of
@@ -2013,9 +2038,9 @@ class ZonationBuilder:
         for substance in self.substances:
             sid = substance.sid
             if self._reflection(substance) < 1.0:
-                for k in range(2, n + 1):
+                for k in range(1, n + 1):
                     out.append(self._drag_reaction(substance, k))
-            for k in range(2, n):
+            for k in range(1, n):
                 out.append(self._filtrate_reaction(sid, ids.zone(k), ids.zone(k + 1)))
             if self._net_filtration() != 0.0:
                 out.append(
@@ -2028,11 +2053,11 @@ class ZonationBuilder:
         zone = ids.zone(k)
         a = ids.species(substance.sid, Layer.PLASMA, zone)
         b = ids.species(substance.sid, Layer.DISSE, zone)
-        # the filtrate of the first zone is 0 by construction, so the flux of
-        # the second zone is its own filtrate and not a difference
+        # the filtrate across the periportal face of the chain is 0, so the
+        # flux of the first zone is its own filtrate and not a difference
         flux = (
             ids.filtrate_flow(zone)
-            if k == 2
+            if k == 1
             else f"({ids.filtrate_flow(zone)} - {ids.filtrate_flow(ids.zone(k - 1))})"
         )
         return Reaction(

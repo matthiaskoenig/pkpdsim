@@ -295,7 +295,7 @@ def observer_objects(
     closed = settings.boundary is FlowBoundary.OPEN
     carriers = builder.carriers()
     blood = ids.VASCULAR if ids.VASCULAR in layers else Layer.PLASMA
-    first, last = ids.zone(1), ids.zone(n)
+    last = ids.zone(n)
     flowing = builder.has_flow()
     out = SbmlObjects()
     for substance in substances:
@@ -357,8 +357,12 @@ def observer_objects(
             out.parameters.append(p)
             out.rules.append(r)
         if flowing and closed:
+            # the inflow crosses the periportal face of the chain, where a
+            # calibrated pressure flow carries the reference flow; the flow of
+            # the first zone is that of its pericentral face
             influx = " + ".join(
-                f"{builder.carrier_flow(layer, first)} * {ids.species(s, layer, ids.INFLOW)}"
+                f"{builder.carrier_flow(layer, ids.INFLOW)} * "
+                f"{ids.species(s, layer, ids.INFLOW)}"
                 for layer in carriers
             )
             # the filtrate which a net filtration takes out of the space of

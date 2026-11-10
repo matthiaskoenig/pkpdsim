@@ -32,16 +32,17 @@ from pkpdsim.zonation.flow import (
     ImposedFlow,
     PressureFlow,
     calibrated_resistance_factor,
+    face_flows,
     flow_objects,
+    mean_flow,
     resolved_resistance_factor,
-    zone_flows,
 )
 from pkpdsim.zonation.geometry import (
     SinusoidGeometry,
     geometry,
     reference_liver_mass,
 )
-from pkpdsim.zonation.profiles import Linear, zone_positions
+from pkpdsim.zonation.profiles import Linear, face_positions
 from pkpdsim.zonation.settings import ZonationSettings
 
 from .conftest import mass_g
@@ -49,6 +50,10 @@ from .conftest import mass_g
 TRACER = Substance("tr", "tracer", Value(100.0, U.g_per_mole))
 _MASS = mass_g(1000.0)
 _N = 10
+_FACES = (ids.INFLOW, *(ids.zone(k) for k in range(1, _N + 1)))
+"""The sites whose faces the chain carries its flow across, periportal first:
+the periportal face of the chain (`in`) and the pericentral face of every
+zone."""
 _SPT_FLOW = PressureFlow(resistance_factor=10.0)
 """The uncalibrated factor of the spt model, which its formula is checked at."""
 
@@ -82,10 +87,18 @@ def _simulated(
     flow: ImposedFlow | PressureFlow,
     tmp_path: Path,
     geo: SinusoidGeometry | None = None,
+    haematocrit: float | None = None,
     **changes: float,
 ) -> roadrunner.RoadRunner:
-    """The initialized roadrunner model of a chain with the given flow."""
-    settings = _settings(flow, geometry_constants=geo)
+    """The initialized roadrunner model of a chain with the given flow.
+
+    A `haematocrit` of 0 is the lumen of plasma alone, which the tubes of the
+    spt model need: they leak more than half of the blood which enters them
+    into the space of Disse, which the builder refuses for a lumen that also
+    has to carry erythrocytes (they pass no fenestra, so their flow is
+    `Hct * Q(0)` across every face).
+    """
+    settings = _settings(flow, geometry_constants=geo, haematocrit=haematocrit)
     model = ZonationBuilder(settings, [TRACER], None).build()
     path = tmp_path / "flow.xml"
     create_model(model, filepath=path, sbml_level=3, sbml_version=2, validate=False)
@@ -98,8 +111,8 @@ def _simulated(
 
 
 def _q_sin(r: roadrunner.RoadRunner) -> list[float]:
-    """The flow (m**3/s) of one sinusoid in every zone."""
-    return [r[ids.sinusoid_flow(ids.zone(k))] for k in range(1, _N + 1)]
+    """The flow (m**3/s) of one sinusoid across every face of the chain."""
+    return [r[ids.sinusoid_flow(site)] for site in _FACES]
 
 
 def _without_leak(geo: SinusoidGeometry) -> SinusoidGeometry:
@@ -255,9 +268,9 @@ def test_the_flow_approaches_poiseuille_as_the_leak_vanishes(tmp_path: Path) -> 
 def test_the_leaky_tube_matches_the_spt_formula_at_the_spt_parameters(
     tmp_path: Path,
 ) -> None:
-    """Every zone has the spt flow at its own position, `PP_x = position * L`."""
-    flows = _q_sin(_simulated(_SPT_FLOW, tmp_path, _spt_geometry()))
-    for q, position in zip(flows, zone_positions(_N), strict=True):
+    """Every face has the spt flow at its own position, `PP_x = position * L`."""
+    flows = _q_sin(_simulated(_SPT_FLOW, tmp_path, _spt_geometry(), haematocrit=0.0))
+    for q, position in zip(flows, face_positions(_N), strict=True):
         assert q == _eq(_spt_q(position), rel=1e-6)
 
 
@@ -273,14 +286,14 @@ def test_the_values_of_the_file_are_the_values_of_its_formulas(tmp_path: Path) -
     create_model(model, filepath=path, sbml_level=3, sbml_version=2, validate=False)
     formulas = roadrunner.RoadRunner(str(path))
     values = individual(path)
-    for k in range(1, _N + 1):
-        for sid in (ids.sinusoid_flow(ids.zone(k)), ids.zone_flow(None, ids.zone(k))):
+    for site in _FACES:
+        for sid in (ids.sinusoid_flow(site), ids.zone_flow(None, site)):
             assert values[sid] == _eq(formulas[sid], rel=1e-12)
     assert values[ids.FLOW] == _eq(formulas[ids.FLOW], rel=1e-12)
 
 
 def test_the_zones_have_different_flows(tmp_path: Path) -> None:
-    """The flow depends on the position (the FIXME of spt): the zones differ."""
+    """The flow depends on the position (the FIXME of spt): the faces differ."""
     flows = _q_sin(_simulated(PressureFlow(), tmp_path))
     assert max(flows) / min(flows) > 1.01
 
@@ -355,19 +368,30 @@ def test_the_zone_flows_split_into_the_carriers_of_the_leaky_tube(
     """
     r = _simulated(PressureFlow(), tmp_path)
     h = r[ids.HAEMATOCRIT]
-    first = r[ids.zone_flow(None, "z1")]
+    first = r[ids.zone_flow(None, ids.INFLOW)]
     assert r[ids.zone_flow(None, "z5")] < first  # the tube leaks
-    for zone in ("z1", "z5", "z10"):
-        q = r[ids.zone_flow(None, zone)]
-        assert r[ids.zone_flow("rbc", zone)] == _eq(h * first)
-        assert r[ids.zone_flow("plasma", zone)] == _eq(q - h * first)
+    for site in (ids.INFLOW, "z1", "z5", "z10"):
+        q = r[ids.zone_flow(None, site)]
+        assert r[ids.zone_flow("rbc", site)] == _eq(h * first)
+        assert r[ids.zone_flow("plasma", site)] == _eq(q - h * first)
 
 
-def test_the_flow_of_the_liver_is_the_mean_of_the_zones(tmp_path: Path) -> None:
-    """`Q_li` of the pressure flow is the mean flow of the zones, in l/min."""
+def test_the_flow_of_the_liver_is_the_mean_over_the_zones_of_its_faces(
+    tmp_path: Path,
+) -> None:
+    """`Q_li` of the pressure flow is the mean over the zones of their faces, in l/min.
+
+    The mean of the two faces of a zone, averaged over the zones, which is
+    the trapezoidal rule over the faces: the two ends of the chain belong to
+    one zone each and count half.
+    """
     r = _simulated(PressureFlow(), tmp_path)
-    zones = [r[ids.zone_flow(None, ids.zone(k))] for k in range(1, _N + 1)]
-    assert r[ids.FLOW] == _eq(sum(zones) / _N)
+    faces = [r[ids.zone_flow(None, site)] for site in _FACES]
+    assert r[ids.FLOW] == _eq((0.5 * (faces[0] + faces[-1]) + sum(faces[1:-1])) / _N)
+    assert r[ids.FLOW] == _eq(mean_flow(faces))
+    # and not the plain mean of the `n + 1` faces, which counts the ends twice
+    # as much as a zone owns them
+    assert r[ids.FLOW] != _eq(sum(faces) / len(faces), rel=1e-6)
     assert r[ids.FLOW] > 0.0
 
 
@@ -470,6 +494,40 @@ def test_both_flow_modes_agree_at_their_defaults(
     assert _inflow(outputs["pressure"]) == _eq(expected, 1e-9)
 
 
+@pytest.mark.parametrize("n_zones", [1, 10, 40])
+@pytest.mark.parametrize("mode", ["imposed", "pressure"])
+def test_the_chain_receives_the_reference_flow_in_both_modes(
+    mode: str, n_zones: int, tmp_path: Path
+) -> None:
+    """The flow the chain receives is the reference flow, in both modes and at every zone count.
+
+    This is the guarantee of the calibration read where it has to hold: the
+    inflow reactions of the carriers at a unit inflow concentration, whose
+    rate is the flow the periportal boundary of the chain carries. The chain
+    evaluates its flows at the faces of the zones, so the inflow crosses the
+    periportal face at `x = 0`, the position the resistance factor is
+    calibrated at, and the guarantee holds at every zone count. With the flow
+    of the centre of the first zone, which the engine read before, the chain
+    received 0.949927 of the reference flow at ten zones, 0.747244 at one and
+    0.986893 at forty.
+    """
+    flow = ImposedFlow() if mode == "imposed" else PressureFlow()
+    settings = ZonationSettings(
+        n_zones=n_zones,
+        flow=flow,
+        reference_flow=reference_flow(ZonationSettings().species),
+    )
+    r = _build(settings, tmp_path)
+    carriers = ("plasma", "rbc")
+    for layer in carriers:
+        r[ids.species("tr", layer, ids.INFLOW)] = 1.0
+    received = sum(
+        r[ids.flow("tr", ids.site(layer, ids.INFLOW), ids.site(layer, ids.zone(1)))]
+        for layer in carriers
+    )
+    assert received == _eq(reference_flow(settings.species).value, rel=1e-12)
+
+
 def test_the_calibrated_factor_is_per_species_and_replaced_by_a_given_one() -> None:
     """The rat needs about five times the factor of spt; a given factor is kept."""
     rat, human = (
@@ -518,7 +576,7 @@ def test_the_flow_falls_to_the_middle_and_rises_again() -> None:
     """
     settings = _settings(PressureFlow())
     geo = geometry(settings.species)
-    q = zone_flows(settings, geo, _MASS)
+    q = face_flows(settings, geo, _MASS)
     half = _N // 2
     assert all(a > b for a, b in itertools.pairwise(q[:half]))
     assert all(a < b for a, b in itertools.pairwise(q[half:]))
@@ -532,7 +590,7 @@ def test_the_calibrated_factor_does_not_follow_the_pressures(tmp_path: Path) -> 
             (
                 PressureFlow(),
                 PressureFlow(p_pp=Value(2000.0, "Pa")),
-                PressureFlow(p_pc=Value(0.0, "Pa"), p_onc=Value(100.0, "Pa")),
+                PressureFlow(p_pc=Value(400.0, "Pa"), p_onc=Value(600.0, "Pa")),
             )
         )
     ]
@@ -551,15 +609,25 @@ def test_the_calibrated_factor_follows_the_geometry() -> None:
     assert calibrated_resistance_factor(Species.RAT, wider, rat) == _eq(71.19, 1e-3)
 
 
-@pytest.mark.parametrize(("n_zones", "ratio"), [(10, 0.82885), (1, 0.74724)])
-def test_the_mean_flow_is_below_the_reference_flow(
+@pytest.mark.parametrize(
+    ("n_zones", "ratio"), [(10, 0.831508), (40, 0.829846), (1, 1.0)]
+)
+def test_the_mean_flow_over_the_zones_against_the_reference_flow(
     n_zones: int, ratio: float, tmp_path: Path
 ) -> None:
-    """`Q_li`, the mean over the zones, is 0.829 (10 zones) or 0.747 (1 zone) of the reference.
+    """`Q_li`, the mean over the zones, is 0.8315 of the reference flow at ten zones.
 
-    The inflow is calibrated; with `P0` at the mean pressure the fluid which
-    filters out of the first half returns in the second, so the mean
-    throughput, which sets the velocity, is lower than the inflow.
+    The chain receives the reference flow at its periportal face, which is
+    what the factor is calibrated to; with `P0` at the mean pressure the fluid
+    which filters out of the first half returns in the second, so the mean
+    throughput, which sets the velocity and the Peclet number, is lower:
+    0.831508 at ten zones, 0.829846 at forty and 0.82974 at 160. The one
+    exception is a single zone, whose two faces are the two ends of the chain
+    and carry the same flow, so its mean is the inflow itself. The mean over
+    the centres of the zones, which the engine took while it evaluated its
+    flows there, was 0.82885 at ten zones and 0.74724 at one: the midpoint
+    rule under-, the trapezoidal rule over-estimates the mean of this convex
+    profile.
     """
     settings = ZonationSettings(
         n_zones=n_zones,
@@ -614,13 +682,12 @@ def test_a_change_of_the_organ_flow_reaches_every_flow(
 def test_a_change_of_the_pressure_reaches_the_flow_of_every_zone(
     tmp_path: Path, factor: float
 ) -> None:
-    """The flow of a zone and of its carriers follows a change after the initialization."""
-    zones = [ids.zone(k) for k in range(1, _N + 1)]
+    """The flow of a face and of its carriers follows a change after the initialization."""
     r = _loaded(_settings(PressureFlow()), tmp_path)
     p_portal = r[ids.PRESSURE_PORTAL]
     p_central = r[ids.PRESSURE_CENTRAL]
     p_onc = r[ids.PRESSURE_ONCOTIC]
-    sins = [ids.sinusoid_flow(z) for z in zones]
+    sins = [ids.sinusoid_flow(site) for site in _FACES]
     expected = []
     # the flow is linear in the pressures relative to the oncotic pressure
     r2 = _loaded(
@@ -642,12 +709,13 @@ def test_a_change_of_the_pressure_reaches_the_flow_of_every_zone(
         },
     )
     assert [r[s] for s in sins] == _eq(expected, rel=1e-9)
-    rbc = r[ids.HAEMATOCRIT] * r[ids.zone_flow(None, zones[0])]
-    for z in zones:
-        assert r[ids.zone_flow("plasma", z)] == _eq(r[ids.zone_flow(None, z)] - rbc)
-        assert r[ids.zone_flow("rbc", z)] == _eq(rbc)
-    zone_flows_ = [r[ids.zone_flow(None, z)] for z in zones]
-    assert r[ids.FLOW] == _eq(sum(zone_flows_) / _N)
+    rbc = r[ids.HAEMATOCRIT] * r[ids.zone_flow(None, ids.INFLOW)]
+    for site in _FACES:
+        assert r[ids.zone_flow("plasma", site)] == _eq(
+            r[ids.zone_flow(None, site)] - rbc
+        )
+        assert r[ids.zone_flow("rbc", site)] == _eq(rbc)
+    assert r[ids.FLOW] == _eq(mean_flow([r[ids.zone_flow(None, s)] for s in _FACES]))
 
 
 @pytest.mark.parametrize("factor", [2.0, 0.5])
