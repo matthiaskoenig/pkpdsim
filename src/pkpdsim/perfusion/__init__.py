@@ -102,6 +102,7 @@ _LAZY_NAMES = {
     "circuit_figure": "figure",
     "circuit_svg": "figure",
     "interactive_circuit": "figure",
+    "PerfusionExtension": "builder",
     "build": "builder",
     "compose": "builder",
 }
@@ -138,6 +139,7 @@ __all__ = [
     "Organ",
     "Perfusate",
     "PerfusionDefinition",
+    "PerfusionExtension",
     "PerfusionSimulationExperiment",
     "buffer_objects",
     "buffer_parameters",

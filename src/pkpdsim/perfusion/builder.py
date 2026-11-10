@@ -38,6 +38,13 @@ uniform profile is 1 in every zone. The cells release the quantities of the
 organ (`PerfusionDefinition.released`), and the enzymes of the cells, the
 perfusate and the observers are the released ones.
 
+A package adds a mechanism of its own with a `PerfusionExtension`
+(`build(extension=)`): the cells of the mechanism are written into the cell
+model once, so the engine exposes its species and its reactions per zone under
+the ids of the perfusion, its constants are shared by the zones, and what the
+circuit or the zones hold is written into the composed model. The machine
+perfusion model of pkdb_models adds its reperfusion injury this way.
+
 The liver secretes bile (`bile`, `bile_rate`). The kidney filters the
 perfusate (`_kidney`): the GFR `GFR_ki` is that of an ample flow,
 `GFR_max_ki = gfr_ki*M_ki` (`gfr_ki` in l/min/kg, numerically ml/min/g), at
@@ -59,7 +66,7 @@ import dataclasses
 import math
 import re
 import textwrap
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import NamedTuple
 
@@ -114,6 +121,38 @@ _P = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
 _TERMS_START = textwrap.dedent(terms_of_use).strip().splitlines()[0]
 """The first line of the terms of use of a model, where the notes of a package end
 and its terms begin (`_terms`)."""
+
+
+@dataclasses.dataclass(frozen=True)
+class PerfusionExtension:
+    """A mechanism which a package adds to the model of a definition.
+
+    The build composes the cellular core of a liver as a submodel of every
+    zone, so a mechanism of the cells is written into the cell model once
+    (`cell`) and not per zone: the engine exposes its species and reactions
+    under the ids of `pkpdsim.perfusion.ids`, as it does those of the library
+    (`hmgb1_z1_cell`, `HMGB1R_z1`), and the liver holds its constants
+    (`shared`), one in the flat model instead of one per zone. A mechanism of
+    the circuit or of the zones is written into the composed model
+    (`composed`), after the build has placed the circuit, the zones and the
+    observers.
+
+    Attributes:
+        cell: the extension of the cell model of the zones, in place, which
+            returns it; `None` for a mechanism without cells of its own.
+        shared: the ids of the elements of `cell` which the liver holds once,
+            its constants; every other element of the extension is one per
+            zone. A shared element is a port of the cell model (which stays
+            loadable alone, with its own value) and an element of the composed
+            model, which replaces the port of every submodel: `compose`
+            refuses an id which its model does not hold.
+        composed: the extension of the composed model, in place, which returns
+            it; `None` for a mechanism of the cells alone.
+    """
+
+    cell: Callable[[Model], Model] | None = None
+    shared: tuple[str, ...] = ()
+    composed: Callable[[Model], Model] | None = None
 
 
 def zone_factors(organ: Organ) -> dict[str, dict[str, float]]:
@@ -184,7 +223,9 @@ def _compartment(
     )
 
 
-def _organ(definition: PerfusionDefinition) -> _Organ:
+def _organ(
+    definition: PerfusionDefinition, extension: PerfusionExtension | None = None
+) -> _Organ:
     """Get the compartments and objects of the zones of the organ.
 
     The zones of a liver are the zonation engine's (`_liver`); the zones of
@@ -198,7 +239,7 @@ def _organ(definition: PerfusionDefinition) -> _Organ:
     """
     organ = definition.organ.resolved(definition.species)
     if isinstance(organ, LiverOrgan):
-        return _liver(definition, organ)
+        return _liver(definition, organ, extension)
     key, n, what = organ.key, organ.zones, organ.what
     m = circuit.converted(organ.mass, 1e-3, U.kg, "g")
     rho, f_vas, f_cell = organ.density, organ.vascular_fraction, organ.cell_fraction
@@ -281,13 +322,20 @@ class _Quantity(NamedTuple):
     diffusion: None = None
 
 
-def zone_cell_model(definition: PerfusionDefinition) -> Model | None:
+def zone_cell_model(
+    definition: PerfusionDefinition, extension: PerfusionExtension | None = None
+) -> Model | None:
     """Get the cell model of the zones of the liver of a definition, `None` for no liver.
 
     The cell model has the zonal factor of every process with a profile as a
     port and no bile compartment (the liver of the builder has no bile of the
     engine), and is named after the model (`<sid>_core`, the stem of its file), so
     that the models of two definitions in one folder have a file each.
+
+    Args:
+        definition: the definition.
+        extension: a mechanism of the cells of a package, applied to the cell
+            model (`PerfusionExtension.cell`).
     """
     organ = definition.organ
     if not isinstance(organ, LiverOrgan):
@@ -308,6 +356,8 @@ def zone_cell_model(definition: PerfusionDefinition) -> Model | None:
         creators=list(definition.creators),
     )
     cell.sid = f"{definition.sid}_core"
+    if extension is not None and extension.cell is not None:
+        cell = extension.cell(cell)
     return cell
 
 
@@ -418,7 +468,11 @@ def _zone_formula(
     return re.sub(r"[A-Za-z_][A-Za-z0-9_]*", rename, formula)
 
 
-def _liver(definition: PerfusionDefinition, organ: LiverOrgan) -> _Organ:
+def _liver(
+    definition: PerfusionDefinition,
+    organ: LiverOrgan,
+    extension: PerfusionExtension | None = None,
+) -> _Organ:
     """Get the zones of the liver from the zonation engine.
 
     The engine chains the zones (the vascular space and the cells of every
@@ -436,7 +490,7 @@ def _liver(definition: PerfusionDefinition, organ: LiverOrgan) -> _Organ:
         model.
     """
     n, released = organ.zones, definition.released
-    cell = zone_cell_model(definition)
+    cell = zone_cell_model(definition, extension)
     assert cell is not None
     quantities = circuit.quantities(definition.perfusate, released)
     assert organ.density is not None
@@ -486,6 +540,7 @@ def _liver(definition: PerfusionDefinition, organ: LiverOrgan) -> _Organ:
             for p in cell_constants(definition.core, bile=True, released=released)
         ),
         *ARRHENIUS,
+        *(extension.shared if extension is not None else ()),
     ]
     (rule,) = [r for r in cell.rate_rules if r.variable == "Vbile"]
 
@@ -833,11 +888,16 @@ def model_ids(model: Model) -> set[str]:
     return {str(e.sid) for group in groups for e in group or []}
 
 
-def compose(definition: PerfusionDefinition) -> Model:
+def compose(
+    definition: PerfusionDefinition, extension: PerfusionExtension | None = None
+) -> Model:
     """Compose the model of a definition.
 
     Args:
         definition: the definition.
+        extension: a mechanism of a package, its cells written into the cell
+            model of the zones and the rest into the composed model
+            (`PerfusionExtension`).
 
     Returns:
         The model: the circuit, the zones of the organ and the observers.
@@ -863,7 +923,7 @@ def compose(definition: PerfusionDefinition) -> Model:
     objects += core.CoreObjects(parameters=core.buffer_parameters())
     objects += circuit.perfusate_parameters(perfusate, released)
     objects += circuit.circuit_objects(definition.circuit, perfusate, released)
-    zones_of = _organ(definition)
+    zones_of = _organ(definition, extension)
     objects += zones_of.objects
     compartments = [
         *circuit.circuit_compartments(
@@ -935,7 +995,33 @@ def compose(definition: PerfusionDefinition) -> Model:
         model.submodels = comp.submodels
         model.replaced_elements = comp.replaced_elements
         model.deletions = comp.deletions
+    if extension is not None and extension.composed is not None:
+        model = extension.composed(model)
+    if extension is not None and extension.shared:
+        _check_shared(model, extension.shared)
     return model
+
+
+def _check_shared(model: Model, shared: Sequence[str]) -> None:
+    """Check that the composed model holds every shared element of an extension.
+
+    Raises:
+        ValueError: for a shared id which the composed model does not hold; the
+            liver replaces the copy of every submodel by its own element, so
+            the element has to be there.
+    """
+    held = {
+        str(x.sid)
+        for x in (*model.parameters, *model.species, *model.compartments)
+        if x.sid is not None
+    }
+    missing = sorted(set(shared) - held)
+    if missing:
+        raise ValueError(
+            f"The model '{model.sid}' does not hold the shared elements of its "
+            f"extension: {missing}. Add them to the composed model as well "
+            "(PerfusionExtension.shared)."
+        )
 
 
 def _unique(parameters: list[Parameter]) -> list[Parameter]:
@@ -950,7 +1036,11 @@ def _unique(parameters: list[Parameter]) -> list[Parameter]:
     return list(seen.values())
 
 
-def build(definition: PerfusionDefinition, output_dir: Path) -> Path:
+def build(
+    definition: PerfusionDefinition,
+    output_dir: Path,
+    extension: PerfusionExtension | None = None,
+) -> Path:
     """Build a definition: write the SBML model of the circuit.
 
     The model of an organ without submodels is written as `<sid>.xml`. The
@@ -962,6 +1052,8 @@ def build(definition: PerfusionDefinition, output_dir: Path) -> Path:
     Args:
         definition: the definition.
         output_dir: the folder of the model.
+        extension: a mechanism of a package, in the cell model of the zones
+            and in the composed model (`PerfusionExtension`).
 
     Returns:
         The path of the model which is simulated: `<sid>.xml`, `<sid>_flat.xml`
@@ -971,8 +1063,8 @@ def build(definition: PerfusionDefinition, output_dir: Path) -> Path:
         ValueError: if the definition is invalid or the model has SBML
             errors (the units included).
     """
-    model = compose(definition)
-    cell = zone_cell_model(definition)
+    model = compose(definition, extension)
+    cell = zone_cell_model(definition, extension)
     if cell is None:
         path = output_dir / f"{definition.sid}.xml"
         # SBML L3V2, the level of the models of pkdb_models: the names of the rules

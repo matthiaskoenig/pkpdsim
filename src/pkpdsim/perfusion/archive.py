@@ -23,7 +23,7 @@ from typing import Any
 from sbmlsim.release.archive import ArchiveModel, write_archive
 
 from pkpdsim.perfusion.anatomy import circuit_anatomy_figure
-from pkpdsim.perfusion.builder import build, zone_cell_model
+from pkpdsim.perfusion.builder import PerfusionExtension, build, zone_cell_model
 from pkpdsim.perfusion.definition import PerfusionDefinition
 from pkpdsim.perfusion.figure import circuit_figure
 
@@ -37,6 +37,7 @@ def create_archive(
     model: str,
     copyright: str,
     readme: Path | None = None,
+    extension: PerfusionExtension | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Build a definition and write its files and the COMBINE archive.
 
@@ -65,6 +66,8 @@ def create_archive(
         copyright: copyright of the MIT license, e.g. `2026 Matthias König`.
         readme: the README of the model repository, left out of the archive if
             `None`.
+        extension: a mechanism of a package, in the cell model of the zones
+            and in the composed model (`pkpdsim.perfusion.PerfusionExtension`).
 
     Returns:
         The files with their entries in the COMBINE archive, by the keys of a
@@ -80,9 +83,9 @@ def create_archive(
         ValueError: for a definition which does not build (`build`).
     """
     model_output_dir.mkdir(parents=True, exist_ok=True)
-    path = build(definition, model_output_dir)
+    path = build(definition, model_output_dir, extension)
     sid = definition.sid
-    cell = zone_cell_model(definition)
+    cell = zone_cell_model(definition, extension)
     # the flat model is the master entry: the comp model of a liver carries it
     models: list[Path | ArchiveModel] = (
         [path]
