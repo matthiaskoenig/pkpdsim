@@ -119,6 +119,38 @@ def test_build_validates_and_flattens(simple: BuildResult) -> None:
     r.simulate(0, 10, 5)
 
 
+def test_the_flat_model_defines_every_unit_once(simple: BuildResult) -> None:
+    """The flat model carries the units of the library, not a copy per organ.
+
+    The flattening prefixes the id of every element of a submodel, the unit
+    definitions included, so a flat body model held one set of units per organ
+    and the math of an organ read `1 LU__mM` where the top model reads `1 mM`.
+    `flat_model` merges them, so a unit of the flat model is defined once and
+    no element names a copy. A base unit kind of SBML (`litre`, `second`,
+    `dimensionless`) needs no definition and is allowed.
+    """
+    model = _flat(simple).getModel()
+    sids = [
+        model.getUnitDefinition(k).getId() for k in range(model.getNumUnitDefinitions())
+    ]
+    assert sids == sorted(set(sids), key=sids.index), "a unit is defined twice"
+    assert not [sid for sid in sids if "__" in sid], sids
+    named = set()
+    elements = model.getListOfAllElements()
+    for k in range(elements.getSize()):
+        element = elements.get(k)
+        for attribute in ("Units", "SubstanceUnits"):
+            getter = getattr(element, f"get{attribute}", None)
+            if getter is not None and getter():
+                named.add(getter())
+    base = {
+        sid
+        for sid in named
+        if libsbml.UnitKind_forName(sid) != libsbml.UNIT_KIND_INVALID
+    }
+    assert named - base <= set(sids), sorted(named - base - set(sids))
+
+
 def test_an_unflattenable_comp_model_is_refused(tmp_path: Path) -> None:
     """The flattening, which does not validate again, refuses what it cannot flatten."""
     comp_path = tmp_path / "comp.xml"

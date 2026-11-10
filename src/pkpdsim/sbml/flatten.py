@@ -9,14 +9,13 @@ M01__mM` where the top model reads `1 mM`. Nothing computes differently, and a
 reviewer of the ODEs of the model saw ten different `mM` and could not tell
 whether the zones share a unit.
 
-`merge_unit_definitions` is the step which drops the copies: it runs on the
-flat model of the composition of the zonation engine
-(`pkpdsim.zonation.composition.write`), the flattener of the models which have
-submodels of their own file, so the flat model of a perfused liver and of a
-zonated liver of the PBPK library carries every unit once. The flattener of
-the PBPK library (`pkpdsim.pbpk.builder.flat_model`, whose organs are model
-definitions of the same file) copies the units as well and does not run it
-yet: that is a change of the tracked SBML of every model of the library.
+`merge_unit_definitions` is the step which drops the copies: it runs on every
+flat model pkpdsim writes, the composition of the zonation engine
+(`pkpdsim.zonation.composition.write`, the models whose submodels are files of
+their own) and the flattening of the PBPK library
+(`pkpdsim.pbpk.builder.flat_model`, whose organs are model definitions of the
+same file). A flat body model of the library carried 315 unit definitions of
+the 21 units it has, one set per organ; it carries 21.
 """
 
 import libsbml
