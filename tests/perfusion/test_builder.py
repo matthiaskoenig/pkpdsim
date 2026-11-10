@@ -10,13 +10,23 @@ import libsbml
 import numpy as np
 import pytest
 from pbpk.conftest import individual
-from sbmlutils.factory import Creator
+from sbmlutils.factory import (
+    AssignmentRule,
+    Creator,
+    Model,
+    Parameter,
+    Reaction,
+    Species,
+)
+from sbmlutils.factory.core_elements import KineticLaw
+from sbmlutils.metadata import SBO
 from sbmlutils.validation import ValidationOptions, validate_doc
 
 from pkpdsim.database.tables import entry
+from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 from pkpdsim.perfusion import circuit, core, ids
-from pkpdsim.perfusion.builder import build, zone_cell_model
+from pkpdsim.perfusion.builder import PerfusionExtension, build, zone_cell_model
 from pkpdsim.perfusion.definition import LiverOrgan, Perfusate
 from pkpdsim.perfusion.units import PU
 from pkpdsim.templates import terms_of_use
@@ -144,6 +154,205 @@ def test_the_flat_ids_of_the_cells_are_the_ids_of_the_perfusion(
         }
         left = {f"M{k:02}__{x}" for x in cell_ids} & flat
         assert not left, sorted(left)
+
+
+def _mechanism(model: Model) -> Model:
+    """Add a mechanism to a cell model: a species, a reaction, a state, a constant."""
+    model.parameters.append(
+        Parameter(
+            "XP_k",
+            1.0,
+            U.per_min,
+            name="rate constant of the mechanism",
+            sboTerm=SBO.KINETIC_CONSTANT,
+            port=True,
+        )
+    )
+    model.species.append(
+        Species(
+            "x_cell",
+            "Vli",
+            initialConcentration=0.0,
+            substanceUnit=U.mmole,
+            hasOnlySubstanceUnits=False,
+            name="product of the mechanism (cells)",
+            sboTerm=SBO.SIMPLE_CHEMICAL,
+        )
+    )
+    model.parameters.append(
+        Parameter(
+            "s_x",
+            0.0,
+            U.dimensionless,
+            constant=False,
+            name="state of the mechanism",
+            sboTerm=SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+        )
+    )
+    model.rules.append(
+        AssignmentRule(
+            "s_x",
+            "atp_cell/(1 mM + atp_cell)",
+            U.dimensionless,
+            name="state of the mechanism",
+            sboTerm=SBO.MATHEMATICAL_EXPRESSION,
+        )
+    )
+    model.reactions.append(
+        Reaction(
+            "XP",
+            "-> x_cell [atp_cell]",
+            formula=("XP_k * Vli * atp_cell", U.mmole_per_min),
+            compartment="Vli",
+            name="production of the product of the mechanism",
+            sboTerm=SBO.BIOCHEMICAL_REACTION,
+        )
+    )
+    return model
+
+
+def test_an_extension_of_the_cells_is_one_mechanism_in_every_zone(
+    tmp_path: Path,
+) -> None:
+    """A mechanism of a package is written into the cell model once and reaches
+    every zone: the engine exposes its species and its reaction under the ids of
+    the perfusion, the liver holds its constant (one in the flat model, none in a
+    submodel) and what the mechanism adds to the composed model is there too."""
+
+    def composed(model: Model) -> Model:
+        model.parameters += [
+            Parameter(
+                "x_reservoir",
+                0.0,
+                U.mmole,
+                name="product of the mechanism in the reservoir",
+                sboTerm=SBO.SIMPLE_CHEMICAL,
+            ),
+            # the shared constant is the liver's, which replaces the copy of
+            # every submodel: it is in both models
+            Parameter(
+                "XP_k",
+                1.0,
+                U.per_min,
+                name="rate constant of the mechanism",
+                sboTerm=SBO.KINETIC_CONSTANT,
+            ),
+        ]
+        return model
+
+    zones = (1, 2, 3)
+    extension = PerfusionExtension(
+        cell=_mechanism, shared=("XP_k",), expose=("s_x",), composed=composed
+    )
+    path = build(liver_definition(len(zones)), tmp_path, extension)
+    flat = _ids(_model(path))
+    expected = {
+        *(ids.species("x", ids.cell_site(ids.zone_id(k))) for k in zones),
+        *(ids.reaction("XP", ids.zone_id(k)) for k in zones),
+        # the state the extension exposes is named as the perfusion names its own
+        *(f"s_x_{ids.zone_id(k)}" for k in zones),
+        "XP_k",
+        "x_reservoir",
+    }
+    assert expected <= flat, sorted(expected - flat)
+    # the constant of the mechanism is the liver's, not one per zone
+    left = {f"M{k:02}__XP_k" for k in zones} & flat
+    assert not left, sorted(left)
+
+
+def test_an_extension_which_replaces_a_law_of_the_library_drops_its_constants(
+    tmp_path: Path,
+) -> None:
+    """A constant of a law which the extension replaces is gone from both models and
+    is shared no more: the flat model holds it neither once nor per zone."""
+    gone = ("O2IM_Vmax", "O2IM_Km_o2")
+
+    def cell(model: Model) -> Model:
+        model = _mechanism(model)
+        model.parameters = [p for p in model.parameters if p.sid not in gone]
+        (uptake,) = [r for r in model.reactions if r.sid == "O2IM"]
+        uptake.formula = KineticLaw("XP_k * Vli * (o2_ext - o2_cell)", U.mmole_per_min)
+        return model
+
+    def composed(model: Model) -> Model:
+        model.parameters = [
+            *(p for p in model.parameters if p.sid not in gone),
+            Parameter(
+                "XP_k",
+                1.0,
+                U.per_min,
+                name="rate constant of the mechanism",
+                sboTerm=SBO.KINETIC_CONSTANT,
+            ),
+        ]
+        return model
+
+    zones = (1, 2)
+    extension = PerfusionExtension(cell=cell, shared=("XP_k",), composed=composed)
+    flat = _ids(_model(build(liver_definition(len(zones)), tmp_path, extension)))
+    left = {
+        *gone,
+        *(f"M{k:02}__{sid}" for k in zones for sid in gone),
+    } & flat
+    assert not left, sorted(left)
+    assert {ids.reaction("O2IM", ids.zone_id(k)) for k in zones} <= flat
+
+
+def test_an_extension_releases_into_a_quantity_of_the_perfusate(
+    tmp_path: Path,
+) -> None:
+    """A quantity of the perfusate which the cells of the library do not exchange is
+    wired like the others when the extension gives the cell model its port: the
+    reaction of the zone releases into the vascular space of the zone, and no copy
+    of the port is left in the submodel."""
+
+    def cell(model: Model) -> Model:
+        model.species.append(
+            Species(
+                "tracer_ext",
+                "Vext",
+                initialConcentration=0.0,
+                substanceUnit=U.mmole,
+                hasOnlySubstanceUnits=False,
+                name="tracer of the perfusate of the zone",
+                sboTerm=SBO.SIMPLE_CHEMICAL,
+                port=True,
+            )
+        )
+        model.reactions.append(
+            Reaction(
+                "TRACERR",
+                "-> tracer_ext",
+                formula=("f_alive * Vli * 1 mM * 1 per_min", U.mmole_per_min),
+                compartment="Vext",
+                name="release of the tracer",
+                sboTerm=SBO.TRANSPORT_REACTION,
+            )
+        )
+        return model
+
+    definition = liver_definition(2, tracers=("tracer",))
+    flat = _model(build(definition, tmp_path, PerfusionExtension(cell=cell)))
+    sids = _ids(flat)
+    for k in (1, 2):
+        zone = ids.zone_id(k)
+        release = flat.getReaction(ids.reaction("TRACERR", zone))
+        assert release is not None, ids.reaction("TRACERR", zone)
+        products = [r.getSpecies() for r in release.getListOfProducts()]
+        assert products == [ids.species("tracer", zone)], products
+    left = {f"M{k:02}__tracer_ext" for k in (1, 2)} & sids
+    assert not left, sorted(left)
+
+
+def test_a_shared_element_an_extension_leaves_out_of_the_liver_is_refused(
+    tmp_path: Path,
+) -> None:
+    """A shared constant which the composed model does not hold is an error of the
+    extension, named before anything is written: the liver replaces the copy of
+    every submodel by its own element."""
+    extension = PerfusionExtension(cell=_mechanism, shared=("XP_k",))
+    with pytest.raises(ValueError, match="shared elements of its extension"):
+        build(liver_definition(2), tmp_path, extension)
 
 
 def test_the_start_values_of_the_replaced_vascular_co2_and_the_cell_ph(

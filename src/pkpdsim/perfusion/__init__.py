@@ -27,7 +27,7 @@ if TYPE_CHECKING:
         circuit_anatomy_svg,
     )
     from pkpdsim.perfusion.archive import create_archive
-    from pkpdsim.perfusion.builder import build, compose
+    from pkpdsim.perfusion.builder import PerfusionExtension, build, compose
     from pkpdsim.perfusion.core import (
         PROCESSES,
         Buffer,
@@ -102,6 +102,7 @@ _LAZY_NAMES = {
     "circuit_figure": "figure",
     "circuit_svg": "figure",
     "interactive_circuit": "figure",
+    "PerfusionExtension": "builder",
     "build": "builder",
     "compose": "builder",
 }
@@ -138,6 +139,7 @@ __all__ = [
     "Organ",
     "Perfusate",
     "PerfusionDefinition",
+    "PerfusionExtension",
     "PerfusionSimulationExperiment",
     "buffer_objects",
     "buffer_parameters",

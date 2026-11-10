@@ -146,6 +146,14 @@ d(Vbile_<z>)/dt = <m>__f_T * f_alive_<z> * V_cell_<z> * BILE_Vmax * atp_<z>_cell
 bile = 1000000 * (Vbile_z1 + Vbile_z2)
 ```
 
+### An extension of a package
+
+A package adds a mechanism which the library does not have with a `PerfusionExtension` (`build(definition, output_dir, extension)`, `create_archive(..., extension=...)`): `cell` extends the cell model of the zones, `composed` the composed model, and `shared` names the elements of the cell model which the liver holds once.
+
+The cells of a mechanism are written into the cell model once and not per zone, so the engine exposes them as it does the cells of the library: a species `<q>_cell` of the cell model is `<q>_<z>_cell` in the flat model, a reaction `R` is `R_<z>`, and every other element of the cell model stays `M<kk>__<id>`. A state of the cells which the liver reads or a figure draws belongs in `expose`, which names it `<id>_<z>` as the perfusion names its own states, so the observers of the liver (the bile secretion of a zone) see it. A constant of the mechanism belongs in `shared`, a port of the cell model and an element of the composed model, so the fit has one value of it instead of one per zone; `compose` refuses a shared id which the composed model does not hold. What the circuit or the zones hold (a quantity of the perfusate, an observer over the zones) is written into the composed model, after the build has placed the circuit, the zones and the observers. A mechanism which exchanges a quantity of the perfusate the cells of the library do not (the signal of the reperfusion injury) gives the cell model the port `<q>_ext` of it, which the zones replace by their vascular species like the ports of the library.
+
+The reperfusion injury of the machine perfusion model of pkdb_models (`pkdb_models.misc.machine_perfusion.models.reperfusion`) is such an extension: the hypoxic and the dying cells release a signal which recirculates with the perfusate and drives the ROS, the loss of nuclear HMGB1 and the necrosis.
+
 ## The temperature
 
 The temperature `T` (degC) is a constant of the model; the rates of the cells scale with the Arrhenius factor `f_T`, 1 at the reference temperature `T_ref` (37 degC), and the solubility of oxygen rises in the cold, both initial assignments of `T`, so a pO2 holds more free oxygen in a hypothermic perfusion. SBML has no degree Celsius: `T` is in `degC`, a unit of the size of a kelvin, and the formulas write out the absolute temperature. The temperature takes effect as a change before the initialization (`perfusion_changes` below); a change of `T` during a timecourse does not evaluate the initial assignments again.
