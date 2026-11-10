@@ -71,6 +71,14 @@ _BAND_ALPHA = 0.25
 """The opacity of the fill of a band of the draws."""
 _NEUTRAL = "0.3"
 """The colour of a legend handle which stands for a time in every column."""
+NO_LEGEND = "_nolegend_"
+"""The label matplotlib leaves out of a legend, the lines of a grid of columns.
+
+The grid draws the handles of its legend itself (`_row_legend`), one set per
+row and not one per column, so the lines and markers of a panel carry this
+label: a caller who calls `ax.legend()` on a panel gets nothing, not a second
+legend of the colours of one column.
+"""
 
 
 @dataclass(frozen=True)
@@ -103,7 +111,7 @@ class ZoneProfile:
     source_unit: str | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class Band:
     """The values over the zones or over the time: the median and its band.
 
@@ -111,6 +119,11 @@ class Band:
     ends, so it draws a line and no fill. A transformation which decreases
     swaps the ends (the lower draws give the larger value), which fills the
     same area.
+
+    The fields are arrays, which have no one truth value, so the comparison is
+    the identity of the object (`eq=False`) and not a field by field one,
+    which would raise `ValueError: The truth value of an array ... is
+    ambiguous`: compare the fields with `numpy.allclose`.
 
     Attributes:
         median: the values, the median over the draws of a run over them.
@@ -355,8 +368,20 @@ def _draw_data(
     colors: np.ndarray,
     column: ZoneColumn,
     time_unit: str,
+    *,
+    labelled: bool,
 ) -> dict[float, np.ndarray]:
     """Draw the data of a row in a column, the markers of a time.
+
+    Args:
+        ax: the panel.
+        rows: the rows of the data of this profile and column.
+        times: the times of the row.
+        colors: the colour of every time.
+        column: the column, whose colour the markers take where it has one.
+        time_unit: the unit of the times.
+        labelled: name the markers in the legend of the panel; the grid draws
+            its own handles (`_row_legend`), see `zone_profiles`.
 
     Returns:
         The drawn values plus their error, by the time they are drawn at; a
@@ -369,6 +394,7 @@ def _draw_data(
             continue
         err = at["sd"].to_numpy(dtype=float) if "sd" in at else 0.0
         drawn[time] = at["value"].to_numpy(dtype=float) + err
+        text = f"Data {_time_text(time, time_unit)}"
         ax.errorbar(
             at["position"],
             at["value"],
@@ -377,7 +403,7 @@ def _draw_data(
             marker=_MARKERS[k % len(_MARKERS)],
             markeredgecolor="black",
             color=colors[k] if column.color is None else column.color,
-            label=f"Data {_time_text(time, time_unit)}",
+            label=text if labelled else NO_LEGEND,
         )
     return drawn
 
@@ -479,7 +505,9 @@ def zone_profiles(
 
     Raises:
         KeyError: if the result has no column of a selection, or if a column
-            has no band of a profile and a time it is asked for.
+            has no band of a profile and a time it is asked for. A frame is
+            read before the data is checked, so a missing selection is named
+            before a label of the data which no profile has.
         ValueError: if `profiles`, `times` or `result` is empty, if a row of
             `data` has a label which no profile or no column has, or if no row
             of `data` is drawn.
@@ -513,13 +541,14 @@ def zone_profiles(
                 band = _band_of(column, profile.label, time)
                 color = colors[k] if column.color is None else column.color
                 _fill_band(ax, x, band, color)
+                text = f"Sim {_time_text(time, time_unit)}"
                 ax.plot(
                     x,
                     band.median,
                     linestyle=_LINE_STYLES[k % len(_LINE_STYLES)],
                     color=color,
                     linewidth=2.0,
-                    label=f"Sim {_time_text(time, time_unit)}",
+                    label=text if single else NO_LEGEND,
                 )
                 values += [
                     v for v in (band.median, band.lower, band.upper) if v is not None
@@ -532,6 +561,7 @@ def zone_profiles(
                     colors,
                     column,
                     time_unit,
+                    labelled=single,
                 )
                 drawn += sum(v.size for v in points.values())
                 values += list(points.values())

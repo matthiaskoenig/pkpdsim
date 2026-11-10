@@ -9,8 +9,9 @@ import xarray as xr
 
 matplotlib.use("Agg")
 
+from sbmlsim import Q
 from sbmlsim.experiment.draws import UncertaintyRun, UncertaintySettings
-from sbmlsim.result.scan import ScanResult
+from sbmlsim.result.scan import ScanResult, point_timecourse
 from sbmlsim.simulation import Dimension
 from sbmlsim.simulation.sampling import UNCERTAINTY_DIMENSION
 
@@ -267,3 +268,113 @@ def test_zone_column_reads_the_unit_of_the_profile_without_a_source_unit() -> No
     profile = ZoneProfile("Drug", "uM", CELL)
     column = zone_column(_flat(), [profile], times=(30.0,))
     assert column.values[("Drug", 30.0)].median == pytest.approx([1e3, 2e3, 3e3])
+
+
+def _reference(
+    res: ScanResult,
+    selections: Sequence[str],
+    time: float,
+    unit: str,
+    run: UncertaintyRun,
+    time_unit: str = "min",
+) -> Band:
+    """The band read one draw at a time, the implementation the fast read replaces."""
+
+    def values(point: ScanResult) -> np.ndarray:
+        out = []
+        for selection in selections:
+            points, series = point_timecourse(point, selection)
+            at = Q(points, res.units["time"]).m_as(time_unit)
+            distance = np.abs(at - time)
+            k = int(np.flatnonzero(distance == distance.min())[-1])
+            out.append(Q(series[k], res.units[selection]).m_as(unit))
+        return np.asarray(out, dtype=float)
+
+    draws = int(res.ds.sizes[run.id])
+    stacked = np.stack([values(res.isel(**{run.id: k})) for k in range(draws)])
+    lower, upper = np.nanquantile(stacked, run.quantiles, axis=0)
+    return Band(np.nanmedian(stacked, axis=0), lower, upper)
+
+
+def _changing(draws: int = 7) -> ScanResult:
+    """Draws on a grid of times with two points at the time of a change (60 min)."""
+    t = np.array([0.0, 30.0, 60.0, 60.0, 90.0, 120.0])
+    rng = np.random.default_rng(11)
+    series = {}
+    for k, sid in enumerate(CELL, start=1):
+        # the state after the change jumps, so the two rows at 60 differ
+        shape = np.array([0.0, 0.5, 1.0, 4.0, 4.5, 5.0]) * k
+        series[sid] = shape[np.newaxis, :] + rng.random((draws, t.size))
+    return _scan(series, t, dict.fromkeys(CELL, "mM"), draws=draws)
+
+
+def _ragged(draws: int = 5) -> ScanResult:
+    """Draws which keep their own time points, padded with NaN (the steps of a run)."""
+    points = 6
+    rng = np.random.default_rng(3)
+    time = np.full((draws, points), np.nan)
+    series = {sid: np.full((draws, points), np.nan) for sid in CELL}
+    for d in range(draws):
+        kept = points - (d % 2)  # the last draw of every pair is padded
+        time[d, :kept] = np.linspace(0.0, 120.0, kept)
+        for k, sid in enumerate(CELL, start=1):
+            series[sid][d, :kept] = k * np.linspace(0.0, 1.0, kept) + rng.random(kept)
+    return ScanResult(
+        xr.Dataset(
+            {
+                "time": ((UNCERTAINTY_DIMENSION, "_point"), time),
+                **{
+                    sid: ((UNCERTAINTY_DIMENSION, "_point"), v)
+                    for sid, v in series.items()
+                },
+            },
+            coords={UNCERTAINTY_DIMENSION: np.arange(draws)},
+            attrs={
+                "dims": [UNCERTAINTY_DIMENSION],
+                "units": {"time": "min", **dict.fromkeys(CELL, "mM")},
+            },
+        )
+    )
+
+
+@pytest.mark.parametrize("at", [0.0, 45.0, 60.0, 61.0, 120.0])
+def test_the_band_of_the_fast_read_is_the_band_of_the_draws_one_at_a_time(
+    at: float,
+) -> None:
+    run = _run(7)
+    res = _changing(7)
+    band = zone_band(res, CELL, at, "uM", run=run)
+    expected = _reference(res, CELL, at, "uM", run)
+    assert band.median == pytest.approx(expected.median)
+    assert band.lower == pytest.approx(expected.lower)
+    assert band.upper == pytest.approx(expected.upper)
+
+
+def test_the_fast_read_matches_the_reference_on_a_ragged_result() -> None:
+    run = _run(5)
+    res = _ragged(5)
+    assert res.ragged
+    for at in (0.0, 50.0, 120.0):
+        band = zone_band(res, CELL, at, "mM", run=run)
+        expected = _reference(res, CELL, at, "mM", run)
+        assert band.median == pytest.approx(expected.median), at
+        assert band.lower == pytest.approx(expected.lower), at
+        assert band.upper == pytest.approx(expected.upper), at
+
+
+def test_the_band_of_a_scan_of_several_points_is_refused() -> None:
+    res = _draws(5)
+    extra = ScanResult(
+        res.ds.expand_dims({"dose": [1.0, 2.0]}).assign_attrs(
+            dims=[UNCERTAINTY_DIMENSION, "dose"], units=res.units
+        )
+    )
+    with pytest.raises(ValueError, match="dose"):
+        zone_band(extra, CELL, 60.0, "mM", run=_run(5))
+
+
+def test_a_selection_the_result_does_not_have_is_named() -> None:
+    with pytest.raises(KeyError, match="nope_z1"):
+        zone_values(_flat(), ["nope_z1"], 30.0, "mM")
+    with pytest.raises(KeyError, match="nope_z1"):
+        zone_band(_draws(5), ["nope_z1"], 60.0, "mM", run=_run(5))

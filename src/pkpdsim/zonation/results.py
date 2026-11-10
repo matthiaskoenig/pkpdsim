@@ -16,6 +16,18 @@ last, because a change of the simulation (a medium change, a second dose)
 gives two points at its time and the state after the change is the one to
 draw. Every time is read and returned in `time_unit`, minutes by default, the
 convention of the engine.
+
+A band reads every selection once over all its draws (`_rows`, the draws of
+the result as the first axis) and converts the time of the result once per
+call, not once per draw and selection: a figure of three conditions, five
+rows, three times, ten zones and a hundred draws is a few hundred reads of
+the dataset instead of tens of thousands. Taking the last of the points
+nearest the time over the raw rows of the dataset is what
+`sbmlsim.result.scan.point_timecourse` of a single draw gives: it drops the
+state before a change, which is the earlier of the two rows at its time, and
+the later row is the one taken here either way;
+`tests/zonation/test_results.py` pins the two against each other, on a grid
+of times and on a ragged result whose draws keep their own time points.
 """
 
 from collections.abc import Callable, Sequence
@@ -23,7 +35,7 @@ from collections.abc import Callable, Sequence
 import numpy as np
 from sbmlsim import Q
 from sbmlsim.experiment.draws import UncertaintyRun
-from sbmlsim.result.scan import ScanResult, point_timecourse
+from sbmlsim.result.scan import POINT, TIME, ScanResult, point_timecourse
 
 from pkpdsim.zonation.figures import (
     DEFAULT_TIME_UNIT,
@@ -40,6 +52,105 @@ __all__ = [
     "zone_column",
     "zone_values",
 ]
+
+
+def _rows(res: ScanResult, key: str, across: str | None) -> np.ndarray:
+    """Get a variable of the result as `(rows, points)`, a row per draw.
+
+    Args:
+        res: the result.
+        key: the variable or the coordinate.
+        across: the dimension of the draws, `None` for a single simulation.
+
+    Returns:
+        The values, one row per draw of `across` and one row for a variable
+        which does not carry the dimension (the time of a grid of times, which
+        every draw shares).
+
+    Raises:
+        KeyError: naming the variables of the result, if it has no variable of
+            the key (`ScanResult.__getitem__`).
+        ValueError: if the result has a dimension of a scan besides `across`,
+            which leaves no one value per time, or if the key is no time
+            course of the result.
+    """
+    extra = [d for d in res.dims if d != across]
+    if extra:
+        raise ValueError(
+            f"The result has the dimensions {extra} besides the draws: read "
+            f"one point of the scan (`res.isel(...)`), it has no one value "
+            f"per time."
+        )
+    array = res[key]
+    tdim = POINT if res.ragged else TIME
+    if tdim not in array.dims:
+        raise ValueError(f"'{key}' is no timecourse of the result.")
+    if across is not None and across in array.dims:
+        return np.asarray(array.transpose(across, tdim).values, dtype=float)
+    return np.asarray(array.transpose(tdim).values, dtype=float)[np.newaxis, :]
+
+
+def _nearest(times: np.ndarray, time: float) -> np.ndarray:
+    """Get the index of the last point nearest a time, per row of the times.
+
+    The padding of a ragged result is `NaN` and is no point: a row of padding
+    alone (a draw whose simulation failed) gives the index 0, whose value is
+    the `NaN` the median and the quantiles of the draws leave out.
+
+    Args:
+        times: the time points `(rows, points)`, padded with `NaN`.
+        time: the time, in the unit of `times`.
+
+    Returns:
+        The index of the point per row.
+    """
+    distance = np.abs(times - time)
+    with np.errstate(invalid="ignore"):
+        nearest = np.nanmin(distance, axis=1, keepdims=True)
+    at = distance == nearest
+    # the last of the nearest points: a change gives two points at its time,
+    # and the second is the state after it
+    return at.shape[1] - 1 - np.argmax(at[:, ::-1], axis=1)
+
+
+def _values_at(
+    res: ScanResult,
+    selections: Sequence[str],
+    time: float,
+    unit: str,
+    *,
+    across: str | None,
+    time_unit: str,
+) -> np.ndarray:
+    """Get the values of the selections at a time, a row per draw.
+
+    Every selection is read once over all its draws and the time of the
+    result is converted once, see the module.
+
+    Args:
+        res: the result of one point of a scan.
+        selections: the selections.
+        time: the time, in `time_unit`.
+        unit: the unit of the values.
+        across: the dimension of the draws, `None` for a single simulation.
+        time_unit: the unit of `time`.
+
+    Returns:
+        The values `(rows, len(selections))`, one row per draw and one row
+        without `across`.
+    """
+    at = Q(_rows(res, TIME, across), res.units[TIME]).m_as(time_unit)
+    index = _nearest(at, time)
+    rows = int(res.ds.sizes[across]) if across is not None else 1
+    if index.size != rows:  # a grid of times, which every draw shares
+        index = np.broadcast_to(index, (rows,))
+    draw = np.arange(rows)
+    values = np.empty((rows, len(selections)), dtype=float)
+    for column, selection in enumerate(selections):
+        series = _rows(res, selection, across)
+        picked = series[draw if series.shape[0] == rows else 0, index]
+        values[:, column] = Q(picked, res.units[selection]).m_as(unit)
+    return values
 
 
 def zone_values(
@@ -63,17 +174,12 @@ def zone_values(
         The value of every selection, in `unit`.
 
     Raises:
-        ValueError: if a selection is no time course of the result.
+        KeyError: naming the variables of the result, if it has no variable of
+            a selection.
+        ValueError: if a selection is no time course of the result, or if the
+            result is more than one point of a scan.
     """
-    values: list[float] = []
-    for selection in selections:
-        points, series = point_timecourse(res, selection)
-        at = Q(points, res.units["time"]).m_as(time_unit)
-        distance = np.abs(at - time)
-        # the last of the nearest points: a change gives two points at its time
-        k = int(np.flatnonzero(distance == distance.min())[-1])
-        values.append(Q(series[k], res.units[selection]).m_as(unit))
-    return np.asarray(values, dtype=float)
+    return _values_at(res, selections, time, unit, across=None, time_unit=time_unit)[0]
 
 
 def _draws(res: ScanResult, run: UncertaintyRun | None) -> int:
@@ -110,23 +216,18 @@ def zone_band(
     Returns:
         The band: the median over the draws and the quantiles of the run, or
         the values alone for a result without draws.
+
+    Raises:
+        KeyError: naming the variables of the result, if it has no variable of
+            a selection.
+        ValueError: if a selection is no time course of the result, or if the
+            result is more than one point of a scan.
     """
     draws = _draws(res, run)
     if not draws or run is None:
         return Band(zone_values(res, selections, time, unit, time_unit=time_unit))
     return _band(
-        np.stack(
-            [
-                zone_values(
-                    res.isel(**{run.id: k}),
-                    selections,
-                    time,
-                    unit,
-                    time_unit=time_unit,
-                )
-                for k in range(draws)
-            ]
-        ),
+        _values_at(res, selections, time, unit, across=run.id, time_unit=time_unit),
         run,
     )
 
@@ -160,21 +261,25 @@ def series_band(
     """
 
     def series(result: ScanResult) -> tuple[np.ndarray, np.ndarray]:
-        """The time and the values of one point of the scan, in their units."""
-        points, values = point_timecourse(result, selection)
-        return (
-            Q(points, res.units["time"]).m_as(time_unit),
-            Q(values, res.units[selection]).m_as(unit),
-        )
+        """The time and the values of one point of the scan, as they are read."""
+        return point_timecourse(result, selection)
+
+    def value(values: np.ndarray) -> np.ndarray:
+        """The values of a draw in the unit of the call."""
+        return Q(values, res.units[selection]).m_as(unit)
 
     draws = _draws(res, run)
     if not draws or run is None:
-        time, values = series(res)
-        return time, Band(values)
-    time, _ = series(res.isel(**{run.id: 0}))
-    return time, _band(
-        np.stack([series(res.isel(**{run.id: k}))[1] for k in range(draws)]), run
+        points, values = series(res)
+        return Q(points, res.units[TIME]).m_as(time_unit), Band(value(values))
+    # a whole time course per draw: the states before the changes are dropped
+    # per draw (`point_timecourse`), so this keeps the loop, and only the time
+    # of the first draw is read and converted, as every draw has the same
+    points, first = series(res.isel(**{run.id: 0}))
+    values = np.stack(
+        [first, *(series(res.isel(**{run.id: k}))[1] for k in range(1, draws))]
     )
+    return Q(points, res.units[TIME]).m_as(time_unit), _band(value(values), run)
 
 
 def band_text(run: UncertaintyRun | None) -> str:

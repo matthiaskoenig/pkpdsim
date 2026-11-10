@@ -14,6 +14,7 @@ from matplotlib import colormaps
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.collections import LineCollection, PolyCollection, QuadMesh
+from matplotlib.colors import to_rgba
 from matplotlib.figure import Figure
 from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
@@ -185,6 +186,8 @@ def test_nothing_to_draw_is_refused() -> None:
         zone_profiles(result, [], times=(0,))
     with pytest.raises(ValueError, match="times are empty"):
         zone_profiles(result, _profiles(1), times=())
+    with pytest.raises(ValueError, match="columns are empty"):
+        zone_profiles([], _profiles(1), times=(0,))
     with pytest.raises(ValueError, match="layers are empty"):
         space_time(result, "drg", layers=(), outflow=False)
 
@@ -831,3 +834,75 @@ def test_the_svg_of_a_grid_holds_no_image(tmp_path: Path) -> None:
     text = path.read_text()
     assert text.startswith("<?xml")
     assert "<image" not in text
+
+
+def _handles(ax: Axes) -> list[Line2D]:
+    """The handles of the legend of an axes, which must exist."""
+    handles = _legend(ax).legend_handles
+    assert all(isinstance(h, Line2D) for h in handles)
+    return [h for h in handles if isinstance(h, Line2D)]
+
+
+def _handle_colors(ax: Axes) -> np.ndarray:
+    """The colours of the handles of the legend of an axes, as RGBA."""
+    return np.asarray([to_rgba(h.get_color()) for h in _handles(ax)])
+
+
+def test_the_legend_handles_are_neutral_where_the_columns_carry_the_colour() -> None:
+    profiles = _profiles(1, n=4)
+    times = (0.0, 60.0)
+    columns = [
+        _column("A", profiles=profiles, times=times, color="#ff0000"),
+        _column("B", profiles=profiles, times=times, color="#0000ff"),
+    ]
+    ax = data_axes(zone_profiles(columns, profiles, times=times))[-1]
+    # the titles name the columns, so a handle stands for its time, not a column
+    assert _handle_colors(ax) == pytest.approx(np.vstack([to_rgba("0.3")] * 2))
+    assert [h.get_linestyle() for h in _handles(ax)] == [":", "--"]
+
+
+def test_the_legend_handles_take_the_colour_of_the_time_where_no_column_has_one() -> (
+    None
+):
+    profiles = _profiles(1, n=4)
+    times = (0.0, 60.0)
+    columns = [
+        _column("A", profiles=profiles, times=times),
+        _column("B", profiles=profiles, times=times, level=2.0),
+    ]
+    axes = data_axes(zone_profiles(columns, profiles, times=times))
+    expected = colormaps["viridis"](np.linspace(0.1, 0.75, 2))
+    assert _handle_colors(axes[-1]) == pytest.approx(expected)
+    # and the handles are the colours the lines of the panel have
+    assert _handle_colors(axes[-1]) == pytest.approx(
+        np.asarray([to_rgba(line.get_color()) for line in axes[0].lines])
+    )
+
+
+def test_the_data_handle_of_a_row_follows_the_colour_rule() -> None:
+    profiles = _profiles(1, n=4)
+    times = (60.0,)
+    data = _data(label=["p0", "p0", "p0"])
+    plain = [_column("A", profiles=profiles, times=times)]
+    coloured = [_column("A", profiles=profiles, times=times, color="#ff0000")]
+    ax = data_axes(zone_profiles(coloured, profiles, times=times, data=data))[0]
+    assert _handle_colors(ax) == pytest.approx(np.vstack([to_rgba("0.3")] * 2))
+    assert [h.get_marker() for h in _handles(ax)] == ["None", "s"]
+    ax = data_axes(zone_profiles(plain, profiles, times=times, data=data))[0]
+    expected = colormaps["viridis"](np.linspace(0.1, 0.75, 1))[0]
+    assert _handle_colors(ax) == pytest.approx(np.vstack([expected, expected]))
+
+
+def test_a_panel_of_a_grid_draws_no_legend_of_its_own() -> None:
+    """The grid draws the handles of a row itself, so the artists carry no label."""
+    profiles = _profiles(1, n=4)
+    times = (0.0, 60.0)
+    data = _data(label=["p0", "p0", "p0"], time=[60.0, 60.0, 60.0])
+    columns = [
+        _column("A", profiles=profiles, times=times, color="#ff0000"),
+        _column("B", profiles=profiles, times=times, color="#0000ff"),
+    ]
+    first, _ = data_axes(zone_profiles(columns, profiles, times=times, data=data))
+    assert first.get_legend_handles_labels() == ([], [])
+    frame = data_axes(zone_profiles(_result(n=4), profiles, times=times))[0]
+    assert frame.get_legend_handles_labels()[1] == ["Sim t = 0 min", "Sim t = 60 min"]
