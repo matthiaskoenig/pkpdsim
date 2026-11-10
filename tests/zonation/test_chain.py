@@ -5,14 +5,15 @@ needed. The chain is simulated with roadrunner as the experiments are.
 """
 
 import dataclasses
+import math
 import warnings
 from pathlib import Path
 
 import numpy as np
 import pytest
 import roadrunner
-from pbpk.conftest import individual
-from sbmlutils.factory import Model, Parameter, create_model
+from pbpk.conftest import individual, individuals
+from sbmlutils.factory import Model, Parameter, Reaction, create_model
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import MODEL_UNITS
@@ -240,6 +241,123 @@ def test_the_outflow_auc_converges_in_the_zone_count(tmp_path: Path) -> None:
     assert coarse == pytest.approx(fine, rel=1e-8)
     assert coarse == pytest.approx(1.0, rel=1e-8)
     assert fine == pytest.approx(1.0, rel=1e-8)
+
+
+K_EL = "k_el_tr"
+"""The first-order elimination of the tracer (1/min) of the extraction test."""
+
+
+def _extraction(n: int, damkoehler: float, tmp_path: Path) -> float:
+    """The extraction of a bolus by a chain of `n` zones which eliminates it.
+
+    The chain of `_tracer_chain` with one first-order elimination per zone
+    added to the built model, `K_EL * V_plasma_<zone> * c` (mmole/min), so
+    every zone eliminates with the same rate constant and the capacity of a
+    zone follows its volume, as a cascade of equal tanks. `K_EL` is set to
+    `damkoehler / tau` with `tau` the plasma residence time of the whole
+    chain read from the model, so the total Damkoehler number `k * tau` is
+    the one the caller asks for whatever the zone count.
+
+    The extraction is `1 - AUC_out * Q_plasma / dose`: the chain is linear and
+    time invariant, so the fraction of a bolus which escapes is the
+    transmission of a sustained infusion at the steady state, and the AUC
+    needs no steady state to run to.
+
+    Args:
+        n: the number of zones.
+        damkoehler: the total Damkoehler number `k * tau` of the chain.
+        tmp_path: the directory of the model.
+
+    Returns:
+        The extraction of the chain.
+    """
+    model = _builder(n, 1.0, 0.0, haematocrit=0.0).build()
+    model.parameters = [
+        *model.parameters,
+        Parameter(
+            K_EL,
+            1.0,
+            unit=U.per_min,
+            name="first-order elimination of the tracer in the plasma",
+            constant=True,
+        ),
+    ]
+    model.reactions = [
+        *model.reactions,
+        *(
+            Reaction(
+                f"EL_tr_{ids.zone(k)}",
+                f"{ids.species('tr', Layer.PLASMA, ids.zone(k))} ->",
+                formula=(
+                    f"{K_EL} * {ids.volume(Layer.PLASMA, ids.zone(k))} * "
+                    f"{ids.species('tr', Layer.PLASMA, ids.zone(k))}",
+                    U.mmole_per_min,
+                ),
+                compartment=ids.volume(Layer.PLASMA, ids.zone(k)),
+                name=f"elimination of the tracer in the plasma of zone {k} of {n}",
+            )
+            for k in range(1, n + 1)
+        ),
+    ]
+    path = tmp_path / f"eliminating_{n}.xml"
+    create_model(model, filepath=path, sbml_level=3, sbml_version=2, validate=False)
+    make = individuals(path)
+    r = make()
+    tau = _volume(r) / r["Q_plasma_li"]
+    r = make(**{K_EL: damkoehler / tau})
+    r.integrator.absolute_tolerance = 1e-14
+    r.integrator.relative_tolerance = 1e-10
+    dose = 1e-3
+    r[f"[{ids.species('tr', Layer.PLASMA, ids.zone(1))}]"] = (
+        dose / r[ids.volume(Layer.PLASMA, ids.zone(1))]
+    )
+    t, c = _outflow(r, 20.0 * tau)
+    return 1.0 - float(np.trapezoid(c, t)) * r["Q_plasma_li"] / dose
+
+
+def test_the_extraction_converges_in_the_zone_count(tmp_path: Path) -> None:
+    """The convergence of a quantity the discretization controls, at `k * tau` = 1.
+
+    The sibling test above pins the outflow AUC of a conservative tracer,
+    which the mass balance fixes at any zone count: it cannot measure the
+    discretization. The extraction of a solute which is consumed along the
+    chain can, because a cascade of `n` stirred tanks extracts less than the
+    plug flow it approximates and approaches it from below as `n` grows.
+
+    The chain runs at a total Damkoehler number of 1 (`k * tau = 1`, the rate
+    constant set from the residence time of the model), where the extraction
+    is substantial. Each measurement is checked against its own oracle, the
+    cascade of `n` tanks in series, `E_n = 1 - (1 + k * tau / n) ** -n`, which
+    is not the expression the engine evaluates, and both approach the
+    continuum limit `1 - exp(-k * tau)` = 0.632121 of plug flow from below.
+
+    Measured, with the same numbers in three runs:
+
+    - ten zones extract 0.614457, the cascade oracle to 5.3e-13,
+    - forty zones extract 0.627569, the oracle to 6.7e-11,
+    - so the default of ten zones is **2.0894 % below forty zones** and
+      **2.7944 % below the continuum**, and forty zones are 0.7200 % below it.
+
+    This is the discretization error of the engine's default, and it is a
+    statement of what the zone count costs in an extraction and no verdict:
+    whether 2 % is acceptable for a model is the maintainer's call, so no
+    default is changed here.
+    """
+    damkoehler = 1.0
+    coarse = _extraction(10, damkoehler, tmp_path)
+    fine = _extraction(40, damkoehler, tmp_path)
+    continuum = 1.0 - math.exp(-damkoehler)
+
+    def cascade(n: int) -> float:
+        """The extraction of `n` stirred tanks in series at this Damkoehler number."""
+        return 1.0 - (1.0 + damkoehler / n) ** -n
+
+    assert coarse == pytest.approx(cascade(10), rel=1e-8)
+    assert fine == pytest.approx(cascade(40), rel=1e-8)
+    assert continuum == pytest.approx(0.6321205588, rel=1e-9)
+    assert coarse < fine < continuum
+    assert (coarse - fine) / fine == pytest.approx(-0.020894368, rel=1e-6)
+    assert (coarse - continuum) / continuum == pytest.approx(-0.027943796, rel=1e-6)
 
 
 @pytest.mark.parametrize("n", [4, 10])

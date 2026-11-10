@@ -3,6 +3,7 @@
 from dataclasses import replace
 from pathlib import Path
 
+import libsbml
 import pytest
 import roadrunner
 from sbmlutils.factory import Compartment, create_model
@@ -129,6 +130,42 @@ def test_every_compartment_has_unit_name_and_sbo_term() -> None:
     settings = ZonationSettings(n_zones=3, reference_flow=liver_flow())
     model = ZonationBuilder(settings, (), None).build()
     assert all(c.unit is not None and c.name and c.sboTerm for c in model.compartments)
+
+
+@pytest.mark.parametrize("geom", list(Geometry))
+def test_the_size_in_the_file_is_what_the_initial_assignment_evaluates(
+    geom: Geometry, tmp_path: Path
+) -> None:
+    """The two sources of a compartment volume cannot drift apart unnoticed.
+
+    `compartments()` writes the size of every compartment from
+    `geometry.layer_volumes`, and `_assignments()` writes an initial
+    assignment `f_<layer> * f_par * M_li / rho_li / n` which the simulator
+    evaluates over it: the number in the file is what a reader of the SBML
+    sees and the number the model runs on is the assignment's, and nothing
+    compared them. This does, for every compartment of both geometries and
+    along two paths to the number (libsbml reads the attribute of the
+    element, roadrunner applies the initial assignments). The well-stirred
+    vascular space is the case where the two sides take different routes: the
+    python sum of the layers of the lumen against the product with the
+    derived fraction `f_vas`. The duct of the bile has no initial assignment
+    and is covered as the trivial case.
+    """
+    n = 3
+    settings = ZonationSettings(n_zones=n, geometry=geom, reference_flow=liver_flow())
+    model = ZonationBuilder(settings, (), None).build()
+    path = tmp_path / "liver.xml"
+    create_model(model, filepath=path, sbml_level=3, sbml_version=2, validate=False)
+    written = libsbml.readSBMLFromFile(str(path)).getModel()
+    sizes = {
+        written.getCompartment(i).getId(): written.getCompartment(i).getSize()
+        for i in range(written.getNumCompartments())
+    }
+    assert len(sizes) == len(model.compartments) > 0
+    rr = roadrunner.RoadRunner(str(path))
+    for sid, size in sizes.items():
+        assert size > 0.0, sid
+        assert rr[sid] == pytest.approx(size, rel=1e-12), sid
 
 
 @pytest.mark.parametrize("geom", list(Geometry))
