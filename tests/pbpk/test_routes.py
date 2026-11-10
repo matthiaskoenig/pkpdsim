@@ -372,7 +372,8 @@ def test_a_dissolution_without_the_options_is_unchanged(tmp_path: Path) -> None:
     rule = model.getAssignmentRuleByVariable(ids.flat(gu, ids.dissolution_rate(S)))
     solids = " + ".join(ids.flat(gu, ids.solid(S, seg)) for seg in ids.GUT_SEGMENTS[1:])
     k, d50 = ids.dissolution(S), ids.dissolution_dose50(S)
+    # the units of the flat model are merged, so the organ keeps no copy of them
     assert libsbml.formulaToL3String(rule.getMath()) == (
-        f"({k} / 60 GU__min_per_hr) * {d50} / ({d50} + {ids.po_dose(S)} + "
+        f"({k} / 60 min_per_hr) * {d50} / ({d50} + {ids.po_dose(S)} + "
         f"{ids.mr(S)} * ({solids}))"
     )
