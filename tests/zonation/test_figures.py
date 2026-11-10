@@ -918,14 +918,16 @@ def test_a_panel_of_a_grid_draws_no_legend_of_its_own() -> None:
     assert frame.get_legend_handles_labels()[1] == ["Sim t = 0 min", "Sim t = 60 min"]
 
 
-BAD = "#f0f0f0"
+NEVER_DRAWN = "#ff00ff"
+"""A conspicuous `bad` of the fixture: the renderer takes the colour of a zone
+without data itself (`MISSING`), so this magenta may appear in no figure."""
 TRIAD_COLORS = ("#1f77b4", "#d62728", "#2ca02c")
 
 
 def _mappable() -> ScalarMappable:
     """A viridis scale of the values 1 to N, the grey of a zone without data."""
     return ScalarMappable(
-        Normalize(1.0, float(N)), colormaps["viridis"].with_extremes(bad=BAD)
+        Normalize(1.0, float(N)), colormaps["viridis"].with_extremes(bad=NEVER_DRAWN)
     )
 
 
@@ -1025,9 +1027,21 @@ def test_the_colour_of_a_zone_without_data_is_the_callers_to_choose() -> None:
     values = _values()
     values[2] = float("nan")
     ax = _axes()
-    draw_lobule(ax, values, mappable=_mappable(), missing="#ff00ff")
-    assert _zone_face(ax, 3) == pytest.approx(to_rgba("#ff00ff"))
+    draw_lobule(ax, values, mappable=_mappable(), missing=(0.0, 0.0, 1.0, 1.0))
+    assert _zone_face(ax, 3) == pytest.approx(to_rgba("blue"))
     assert _zone_face(ax, 4) == pytest.approx(_colour(_mappable(), 4.0))
+
+
+def test_the_fixture_of_the_tests_never_draws_the_colour_of_its_colormap() -> None:
+    """The `bad` of a colormap is not where the renderer takes its colour."""
+    values = _values()
+    values[5] = float("nan")
+    ax = _axes()
+    draw_lobule(ax, values, mappable=_mappable())
+    assert _zone_face(ax, 6) == pytest.approx(to_rgba(MISSING))
+    assert to_rgba(NEVER_DRAWN) not in {
+        to_rgba(p.get_facecolor()) for p in _polygons(ax)
+    }
 
 
 def test_draw_lobule_draws_the_thirds_only_when_asked() -> None:
@@ -1067,8 +1081,14 @@ def test_draw_lobule_draws_the_triads_only_when_asked() -> None:
     angles = np.deg2rad(60.0 * np.arange(6))
     corners = np.column_stack([np.cos(angles), np.sin(angles)])
     distance = np.linalg.norm(points[:, None, :] - corners[None, :, :], axis=2)
-    assert distance.min(axis=1) == pytest.approx(0.045, abs=5e-4)
-    assert sorted(np.bincount(distance.argmin(axis=1), minlength=6)) == [3] * 6
+    assert distance.min(axis=1) == pytest.approx(0.045, abs=1e-12)
+    nearest = distance.argmin(axis=1)
+    assert sorted(np.bincount(nearest, minlength=6)) == [3] * 6
+    # the three vessels of a triad stand 120 degrees apart around their corner
+    for corner in range(6):
+        triad = points[nearest == corner] - corners[corner]
+        around = np.sort(np.rad2deg(np.arctan2(triad[:, 1], triad[:, 0])) % 360.0)
+        assert np.diff(np.append(around, around[0] + 360.0)) == pytest.approx(120.0)
     for line in triads:
         assert line.get_marker() == "o"
         assert line.get_linestyle() == "None"
@@ -1141,3 +1161,9 @@ def test_the_colorbar_of_several_axes_is_vector(tmp_path: Path) -> None:
     assert data_axes(fig) == [left, right]
     fig.savefig(tmp_path / "grid.svg")
     assert "<image" not in (tmp_path / "grid.svg").read_text()
+    # the budget of this figure, two lobules of ten zones with one colorbar:
+    # it writes 268 kB, and a grid of a model has six panels of the kind. The
+    # sampling of the bands is what the picture weighs (`_ARC_POINTS`), so a
+    # return to the accuracy a measurement wants (`points=256`, 1.4 MB a
+    # panel) is a regression which no other test would catch.
+    assert (tmp_path / "grid.svg").stat().st_size < 300 * 1024

@@ -37,7 +37,7 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import Polygon
 from matplotlib.patheffects import withStroke
-from matplotlib.typing import LineStyleType
+from matplotlib.typing import ColorType, LineStyleType
 
 from pkpdsim.zonation import ids, observers
 from pkpdsim.zonation.geometry import Layer
@@ -843,7 +843,9 @@ def _portal_triads(ax: Axes) -> None:
     bile duct, the convention of the figures of the machine perfusion model.
     The corners are on the angles 0, 60, ... degrees (`lobule_bands`).
     """
-    offsets = _TRIAD_OFFSET * np.array([[1.0, 0.0], [-0.5, 0.87], [-0.5, -0.87]])
+    # the three dots stand at the same distance from the corner, 120 degrees apart
+    around = np.deg2rad(120.0 * np.arange(3))
+    offsets = _TRIAD_OFFSET * np.column_stack([np.cos(around), np.sin(around)])
     angles = np.deg2rad(60.0 * np.arange(6))
     corners = np.column_stack([np.cos(angles), np.sin(angles)])
     for offset, color in zip(offsets, _TRIAD_COLORS, strict=True):
@@ -869,7 +871,7 @@ def draw_lobule(
     values: Sequence[float] | np.ndarray,
     *,
     mappable: ScalarMappable,
-    missing: str = MISSING,
+    missing: ColorType = MISSING,
     thirds: bool = False,
     anatomy: bool = False,
     labels: bool = False,
@@ -899,7 +901,8 @@ def draw_lobule(
             data and is drawn in `missing`.
         mappable: the colour of a value, a `ScalarMappable` of a norm and a
             colormap; the same one goes to `colorbar`.
-        missing: the colour of a zone without data, a grey by default. It is
+        missing: the colour of a zone without data, a grey by default (any
+            colour matplotlib reads, a name, a hex string or an rgba). It is
             taken here and not from the `bad` colour of the colormap, whose
             default is transparent: a caller who forgets to set it would get
             white holes in the hexagon, which read as a defect of the geometry

@@ -69,6 +69,7 @@ __all__ = [
     "Weight",
     "Weights",
     "lobular_area",
+    "lobular_edge",
     "lobular_radius",
     "lobular_weight",
     "normalized",
@@ -130,6 +131,33 @@ def _direction_of_the_edge(ratio: float) -> float:
     outside the lobule and the whole ray lies beyond it.
     """
     return min(_WEDGE, math.asin(min(1.0, _APOTHEM * ratio)))
+
+
+def lobular_edge(x: float) -> float:
+    """Get the direction in which the isoline of a position leaves the hexagon.
+
+    Up to this direction the isoline is the arc of the Apollonius circle of the
+    position (`lobular_radius`); beyond it the position lies outside the lobule
+    and the edge of the hexagon bounds it, so the isoline follows the straight
+    edge. The isoline of 0 leaves at once, it is the edge over the whole wedge,
+    and the isoline of 1, the central vein, never leaves. A renderer samples
+    the arc and takes the rest straight (`pkpdsim.zonation.render`).
+
+    Args:
+        x: the lobular position, 0 periportal (the portal triads) and 1
+            pericentral (the central vein).
+
+    Returns:
+        The direction in the wedge of a triad, in `[0, pi / 6]` (rad).
+
+    Raises:
+        ValueError: for a position outside the lobule.
+    """
+    if not 0.0 <= x <= 1.0:
+        raise ValueError(f"The lobular position {x} is outside [0, 1].")
+    if x == 1.0:
+        return _WEDGE
+    return _direction_of_the_edge(x / (1.0 - x))
 
 
 def lobular_area(x: float) -> float:

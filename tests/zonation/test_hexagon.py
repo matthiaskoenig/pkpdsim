@@ -253,6 +253,8 @@ def test_the_isoline_of_one_is_the_centre() -> None:
     ring = lobule_isoline(1.0)
     assert np.hypot(ring[:, 0], ring[:, 1]) == pytest.approx(0.0)
     assert _shoelace(ring) == pytest.approx(0.0)
+    # the centre is the same point in every direction: two per wedge, not more
+    assert len(ring) == len(lobule_isoline(1.0, points=256)) == 13
 
 
 def test_the_isoline_shrinks_with_the_position() -> None:

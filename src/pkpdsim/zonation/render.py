@@ -22,7 +22,7 @@ from itertools import pairwise
 import numpy as np
 
 from pkpdsim.zonation.geometry import SinusoidGeometry
-from pkpdsim.zonation.profiles import lobular_radius
+from pkpdsim.zonation.profiles import lobular_edge, lobular_radius
 
 __all__ = ["lobule_bands", "lobule_isoline", "tube_mesh"]
 
@@ -57,33 +57,25 @@ def _zone_edges(n: int) -> list[float]:
     return [k / n for k in range(n + 1)]
 
 
-def _kink(position: float) -> float:
-    """Get the direction in which the isoline of a position leaves the hexagon.
-
-    Beyond this direction the edge of the hexagon bounds the lobule and the
-    isoline follows it (`sin(theta) = sqrt(3) / 2 * x / (1 - x)`); the isoline
-    of 0 is the edge over the whole wedge and the isoline of 1 is the centre,
-    which has no straight part.
-    """
-    if position <= 0.0:
-        return 0.0
-    if position >= 1.0:
-        return _WEDGE
-    return math.asin(min(1.0, math.sqrt(3.0) / 2.0 * position / (1.0 - position)))
-
-
 def _directions(position: float, points: int) -> np.ndarray:
     """Get the directions which the isoline of a position is sampled in.
 
-    The isoline is an arc of an Apollonius circle up to the direction in which
-    it leaves through the edge of the hexagon (`_kink`) and the straight edge
-    beyond it, so `points` directions cover the arc and the kink and the
-    midpoint of the edge (theta `pi / 6`) close it: a chord of the straight
-    part is the part itself, and no point is spent where the polygon is exact.
-    The isoline of 0 is therefore two points, the corner and the midpoint of
-    the edge.
+    The isoline is the arc of an Apollonius circle up to the direction in which
+    it leaves through the edge of the hexagon and the straight edge beyond it,
+    so `points` directions cover the arc and the midpoint of the edge (theta
+    `pi / 6`) closes it: a chord of the straight part is the part itself, and
+    no point is spent where the polygon is exact already. The direction is
+    `lobular_edge` of the profiles, the one the engine integrates the areas of
+    the zones with, so the polygons and `zone_areas` cut the lobule in the same
+    place.
+
+    The isoline of 0 is therefore two directions, the corner and the midpoint
+    of the edge, and the isoline of 1 is the central vein, the radius 0 in
+    every direction, which two directions give as well.
     """
-    theta = np.linspace(0.0, min(_kink(position), _WEDGE), points)
+    if position >= 1.0:
+        return np.array([0.0, _WEDGE])
+    theta = np.linspace(0.0, lobular_edge(position), points)
     return np.unique(np.append(theta, _WEDGE))
 
 
