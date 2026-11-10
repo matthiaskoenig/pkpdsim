@@ -641,8 +641,28 @@ class ZonationBuilder:
             )
         return flows
 
+    def _carrier_fraction(self) -> float:
+        """The volume fraction of the space the chain convects the blood through.
+
+        The lumen (the plasma and the erythrocytes) in the sinusoid geometry,
+        whose endothelium and space of Disse are no part of the axial flow; the
+        whole vascular compartment of a well-stirred zone (`vas`, the lumen,
+        the endothelium and the space of Disse in one), which is what its flow
+        reaction moves the substance through, so that is the volume its
+        residence time and its velocity are.
+        """
+        fr = self._full_fractions()
+        if self.settings.geometry is Geometry.SINUSOID:
+            return lumen_fraction(fr)
+        return sum(fr[layer].value for layer in _VASCULAR if layer in fr)
+
     def velocity(self) -> float:
-        """The velocity (m/s) of the blood in the sinusoid, 0 without a flow."""
+        """The velocity (m/s) of the blood along the chain, 0 without a flow.
+
+        The flow over the cross-section of the space it convects through
+        (`_carrier_fraction`), which is the lumen of a sinusoid and the whole
+        vascular compartment of a well-stirred zone.
+        """
         # TODO(geometry): both numbers are outputs of this geometry paired with
         # the PBPK reference flow (default settings), none is a measurement:
         # 108 um/s for the rat (the lower end of the intravital literature,
@@ -657,10 +677,9 @@ class ZonationBuilder:
         q = self._flow()
         if q == 0.0:
             return 0.0
-        fr = self._full_fractions()
         geo = self._geo()
         litre = (
-            lumen_fraction(fr)
+            self._carrier_fraction()
             * geo.f_par.value
             * self._mass().value
             / geo.density.value
