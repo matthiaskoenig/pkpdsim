@@ -62,6 +62,7 @@ from pkpdsim.pbpk import (
     SegmentedIntestine,
     Sex,
     SlowPool,
+    Stabilisation,
     Substance,
     ThresholdReabsorption,
     Transport,
@@ -93,8 +94,9 @@ def standard() -> PBPKDefinition:
     `drg` (merged tissue, urine), its metabolite `drg_m` (vascular), `prf`
     (flow-limited, erythrocytes in equilibrium, a Kp override of adipose),
     `prm` (full form, kinetic erythrocytes, transport), `hil` (Hill kinetics
-    in the kidney) and `inh` (a mechanism-based inhibitor and inducer of the
-    CYP2D6 which metabolises it), `spl` (split by a fraction into `spl_m1`
+    in the kidney) and `inh` (a mechanism-based inhibitor, inducer and
+    stabiliser of the CYP2D6 which metabolises it, whose degradation rate is
+    that of the definition), `spl` (split by a fraction into `spl_m1`
     and the remainder `spl_m2`); the OATP1B3 uptake `PRMIN3` of `prm` has a
     capacity as a ratio of `PRMIN`; `drg` inhibits CYP2C9 competitively;
     `drg`, `prf` and `prm` have an endogenous baseline; a PD component reads
@@ -144,6 +146,7 @@ def standard() -> PBPKDefinition:
                 distribution=Kp(1.0, ftissue=1.0),
                 inhibits=(Inhibition("CYP2D6", "mechanism", ki=0.005, kinact=0.05),),
                 induces=(Induction("CYP2D6", emax=2.0, ec50=0.1),),
+                stabilises=(Stabilisation("CYP2D6", ki=0.05),),
             ),
             Substance(
                 "spl",
@@ -227,9 +230,17 @@ def standard() -> PBPKDefinition:
                 FirstOrder(k=0.3),
             ),
         ],
-        routes=[Route.iv("drg"), Route.oral("drg"), Route.oral_solution("prf")],
+        routes=[
+            Route.iv("drg"),
+            Route.oral("drg"),
+            Route.oral_solution("prf"),
+            Route.im("drg"),
+            Route.sc("prf"),
+            Route.rectal("drg"),
+        ],
         pd=[_cell_reader()],
         slow_pools=[SlowPool("drg", frozenset({Organ.MUSCLE}), k=1e-3, kp=1.5)],
+        turnover={"CYP2D6": 0.0267},
     )
 
 
@@ -323,7 +334,8 @@ def absorption() -> PBPKDefinition:
     """Get the toy with the factors of the absorption and a conversion of the segmented intestine.
 
     The fraction absorbed, the colon factor, a regional factor of the lower
-    ileum and the conversion of the drug into its product in the stomach.
+    ileum, the conversion of the drug into its product in the stomach and an
+    enteric-coated tablet of the product.
     """
     return PBPKDefinition(
         sid="toy_absorption",
@@ -344,7 +356,51 @@ def absorption() -> PBPKDefinition:
         routes=[
             Route.oral_solution("drg"),
             Route.oral("drg", FirstOrderDissolution(k=2.0, fed=0.5, release=0.2)),
+            Route.oral("drg_m", FirstOrderDissolution(k=2.0, enteric=True)),
         ],
+    )
+
+
+def mucosa(per_volume: bool = True) -> PBPKDefinition:
+    """Get the toy with the permeability-limited mucosa of the segmented intestine.
+
+    `drg` has a gut metabolism of CYP3A4 into `drg_m` and the exchange between
+    the mucosal blood and the enterocytes (`SegmentedIntestine(mucosa_ps=...)`,
+    the Qgut model): per litre of mucosa (`kps_mu_drg`) or, with
+    `per_volume=False`, of the mucosa of the small intestine
+    (`PS_mu_ref_drg`), the two forms of the option.
+    """
+    return PBPKDefinition(
+        sid="toy_mucosa" + ("" if per_volume else "_whole"),
+        substances=[
+            Substance(
+                "drg",
+                name="drug",
+                mr=300.0,
+                binding=Binding(fu=0.1),
+                distribution=Kp(2.0, ftissue=1.0),
+            ),
+            Substance("drg_m", name="metabolite", mr=316.0),
+        ],
+        chemistry=[
+            Metabolism(
+                "DRGGU",
+                Organ.SMALL_INTESTINE,
+                "drg",
+                {"drg_m": 1.0},
+                FirstOrder(k=0.05),
+                protein="CYP3A4",
+            )
+        ],
+        variants=Variants(
+            organs={
+                Organ.SMALL_INTESTINE: SegmentedIntestine(
+                    mucosa_ps={"drg": 0.5 if per_volume else 1.0},
+                    mucosa_ps_per_volume=per_volume,
+                )
+            }
+        ),
+        routes=[Route.oral_solution("drg")],
     )
 
 
@@ -402,6 +458,8 @@ def contexts(tmp_path_factory: pytest.TempPathFactory) -> list[Context]:
         losing,
         variants(),
         absorption(),
+        mucosa(),
+        mucosa(per_volume=False),
     ):
         paths = build(definition, directory)
         doc = libsbml.readSBMLFromFile(str(paths.comp_path))

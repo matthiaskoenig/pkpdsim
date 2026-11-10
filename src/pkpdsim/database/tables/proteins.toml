@@ -1,7 +1,14 @@
 # The enzymes and transporters of the PBPK models (human).
 # `uniprot` is the reviewed human UniProtKB accession (UniProt, checked against rest.uniprot.org
-# 2026-10-25, ABCC3, ABCC4 and SLC6A8 2026-10-27); `ncit` the NCI Thesaurus concept of the protein
-# (checked against the NCIt EVS API 2026-10-25, ABCC3, ABCC4 and SLC6A8 2026-10-27), left out where NCIt has no concept for the protein (SLC22A6, SLC22A8).
+# 2026-10-25, ABCC3, ABCC4 and SLC6A8 2026-10-27, CES1, CYP2E1, UGT2B15 and UGT1A3 2026-11-02, CYP3A5 2026-11-04); `ncit` the NCI Thesaurus concept of the protein
+# (checked against the NCIt EVS API 2026-10-25, ABCC3, ABCC4 and SLC6A8 2026-10-27, CES1, CYP2E1, UGT2B15 and UGT1A3 2026-11-02, CYP3A5 2026-11-04), left out where NCIt has no concept for the protein (SLC22A6, SLC22A8, UGT1A3).
+#
+# The table holds no abundances: the capacity of a process is a rate of the
+# model, and the ratio of two enzymes of one pathway is a `RateOf` of the first
+# (see docs/pbpk/chemistry.md). The only expression data of the library are the
+# relative amounts of CYP3A4 along the intestinal mucosa
+# (`data/intestine_human.toml`); a process of any other protein is placed by
+# mucosa volume over the small intestine.
 
 source = "UniProt"
 
@@ -34,6 +41,31 @@ ncit = "C17287"
 name = "Cytochrome P450 3A4"
 uniprot = "P08684"
 ncit = "C17573"
+
+# The second CYP3A of liver and small intestine. No open source read gives its
+# abundance along the intestinal segments, so a process of CYP3A5 is placed by
+# mucosa volume over the small intestine, as every protein but CYP3A4. What the
+# open sources give, for the capacity a model has to choose: in the mucosa of
+# the small intestine of 11 of 31 donors CYP3A5 was 4.9 to 25 (mean 16) pmol/mg
+# microsomal protein, against 8.8 to 150 pmol/mg of CYP3A4 and a mean total
+# CYP3A of 50 pmol/mg (Paine 2006, doi:10.1124/dmd.105.008672, PMID 16467132,
+# free full text PMC2222892); in the livers and the jejunal mucosa of white
+# donors with a CYP3A5*1 allele CYP3A5 was more than half of the total CYP3A
+# (Lin 2002, doi:10.1124/mol.62.1.162, PMID 12065767, abstract read). These
+# abundances are those of expressors: CYP3A5*3 and *6 abolish the protein, and
+# CYP3A5 is expressed in 60 % of African American and 33 % of Caucasian livers
+# (Kuehl 2001, doi:10.1038/86882, PMID 11279519, abstract read), so the
+# reference genotype belongs to the model, not to the library: `f_CYP3A5` is 1
+# as for every protein, and a model whose reference subjects do not express it
+# (*3/*3) writes the genotype into the rate of its definition and keeps
+# `f_CYP3A5` for the interactions. No factor of impairment: the transcribed
+# figure of El Khateeb 2021 in `data/impairment.toml` gives CYP3A4 and not
+# CYP3A5, and Yoshida 2016 does not separate the CYP3A4/5 model drugs, so
+# CYP3A5 has none, as UGT1A3 has none.
+[proteins.CYP3A5]
+name = "Cytochrome P450 3A5"
+uniprot = "P20815"
+ncit = "C45999"
 
 [proteins.UGT1A1]
 name = "UDP-glucuronosyltransferase 1A1"
@@ -127,3 +159,22 @@ ncit = "C153432"
 li = { value = 0.0193, unit = "1/hr", source = "RowlandYeo2011", notes = "hepatic CYP3A4 (half-life 35.9 h): of the two values tested (0.0193 and 0.0077 1/h), the one which predicted 29 clinical mechanism-based CYP3A4 interactions with less bias and higher precision" }
 si = { value = 0.0301, unit = "1/hr", source = "Greenblatt2003", notes = "derived: ln(2)/23 h, the recovery half-life of intestinal CYP3A after a single dose of grapefruit juice (midazolam AUC ratios 26 to 74 h after the juice)" }
 other = { value = 0.0193, unit = "1/hr", source = "ModelChoice", notes = "the hepatic value (Rowland Yeo 2011) for the organs without an in vivo estimate of the turnover" }
+
+[proteins.CES1]
+name = "Liver carboxylesterase 1"
+uniprot = "P23141"
+ncit = "C116036"
+
+[proteins.CYP2E1]
+name = "Cytochrome P450 2E1"
+uniprot = "P05181"
+ncit = "C16485"
+
+[proteins.UGT2B15]
+name = "UDP-glucuronosyltransferase 2B15"
+uniprot = "P54855"
+ncit = "C105422"
+
+[proteins.UGT1A3]
+name = "UDP-glucuronosyltransferase 1A3"
+uniprot = "P35503"

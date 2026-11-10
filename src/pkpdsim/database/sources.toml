@@ -80,6 +80,10 @@ doi = "10.2174/138920009788498978"
 citation = "Fahmi OA, Maurer TS, Kish M, Cardenas E, Boldt S, Nettleton D. A combined model for predicting CYP3A4 clinical net drug-drug interaction based on CYP3A4 inhibition, inactivation, and induction determined in vitro. Drug Metab Dispos 36(8):1698-1708, 2008."
 doi = "10.1124/dmd.107.018663"
 
+[Roberts1995]
+citation = "Roberts BJ, Song BJ, Soh Y, Park SS, Shoaf SE. Ethanol induces CYP2E1 by protein stabilization: role of ubiquitin conjugation in the rapid degradation of CYP2E1. J Biol Chem 270(50):29632-29635, 1995."
+doi = "10.1074/jbc.270.50.29632"
+
 [RowlandYeo2011]
 citation = "Rowland Yeo K, Walsky RL, Jamei M, Rostami-Hodjegan A, Tucker GT. Prediction of time-dependent CYP3A4 drug-drug interactions by physiologically based pharmacokinetic modelling: impact of inactivation parameters and enzyme turnover. Eur J Pharm Sci 43(3):160-173, 2011."
 doi = "10.1016/j.ejps.2011.04.008"
@@ -1161,6 +1165,30 @@ doi = "10.1152/japplphysiol.01124.2016"
 [MacDougall1989]
 citation = "MacDougall ML, Wiegmann TB. Urate excretion by the isolated perfused rat kidney and modification by drugs. Proc Soc Exp Biol Med 192(3):276-280, 1989."
 doi = "10.3181/00379727-192-42997"
+
+[deBoer1979]
+citation = "de Boer AG, Breimer DD, Mattie H, Pronk J, Gubbens-Stibbe JM. Rectal bioavailability of lidocaine in man: partial avoidance of \"first-pass\" metabolism. Clin Pharmacol Ther 26(6):701-709, 1979."
+doi = "10.1002/cpt1979266701"
+
+[Yang2007]
+citation = "Yang J, Jamei M, Rowland Yeo K, Tucker GT, Rostami-Hodjegan A. Prediction of intestinal first-pass drug metabolism. Curr Drug Metab 8(7):676-684, 2007. PMID 17979655. Abstract read (Europe PMC, 2026-11-04); the full text is not open access."
+doi = "10.2174/138920007782109733"
+
+[Gertz2010]
+citation = "Gertz M, Harrison A, Houston JB, Galetin A. Prediction of human intestinal first-pass metabolism of 25 CYP3A substrates from in vitro clearance and permeability data. Drug Metab Dispos 38(7):1147-1158, 2010. PMID 20368326. Abstract read (Europe PMC, 2026-11-04); the full text is not open access."
+doi = "10.1124/dmd.110.032649"
+
+[Paine2006]
+citation = "Paine MF, Hart HL, Ludington SS, Haining RL, Rettie AE, Zeldin DC. The human intestinal cytochrome P450 'pie'. Drug Metab Dispos 34(5):880-886, 2006. PMID 16467132, free full text PMC2222892."
+doi = "10.1124/dmd.105.008672"
+
+[Lin2002]
+citation = "Lin YS, Dowling AL, Quigley SD, Farin FM, Zhang J, Lamba J, Schuetz EG, Thummel KE. Co-regulation of CYP3A4 and CYP3A5 and contribution to hepatic and intestinal midazolam metabolism. Mol Pharmacol 62(1):162-172, 2002. PMID 12065767. Abstract read (Europe PMC, 2026-11-04); the full text is not open access."
+doi = "10.1124/mol.62.1.162"
+
+[Kuehl2001]
+citation = "Kuehl P, Zhang J, Lin Y, Lamba J, Assem M, Schuetz J, Watkins PB, Daly A, Wrighton SA, Hall SD, Maurel P, Relling M, Brimer C, Yasuda K, Venkataramanan R, Strom S, Thummel K, Boguski MS, Schuetz E. Sequence diversity in CYP3A promoters and characterization of the genetic basis of polymorphic CYP3A5 expression. Nat Genet 27(4):383-391, 2001. PMID 11279519. Abstract read (Europe PMC, 2026-11-04); the full text is not open access."
+doi = "10.1038/86882"
 
 [Blouin1977]
 citation = "Blouin A, Bolender RP, Weibel ER. Distribution of organelles and membranes between hepatocytes and nonhepatocytes in the rat liver parenchyma. A stereological study. J Cell Biol 72(2):441-455, 1977."

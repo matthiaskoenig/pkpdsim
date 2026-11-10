@@ -15,20 +15,26 @@ A protein of a process of the organ has the base activity `f_<protein>`, a
 constant of the organ (1, set by genotype and the experiments); in the liver
 the impairment multiplies it by the input `fimp_<protein>`
 (`pkpdsim.pbpk.impairment`).
-When a substance of the definition inactivates it (mechanism-based) or
-induces it, the organ has the turnover state `E_<protein>`, the amount of the
-protein relative to its baseline (initially 1),
+When a substance of the definition inactivates it (mechanism-based),
+induces it or stabilises it, the organ has the turnover state `E_<protein>`,
+the amount of the protein relative to its baseline (initially 1),
 
 ```
-dE/dt = kdeg*(1 + sum Emax*I/(EC50 + I)) - kdeg*E - sum kinact*I/(KI + I)*E
+dE/dt = kdeg*(1 + sum Emax*I/(EC50 + I)) - kdeg*E/(1 + sum I/Kstab)
+        - sum kinact*I/(KI + I)*E
 ```
 
-(Mayhew 2000, Almond 2009, Fahmi 2008), with the unbound concentration `I`
-of the inhibitor or inducer in the cell (intracellular, else the equivalent
-tissue part, else plasma) and the degradation rate `kdeg_<protein>` of the
-organ; the rates of the protein are multiplied by `E_<protein>`. The
-constants of the interactions (`Ki`, `Kiu`, `kinact`, `Emax`, `EC50`) are
-parameters of the body, read through a port.
+(Mayhew 2000, Almond 2009, Fahmi 2008; the stabilisation of Roberts 1995
+slows the degradation, so the amount approaches
+`(1 + sum Emax*I/(EC50 + I))*(1 + sum I/Kstab)` without an inactivation),
+with the unbound concentration `I` of the inhibitor, inducer or stabiliser
+in the cell (intracellular, else the equivalent tissue part, else plasma)
+and the degradation rate `kdeg_<protein>`, that of the protein in the
+definition (`PBPKDefinition.turnover`) or else of the organ; without a
+stabilisation the degradation is `kdeg*E`. The rates of the protein are
+multiplied by `E_<protein>`. The constants of the interactions (`Ki`,
+`Kiu`, `kinact`, `Emax`, `EC50`, `Kstab`) are parameters of the body, read
+through a port.
 """
 
 from collections.abc import Mapping, Sequence
@@ -641,9 +647,10 @@ class OrganBuilder:
     def _activity(self, protein: str) -> None:
         """The base activity `f_<protein>` of a protein in the organ and its interactions.
 
-        The constants of the inhibitions and inductions of the protein are
-        inputs of the organ; a protein which a substance inactivates or
-        induces has the turnover state `E_<protein>`.
+        The constants of the inhibitions, inductions and stabilisations of
+        the protein are inputs of the organ; a protein which a substance
+        inactivates, induces or stabilises has the turnover state
+        `E_<protein>`.
         """
         pid = ids.activity(protein)
         if pid in self.parameters:
@@ -689,26 +696,45 @@ class OrganBuilder:
                     ids.emax(protein, sid), U.dimensionless, f"Emax {protein} {sid}"
                 )
                 self._input(ids.ec50(protein, sid), U.mM, f"EC50 {protein} {sid}")
+        for sid, stab in self.ctx.stabilisations:
+            if stab.protein == protein:
+                self._input(ids.kstab(protein, sid), U.mM, f"Kstab {protein} {sid}")
         if has_turnover(protein, self.ctx):
             self._turnover(protein)
 
     def _turnover(self, protein: str) -> None:
-        """The turnover state `E_<protein>` under mechanism-based inhibition and induction."""
+        """The turnover state `E_<protein>` under mechanism-based inhibition, induction and stabilisation.
+
+        `dE/dt = kdeg*(1 + sum Emax*I/(EC50 + I)) - kdeg*E/(1 + sum I/Kstab)
+        - sum kinact*I/(KI + I)*E` with the degradation rate of the protein
+        in the definition (`PBPKDefinition.turnover`), else of the organ; the
+        degradation is `kdeg*E` without a stabilisation.
+        """
         kdeg = ids.kdeg(protein)
+        given = self.ctx.turnover.get(protein)
+        text = (
+            f"First order degradation of {protein} in the organ; the synthesis "
+            "of the baseline amount balances it."
+        )
+        if given is not None:
+            text += (
+                f" The degradation rate of {protein} of the definition "
+                "(`PBPKDefinition.turnover`), in every organ."
+            )
         self.parameters[kdeg] = self._annotate(
             value_parameter(
                 kdeg,
-                turnover(self.organ),
+                turnover(self.organ, given),
                 U.per_min,
                 f"degradation rate {protein} [1/min]",
                 SBO.DECAY_CONSTANT,
-                f"First order degradation of {protein} in the organ; the synthesis "
-                "of the baseline amount balances it.",
+                text,
             ),
             "kdeg",
             protein=protein,
         )
         synthesis = [ONE]
+        stabilisation: list[str] = []
         inactivation: list[str] = []
         for sid, ind in self.ctx.inductions:
             if ind.protein != protein:
@@ -717,6 +743,11 @@ class OrganBuilder:
             synthesis.append(
                 f"{ids.emax(protein, sid)} * ({i}) / ({ids.ec50(protein, sid)} + {i})"
             )
+        for sid, stab in self.ctx.stabilisations:
+            if stab.protein != protein:
+                continue
+            i = self._unbound_in_cell(sid, protein)
+            stabilisation.append(f"({i}) / {ids.kstab(protein, sid)}")
         for sid, inh in self.ctx.inhibitions:
             if inh.protein != protein or inh.kind != "mechanism":
                 continue
@@ -726,8 +757,18 @@ class OrganBuilder:
             )
         e = ids.enzyme(protein)
         formula = f"{kdeg} * ({' + '.join(synthesis)}) - {kdeg} * {e}"
+        degradation = "degradation `kdeg*E`"
+        sources = ["Mayhew2000", "Almond2009", "Fahmi2008"]
+        if stabilisation:
+            formula += f" / ({' + '.join([ONE, *stabilisation])})"
+            degradation = (
+                "degradation `kdeg*E/(1 + sum I/Kstab)` slowed by the "
+                "stabilisation of Roberts 1995"
+            )
+            sources.append("Roberts1995")
         if inactivation:
             formula += f" - ({' + '.join(inactivation)}) * {e}"
+        cited = "\n".join(f"- {cite(key)}" for key in sources)
         self.parameters[e] = self._annotate(
             Parameter(
                 e,
@@ -738,11 +779,11 @@ class OrganBuilder:
                 sboTerm=SBO.RELATIVE_ACTIVITY,
                 notes=f"Turnover of {protein} in the organ (initially 1): synthesis "
                 "`kdeg*(1 + sum Emax*I/(EC50 + I))` with the induction of Almond "
-                "2009, degradation `kdeg*E` and the mechanism-based inactivation "
+                f"2009, {degradation} and the mechanism-based inactivation "
                 "`kinact*I/(KI + I)*E` of Mayhew 2000, combined as in Fahmi 2008; "
                 "`I` is the unbound concentration in the cell. It multiplies the "
                 f"rates of {protein}.\n\n`d{e}/dt = {formula}`\n\nSources:\n\n"
-                f"- {cite('Mayhew2000')}\n- {cite('Almond2009')}\n- {cite('Fahmi2008')}",
+                f"{cited}",
             ),
             "enzyme_amount",
             protein=protein,

@@ -55,7 +55,9 @@ library which moves it (but the uptake from the empty lumen), kinetic
 erythrocytes, a declared process in an organ part without a closed form (the
 full form, the flow-limited organ, the blood cells, a slow pool), a linear
 transfer between two parts of the substance, a threshold reabsorption with
-another process of the kidney or without a baseline, and of a solved
+another process of the kidney or without a baseline, an induction, a
+stabilisation or a mechanism-based inactivation of a protein with a turnover
+state (the state starts at 1, not at its steady state), and of a solved
 substance a saturable process outside the systemic organs, two saturable
 processes or no elimination.
 """
@@ -81,7 +83,7 @@ from pkpdsim.pbpk.chemistry import (
 )
 from pkpdsim.pbpk.organs import PORTAL_ORGANS, SYSTEMIC_ORGANS, Organ, Part, Pool
 from pkpdsim.pbpk.parts import parts_for
-from pkpdsim.pbpk.placement import ONE, formula_ids
+from pkpdsim.pbpk.placement import ONE, formula_ids, turnover_proteins
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Formula
@@ -512,8 +514,10 @@ def steady_plan(definition: "PBPKDefinition") -> SteadyPlan:
         elif p.stationary is not None:
             problems += _declared(p, moves[p.sid], species, collector, depends)
     problems += _library_processes(definition, set(generated))
+    regulated = turnover_proteins(definition.substances, definition.chemistry)
     for sid in generated:
         problems += _substance_problems(by_sid[sid], collector)
+        problems += _turnover_problems(by_sid[sid], regulated)
     organs = collector.organs()
     problems += _part_problems(definition, organs, by_sid)
     solved = frozenset(sid for sid in generated if by_sid[sid].baseline is None)
@@ -693,6 +697,27 @@ def _substance_problems(s: Substance, collector: _Collector) -> list[str]:
             "plasma has no closed steady state"
         )
     return problems
+
+
+def _turnover_problems(s: Substance, regulated: set[str]) -> list[str]:
+    """Refuse a substance which changes the turnover state of a protein.
+
+    The turnover state `E_<protein>` starts at 1, its steady state at the
+    start of the substance (an induction, a stabilisation, a mechanism-based
+    inactivation) is not generated.
+    """
+    changes = [
+        *(("inactivates", i.protein) for i in s.inhibits if i.kind == "mechanism"),
+        *(("induces", i.protein) for i in s.induces),
+        *(("stabilises", i.protein) for i in s.stabilises),
+    ]
+    return [
+        f"{s.sid} {verb} {protein}: its turnover state E_{protein.lower()} starts "
+        f"at 1, not at its steady state at the start of {s.sid}, which has no "
+        "generated form"
+        for verb, protein in changes
+        if protein in regulated
+    ]
 
 
 def _part_problems(

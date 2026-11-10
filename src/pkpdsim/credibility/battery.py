@@ -8,6 +8,10 @@ battery hook of every `PKPDModel`) adds what every PBPK model must fulfil, on
 the simulations of every build with roadrunner without a dose and with a dose
 of every route of every substance:
 
+- `dose_states`: every state in mg which a reaction reads is a dose state
+  the battery knows, so no dose of that shape is simulated by nothing
+  (`FlatBuild.unknown_doses`, a heuristic: a dose in another unit, one which
+  is a species and one which is a constant are not found).
 - `mass_balance`: the amount of the substances in the model, in its sinks and
   in its dose states changes by the infusion and by the flows of the reactions
   which do not read a dose (eliminations and productions) alone, so a dose
@@ -31,12 +35,23 @@ small doses of the superposition) and the order of the checks in the report.
 
 The battery reads the conventions of the models of pkdb_models from the flat
 SBML (`FlatBuild`): a substance has its molecular weight `Mr_<s>`, its doses
-are the states `IVDOSE_<s>`, `PODOSE_<s>` and `SOLDOSE_<s>` (mg) and the
-infusion rate `Ri_<s>` (mg/min), and a species belongs to the substance its
-id (the part after the last `__`) ends with, `_<s>`, or else starts with,
-`<s>_` (the lumen of the intestine of some models, `mid_lumen`). A check
-without what it needs, e.g. a model without doses, is not applicable and
-assesses nothing.
+are the dose states of `dose_prefixes` (mg) and the infusion rate `Ri_<s>`
+(mg/min), and a species belongs to the substance its id (the part after the
+last `__`) ends with, `_<s>`, or else starts with, `<s>_` (the lumen of the
+intestine of some models, `mid_lumen`). A check without what it needs, e.g. a
+model without doses, is not applicable and assesses nothing.
+
+`dose_prefixes` is the dose states of the PBPK library
+(`pkpdsim.pbpk.equilibration.DOSE_PREFIXES`, `IVDOSE_<s>`, `PODOSE_<s>`,
+`SOLDOSE_<s>` and the depots `IMDOSE_<s>`, `SCDOSE_<s>`, `RECDOSE_<s>`) and
+`LEGACY_DOSE_STATES`, the dose states of the models which are not built with
+the library (an inhaled, buccal, legacy rectal or sublingual dose, an oral
+solution). A state in mg which a reaction reads and which is neither is a
+dose state or a depot of a dose the battery does not know: the check
+`dose_states` reports it (`FlatBuild.unknown_doses`) instead of leaving it
+out in silence, so it is given its prefix or the check is declared as a
+known failure with its reason (`CheckSettings.battery`). The mass balance
+keeps its arithmetic meaning and does not fail for it.
 """
 
 from __future__ import annotations
@@ -45,6 +60,7 @@ import logging
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Self, override
 
@@ -75,9 +91,11 @@ if TYPE_CHECKING:
 __all__ = [
     "ABSOLUTE_TOLERANCE",
     "DOSE",
+    "DOSE_STATES",
     "FATE_COLUMNS",
     "HORIZON",
     "INFUSION",
+    "LEGACY_DOSE_STATES",
     "MASS_BALANCE",
     "MASS_LIMIT",
     "PK_BATTERY",
@@ -92,6 +110,7 @@ __all__ = [
     "Fate",
     "FlatBuild",
     "PKBattery",
+    "dose_prefixes",
 ]
 
 logger = logging.getLogger(__name__)
@@ -118,11 +137,21 @@ MASS_LIMIT: Final = 1e-6
 #: the largest change of a state without a dose relative to its start
 STEADY_LIMIT: Final = 1e-6
 
-#: the prefixes of the dose states (mg) and of the infusion rate (mg/min)
-_BOLUS: Final = ("IVDOSE", "PODOSE", "SOLDOSE")
+#: the prefix of the infusion rate (mg/min)
 _INFUSION: Final = "Ri"
-#: the prefixes of the sinks of a substance, by the name of their part of a fate
-_SINKS: Final = {"urine": "Aurine_", "feces": "Afeces_"}
+#: the prefixes of the dose states (mg) of the models of pkdb_models which the
+#: PBPK library does not create, with the model which has them: the library
+#: has no such route and will not have one until these models are migrated
+LEGACY_DOSE_STATES: Final = {
+    "INHDOSE_": "albuterol, the inhaled dose",
+    "BUDOSE_": "morphine, the buccal dose",
+    "REDOSE_": "morphine, the rectal dose (the spelling before `RECDOSE_`)",
+    "SLDOSE_": "captopril, the sublingual dose",
+    "POSOLUTION_": "rivaroxaban, the oral dose as a solution (`SOLDOSE_`)",
+}
+#: the prefixes of the sinks of a substance, by the name of their part of a
+#: fate; the bile of the library is no sink, it transits into the lumen
+_SINKS: Final = {"urine": "Aurine_", "feces": "Afeces_", "loss": "Aloss_"}
 #: the prefix of the parameters which integrate the flows of the reactions
 _FLOW: Final = "battery_flow_"
 #: why a check of the PK battery or the steady state does not apply to a model
@@ -131,6 +160,9 @@ _NO_SUBSTANCE: Final = (
     "convention of the PBPK models the checks of the simulations read."
 )
 
+DOSE_STATES: Final = register_check(
+    Check("dose_states", "dose states of the model", "use_error")
+)
 MASS_BALANCE: Final = register_check(
     Check("mass_balance", "mass balance", "numerical_code_verification")
 )
@@ -140,8 +172,9 @@ ZERO_DOSE: Final = register_check(
 SUPERPOSITION: Final = register_check(
     Check("superposition", "superposition", "numerical_code_verification")
 )
-#: the checks of the PK battery
-PK_CHECKS: Final = (MASS_BALANCE, ZERO_DOSE, SUPERPOSITION)
+#: the checks of the PK battery, the dose states first: the check says what
+#: the others cover
+PK_CHECKS: Final = (DOSE_STATES, MASS_BALANCE, ZERO_DOSE, SUPERPOSITION)
 
 #: the columns of `fates.tsv`
 FATE_COLUMNS: Final = (
@@ -153,6 +186,72 @@ FATE_COLUMNS: Final = (
     "value",
     "share",
 )
+
+
+@cache
+def dose_prefixes() -> tuple[str, ...]:
+    """Get the prefixes of the dose states (mg) of the models, with the `_`.
+
+    The dose states of the PBPK library come from the library itself
+    (`pkpdsim.pbpk.equilibration.DOSE_PREFIXES`, which `pkpdsim.pbpk.ids`
+    builds), without the infusion rate, which is a rate and no state, plus
+    `LEGACY_DOSE_STATES`, the dose states of the models which the library
+    does not build. A route the library gains is a dose of the battery
+    without a change here.
+
+    The library is imported inside the function, as `flat_model` is, so that
+    `pkpdsim.credibility` imports without it: the battery and the
+    equivalency of the inputs read a build and pay for the library anyway,
+    while the fits and their reports do not.
+
+    Returns:
+        The prefixes, the library's first.
+    """
+    from pkpdsim.pbpk.equilibration import DOSE_PREFIXES
+    from pkpdsim.pbpk.ids import infusion_rate
+
+    return (
+        *(prefix for prefix in DOSE_PREFIXES if prefix != infusion_rate("")),
+        *LEGACY_DOSE_STATES,
+    )
+
+
+@cache
+def _bolus() -> tuple[str, ...]:
+    """Get the dose states of `dose_prefixes` without their trailing `_`."""
+    return tuple(prefix.removesuffix("_") for prefix in dose_prefixes())
+
+
+def _local(sid: str) -> str:
+    """Get an id without the qualifier of its submodel, `GU__PODOSE_d` to `PODOSE_d`.
+
+    A flattened comp model qualifies the ids of a submodel with
+    `<SUBMODEL>__`, and a dose state of a submodel is a dose state of the
+    model, since a flat model is what every simulation runs, as a species of
+    a submodel belongs to its substance (`_substance_of`).
+
+    Args:
+        sid: the id of an element of a flat build.
+
+    Returns:
+        The id without the qualifier of a submodel.
+    """
+    return sid.rsplit("__", 1)[-1]
+
+
+def _is_bolus(sid: str) -> bool:
+    """Get whether an id is a dose state (mg), the qualifier of a submodel aside.
+
+    A dose of a dose state is added to it and a dose of an infusion rate
+    (mg/min) replaces it, so the two are told apart by the prefix of the id.
+
+    Args:
+        sid: the id of a dose state or of an infusion rate.
+
+    Returns:
+        Whether the id is a dose state.
+    """
+    return _local(sid).split("_")[0] in _bolus()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -169,8 +268,10 @@ class Fate:
         substance: the dosed substance.
         amount: the dose (mmole).
         parts: the parts of the dose (mmole) by name: `body` (the species
-            which are no sink), `urine` and `feces` (the sinks), `dose` (not
-            yet applied) and a reaction which does not read a dose by its id
+            which are no sink), `urine`, `feces` and `loss` (the sinks:
+            `feces` holds the unabsorbed part of a rectal dose as well,
+            `loss` what an injected depot does not absorb), `dose` (not yet
+            applied) and a reaction which does not read a dose by its id
             (negative for an elimination, positive for a production).
         imbalance: the imbalance of the dose simulation relative to the
             largest term of its balance.
@@ -256,6 +357,20 @@ class FlatBuild:
             states and the parameters in mg with a rate rule which reads one, e.g.
             the drug in the stomach of a model, also through the assignment
             rules and transitively.
+        unknown_doses: the states in mg which a reaction reads and which are
+            no dose of any prefix of `dose_prefixes`, so they are a dose state
+            or a depot of a dose which the battery does not know; the check
+            `dose_states` reports them instead of leaving them out in
+            silence. A heuristic in both directions, and not a guarantee that
+            no dose is skipped: it finds a parameter with a rate rule, in mg,
+            which a reaction reads, which is what every dose state of the
+            models looks like. It has no false positive over the tracked
+            builds of pkdb_models, but a model may have such a state which is
+            no dose; and it does not find a dose state in another unit, one
+            which is a species, or one which is a constant parameter without
+            a rate rule, each of which stays skipped in silence and needs a
+            reader of its own (none of the three occurs in the tracked
+            builds).
         flows: the net change of the amount of the tracked species per unit of
             the rate of every reaction which changes it, by reaction id.
         inputs: the reactions of `flows` which read a state of the dose or
@@ -278,6 +393,7 @@ class FlatBuild:
     amounts: frozenset[str]
     doses: Mapping[str, str]
     dose_states: Mapping[str, str]
+    unknown_doses: tuple[str, ...]
     flows: Mapping[str, float]
     inputs: frozenset[str]
     outside: tuple[str, ...]
@@ -342,13 +458,11 @@ class FlatBuild:
         doses = {
             pid: s
             for pid in parameters
-            for prefix in (*_BOLUS, _INFUSION)
+            for prefix in (*_bolus(), _INFUSION)
             for s in substances
-            if pid == f"{prefix}_{s}"
+            if _local(pid) == f"{prefix}_{s}"
         }
-        dose_states = {
-            pid: s for pid, s in doses.items() if pid.split("_")[0] in _BOLUS
-        }
+        dose_states = {pid: s for pid, s in doses.items() if _is_bolus(pid)}
         # a parameter in mg whose rate rule reads the dose, e.g. the drug in the
         # stomach, is a state of the dose while a reaction or the rate rule of
         # another state of the dose reads it, not a sum of the given doses
@@ -386,6 +500,22 @@ class FlatBuild:
                     pruned = True
         dose_states.update(chain)
         dosing = {**doses, **dose_states}
+        # a state in mg which a reaction reads and which is no dose of any
+        # prefix looks like a dose state the battery does not know: it would
+        # otherwise be left out of every check without a word. A heuristic in
+        # both directions (see `unknown_doses`), which the check `dose_states`
+        # reports and nothing else acts on: a dose state in another unit, a
+        # species or a constant parameter is not found
+        unknown_doses = tuple(
+            sorted(
+                pid
+                for pid in rates
+                if pid in parameters
+                and pid not in dosing
+                and pid in laws
+                and parameters[pid].getUnits().rsplit("__", 1)[-1] == "mg"
+            )
+        )
         flows: dict[str, float] = {}
         inputs: set[str] = set()
         for reaction in model.getListOfReactions():
@@ -441,6 +571,7 @@ class FlatBuild:
             ),
             doses=doses,
             dose_states=dose_states,
+            unknown_doses=unknown_doses,
             flows=flows,
             inputs=frozenset(inputs),
             outside=tuple(sorted(outside & set(tracked))),
@@ -464,7 +595,7 @@ class FlatBuild:
 
 def _dose_changes(dose: str, amount: float, at: float) -> dict[float, dict[str, float]]:
     """Get the changes of a dose given at a time, an infusion over `INFUSION`."""
-    if dose.split("_")[0] == _INFUSION:
+    if _local(dose).split("_")[0] == _INFUSION:
         return {at: {dose: amount / INFUSION}, at + INFUSION: {dose: 0.0}}
     return {at: {dose: amount}}
 
@@ -485,10 +616,7 @@ def _case(
 ) -> BatteryCase:
     """Get a case of the battery, a dose state increased by its change."""
     added = frozenset(
-        sid
-        for values in changes.values()
-        for sid in values
-        if sid.split("_")[0] in _BOLUS
+        sid for values in changes.values() for sid in values if _is_bolus(sid)
     )
     return BatteryCase(
         name=name, changes=changes, added=added, cross_simulator=repeated
@@ -583,7 +711,7 @@ def _mr(runner: _Runner, substance: str) -> float:
 def _amount(runner: _Runner, result: np.ndarray, row: int) -> dict[str, float]:
     """Get the amounts (mmole) of a row by part: body, sinks and doses."""
     build = runner.build
-    parts: dict[str, float] = {"body": 0.0, "urine": 0.0, "feces": 0.0, "dose": 0.0}
+    parts: dict[str, float] = {"body": 0.0, **dict.fromkeys(_SINKS, 0.0), "dose": 0.0}
     for sid in build.tracked:
         local = sid.rsplit("__", 1)[-1]
         part = next((k for k, p in _SINKS.items() if local.startswith(p)), "body")
@@ -613,7 +741,7 @@ def _balance(
     end = _amount(runner, result, -1)
     # a bolus is in the dose state of the first row, an infusion enters from outside
     infused = 0.0
-    if dose is not None and dose.split("_")[0] == _INFUSION:
+    if dose is not None and _local(dose).split("_")[0] == _INFUSION:
         infused = DOSE / _mr(runner, build.doses[dose])
     flows = {
         rid: float(result[-1, runner.index[f"{_FLOW}{rid}"]])
@@ -783,6 +911,10 @@ def _superposition(
 
 
 _STATEMENTS: Final = {
+    DOSE_STATES.id: (
+        "Every state in mg which a reaction reads is a dose state the battery "
+        "knows, so every dose of the model is checked."
+    ),
     MASS_BALANCE.id: (
         "The amounts of the substances, of their sinks and doses change by the "
         "infusion and the flows of the reactions which read no dose alone, at "
@@ -832,17 +964,48 @@ def fates_table(fates: Sequence[Mapping[str, Any]]) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=list(FATE_COLUMNS))
 
 
+def _dose_states(builds: Sequence[FlatBuild]) -> BatteryResult:
+    """Check that the battery knows every dose state of every build.
+
+    A dose state the battery does not know is simulated by nothing: it has no
+    mass balance, no superposition and no fate, and the model is not told.
+    This check is what tells it, one case per build. It needs no simulation
+    and no substance with a molecular weight, so a build without one has it.
+
+    Args:
+        builds: the builds of the model.
+
+    Returns:
+        The result of the check `dose_states`.
+    """
+    collector = BatteryCollector()
+    for build in builds:
+        collector.cases += 1
+        for pid in build.unknown_doses:
+            collector.problems.append(
+                f"{build.name}: the state '{pid}' is in mg and a reaction reads "
+                f"it, so it is a dose state or a depot of a dose which the "
+                f"battery does not know and nothing checks; add its prefix to "
+                f"the dose states of the library or to `LEGACY_DOSE_STATES`, or "
+                f"declare the check as a known failure with its reason"
+            )
+    return collector.result(DOSE_STATES, _statement(DOSE_STATES))
+
+
 class PKBattery(BatteryHook):
     """The battery hook of the PBPK models, see the module.
 
     Reads every build as a `FlatBuild`, simulates the SBML which integrates
     the flows of the reactions with the cases of the doses (`dose_cases`) and
     adds the checks `PK_CHECKS` with the fates of the doses (section `fates`).
+    The check `dose_states` needs no simulation, so a build without a
+    substance with a molecular weight has it as well.
     """
 
     name = "pk"
     checks = PK_CHECKS
     order = (
+        "dose_states",
         "mass_balance",
         "non_negativity",
         "zero_dose",
@@ -904,22 +1067,27 @@ class PKBattery(BatteryHook):
 
     @override
     def contribute(self, runs: Sequence[BatteryRun]) -> BatteryContribution:
-        """Check the mass balance, the zero dose and the superposition of the builds."""
+        """Check the dose states, the mass balance, the zero dose and the superposition."""
         builds = [run.build.data for run in runs]
-        if not any(isinstance(b, FlatBuild) and b.substances for b in builds):
+        flat = [b for b in builds if isinstance(b, FlatBuild)]
+        results: dict[str, BatteryResult] = {DOSE_STATES.id: _dose_states(flat)}
+        if not any(b.substances for b in flat):
+            # the dose states need no simulation and no molecular weight
             return BatteryContribution(
                 results=tuple(
-                    not_applicable_result(check, _NO_SUBSTANCE) for check in PK_CHECKS
+                    results.get(check.id, not_applicable_result(check, _NO_SUBSTANCE))
+                    for check in PK_CHECKS
                 ),
                 sections={"fates": []},
             )
         simulations = [_Simulations.of(run) for run in runs]
-        results: dict[str, BatteryResult] = {}
         fates: list[Fate] = []
         if not any(sims.runner.build.doses for sims in simulations):
             reason = (
                 "The model has no dose state or infusion rate of a substance, "
-                "`IVDOSE_<s>`, `PODOSE_<s>`, `SOLDOSE_<s>` or `Ri_<s>`."
+                "one of "
+                + ", ".join(f"`{p}<s>`" for p in dose_prefixes())
+                + f" or `{_INFUSION}_<s>`."
             )
             for check in (MASS_BALANCE, SUPERPOSITION):
                 results[check.id] = not_applicable_result(check, reason)

@@ -334,6 +334,112 @@ _IV_INFUSION: tuple[Term, ...] = (
     _IV_ROUTE,
 )
 _BLOOD_CELLS: tuple[Term, ...] = ((BQB.IS, "cl/CL:0000232"),)  # erythrocyte
+
+
+@dataclass(frozen=True)
+class _DepotRoute:
+    """The terms of a depot route: its exposure, its route and the site of its depot.
+
+    Attributes:
+        exposure: the PBPKO exposure of the route, `None` if PBPKO has none.
+        route: the NCIT route of administration.
+        site: the anatomical site of the depot (UBERON).
+        label: the name of the route in the requested terms.
+    """
+
+    exposure: str | None
+    route: str
+    site: str
+    label: str
+
+
+_DEPOT_ROUTES: dict[str, _DepotRoute] = {
+    "im": _DepotRoute(
+        "INTRAMUSCULAR_EXPOSURE",
+        "ncit/C28161",  # intramuscular route of administration
+        "uberon/UBERON:0001134",  # skeletal muscle tissue
+        "intramuscular",
+    ),
+    "sc": _DepotRoute(
+        "SUBCUTANEOUS_EXPOSURE",
+        "ncit/C38299",  # subcutaneous route of administration
+        "uberon/UBERON:0002072",  # hypodermis
+        "subcutaneous",
+    ),
+    "rectal": _DepotRoute(
+        None,
+        "ncit/C38295",  # rectal route of administration
+        "uberon/UBERON:0001052",  # rectum
+        "rectal",
+    ),
+}
+"""The depot routes by the kind of `Route`."""
+
+
+def _depot_kinds() -> dict[str, Kind]:
+    """The kinds of the elements of the depot routes, `<what>_<route kind>`.
+
+    The parameters and the species are properties of the route (`BQB.IS_PROPERTY_OF`
+    its exposure and NCIT route), the reactions are part of it
+    (`BQB.IS_PART_OF`), the compartment of the depots is part of its site.
+    """
+    kinds: dict[str, Kind] = {}
+    for key, r in _DEPOT_ROUTES.items():
+        exposure = (
+            pbpko(r.exposure) if r.exposure is not None else pbpko("ROUTE_OF_EXPOSURE")
+        )
+        # a route without its exposure in PBPKO is a version of the broader term
+        prop = (
+            (BQB.IS_PROPERTY_OF if r.exposure else BQB.IS_VERSION_OF, exposure),
+            (BQB.IS_PROPERTY_OF, r.route),
+        )
+        part = (
+            (BQB.IS_PART_OF if r.exposure else BQB.IS_VERSION_OF, exposure),
+            (BQB.IS_PART_OF, r.route),
+        )
+        requested = None if r.exposure else f"{r.label} exposure"
+        kinds |= {
+            f"depot_site_{key}": Kind(
+                _C,
+                "COMPARTMENT",
+                terms=((BQB.IS_PART_OF, r.site),),
+                requested=f"{r.label} depot compartment",
+            ),
+            f"depot_amount_{key}": Kind(
+                _SPECIES, "AMOUNT_OF_COMPOUND_IN_COMPARTMENT", terms=prop
+            ),
+            f"depot_loss_amount_{key}": Kind(
+                _SPECIES,
+                "AMOUNT_OF_COMPOUND_IN_COMPARTMENT",
+                terms=prop,
+                requested="cumulative amount of a depot dose which is not absorbed",
+            ),
+            f"depot_time_{key}": Kind(
+                _P,
+                "PARAMETER",
+                terms=prop,
+                requested="application time of a depot dose",
+            ),
+            f"depot_rate_{key}": Kind(
+                SBO.FORWARD_RATE_CONSTANT, "ABSORPTION_RATE_CONSTANT", terms=prop
+            ),
+            f"depot_fraction_{key}": Kind(_P, "UPTAKE_FRACTION_TO_BLOOD", terms=prop),
+            f"depot_application_{key}": Kind(_T, None, terms=part, requested=requested),
+            f"depot_absorption_{key}": Kind(_T, "ABSORPTION", terms=part),
+            f"depot_loss_{key}": (
+                Kind(_T, "FECAL_EXCRETION", terms=part)
+                if key == "rectal"
+                else Kind(
+                    SBO.DEGRADATION,
+                    None,
+                    terms=part,
+                    requested="loss of a depot dose at the site of the injection",
+                )
+            ),
+        }
+    return kinds
+
+
 _DISEASES: dict[str, Term] = {
     "cirrhosis": (BQB.IS_PROPERTY_OF, "ncit/C2951"),  # cirrhosis
     "child_pugh": (BQB.IS, "ncit/C121007"),  # Child-Pugh clinical classification
@@ -907,6 +1013,16 @@ KINDS: dict[str, Kind] = {
         ),
     ),
     "oral_application": Kind(_T, "ORAL_EXPOSURE"),
+    **_depot_kinds(),
+    "rectal_portal_fraction": Kind(
+        _P,
+        _PHYS,
+        terms=(
+            (BQB.IS_VERSION_OF, pbpko("ROUTE_OF_EXPOSURE")),
+            (BQB.IS_PROPERTY_OF, _DEPOT_ROUTES["rectal"].route),
+        ),
+        requested="fraction of the absorbed rectal dose into the portal vein",
+    ),
     "custom_reaction": Kind(
         SBO.BIOCHEMICAL_OR_TRANSPORT_REACTION,
         None,

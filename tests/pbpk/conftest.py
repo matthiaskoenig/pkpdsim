@@ -40,6 +40,8 @@ from pkpdsim.pbpk import (
     Excretion,
     FirstOrder,
     Formula,
+    Induction,
+    Inhibition,
     Kp,
     Membrane,
     Metabolism,
@@ -338,7 +340,8 @@ def total_amount(r: "roadrunner.RoadRunner", sid: str) -> float:
     `hasOnlySubstanceUnits` is an amount, any other a concentration which is
     multiplied with the volume of its compartment. The species of the id
     scheme (`ids.species_of`: organs, pools, intestinal lumen, undissolved
-    drug, mucosa) and the sinks: the urine and feces amounts and the bile;
+    drug, mucosa, the depots of the depot routes) and the sinks: the urine
+    and feces amounts, the bile and what an injected depot does not absorb;
     the dose states are not counted (`dose_amount`).
     """
     import libsbml
@@ -346,7 +349,13 @@ def total_amount(r: "roadrunner.RoadRunner", sid: str) -> float:
     doc = libsbml.readSBMLFromString(r.getCurrentSBML())
     model = doc.getModel()
     by_id = {sp.getId(): sp for sp in model.getListOfSpecies()}
-    sinks = {ids.urine(sid), ids.feces(sid), ids.bile(sid)}
+    sinks = {
+        ids.urine(sid),
+        ids.feces(sid),
+        ids.bile(sid),
+        ids.depot_loss("im", sid),
+        ids.depot_loss("sc", sid),
+    }
     selected = ids.species_of(sid, by_id) + [
         i for i in by_id if i.rsplit("__", 1)[-1] in sinks
     ]
@@ -362,7 +371,12 @@ def total_amount(r: "roadrunner.RoadRunner", sid: str) -> float:
 
 def dose_amount(r: "roadrunner.RoadRunner", sid: str) -> float:
     """Get the amount (mmole) of a substance in its dose states, not yet applied."""
-    doses = (ids.iv_dose(sid), ids.po_dose(sid), ids.sol_dose(sid))
+    doses = (
+        ids.iv_dose(sid),
+        ids.po_dose(sid),
+        ids.sol_dose(sid),
+        *(ids.depot_dose(kind, sid) for kind in ("im", "sc", "rectal")),
+    )
     mg = sum(float(r[d]) for d in doses if d in r.model.getGlobalParameterIds())
     return mg / float(r[ids.mr(sid)])
 
@@ -603,6 +617,60 @@ def endogenous_reference_definition() -> PBPKDefinition:
     )
 
 
+def turnover_reference_definition() -> PBPKDefinition:
+    """The definition of the stored turnover reference: turnover states without its options.
+
+    `drg` metabolised by CYP3A4 in the liver and the small intestine and by
+    CYP2C19 in the liver; `inh` (fu 0.5, Kp 1.5, not eliminated) inactivates
+    CYP3A4 (mechanism-based) and induces CYP2C19, so both proteins have their
+    turnover state, without a degradation rate of the definition
+    (`PBPKDefinition.turnover`) and without a stabilisation. The stored comp
+    and flat SBML were built at pkpdsim f2d7c13, before both options.
+    """
+    return PBPKDefinition(
+        sid="turnover_reference",
+        substances=[
+            simple_drug(),
+            Substance(
+                "inh",
+                name="inhibitor",
+                mr=400.0,
+                binding=Binding(fu=0.5),
+                distribution=Kp(1.5, ftissue=1.0),
+                inhibits=(Inhibition("CYP3A4", "mechanism", 0.005, kinact=1e-3),),
+                induces=(Induction("CYP2C19", 2.0, 0.01),),
+            ),
+        ],
+        chemistry=[
+            Metabolism(
+                "DRG3A4",
+                Organ.LIVER,
+                "drg",
+                {},
+                MM(vmax=1e-3, km=0.01),
+                protein="CYP3A4",
+            ),
+            Metabolism(
+                "DRG2C19",
+                Organ.LIVER,
+                "drg",
+                {},
+                MM(vmax=5e-4, km=0.02),
+                protein="CYP2C19",
+            ),
+            Metabolism(
+                "DRGGU",
+                Organ.SMALL_INTESTINE,
+                "drg",
+                {},
+                MM(vmax=1e-3, km=0.01),
+                protein="CYP3A4",
+            ),
+        ],
+        routes=[Route.iv("drg"), Route.oral("drg"), Route.iv("inh")],
+    )
+
+
 def dateless(text: str) -> list[str]:
     """The lines of an SBML text without the dates of the model history."""
     return [line for line in text.splitlines() if not _DATE.search(line)]
@@ -632,7 +700,7 @@ def assert_reference_sbml(result: BuildResult) -> None:
     and with the heart failure factors of the consensus (Leithe 1984), the
     kidney volume and transit of CKD of Malik 2020 and the cirrhosis factors
     cited from Edginton 2008 (factors, notes and sources only), and all rebuilt with the factors of the sex of the female build and the constant factors of the age of a build without the physiology over age (`PBPKDefinition.age`, which is not the default: the reference values and the factors are those of the individual of 35 years, as before, and the parameters `fage_*` are their constant 1; the values of the default individual unchanged); a change of the library which changes the
-    SBML of every model on purpose rebuilds them and says so, and all rebuilt with the notes of the age table read from the primary publications (`age_human.toml`; the notes of the age factors and the two sources Fomon 1982 and Jopling 2009 only, no value changed) and with the citation of NHANES which names the script of the waist regression (the one line of the sources of the hematocrit and the albumin; the waist itself belongs to the adipose option, which these references do not have), and with the citation of `ModelChoice` which names both libraries of pkpdsim, the PBPK and the machine perfusion library (that text only), and with the units of the flat model merged (`pkpdsim.sbml.flatten.merge_unit_definitions` in `flat_model`: the flat references carry 21 unit definitions instead of the 315 copies of them the flattening made, and every `units`, `substanceUnits` and unit of the math names the definition of the model instead of the copy of its organ, `mmole` instead of `LU__mmole`; line by line the former references otherwise, the comp references unchanged).
+    SBML of every model on purpose rebuilds them and says so, and all rebuilt with the notes of the age table read from the primary publications (`age_human.toml`; the notes of the age factors and the two sources Fomon 1982 and Jopling 2009 only, no value changed) and with the citation of NHANES which names the script of the waist regression (the one line of the sources of the hematocrit and the albumin; the waist itself belongs to the adipose option, which these references do not have), and with the citation of `ModelChoice` which names both libraries of pkpdsim, the PBPK and the machine perfusion library (that text only), and with the units of the flat model merged (`pkpdsim.sbml.flatten.merge_unit_definitions` in `flat_model`: the flat references carry 21 unit definitions instead of the 315 copies of them the flattening made, and every `units`, `substanceUnits` and unit of the math names the definition of the model instead of the copy of its organ, `mmole` instead of `LU__mmole`; line by line the former references otherwise, the comp references unchanged). `turnover_reference_definition()` was built at the commit before the degradation rate of a protein and the stabilisation; its flat reference is rebuilt with the merged units as well, its comp reference is unchanged.
     """
     for path in (result.comp_path, result.flat_path):
         reference = gzip.decompress((REFERENCE / f"{path.name}.gz").read_bytes())

@@ -21,7 +21,9 @@ enters the portal vein directly. Their parts:
   `Afeces_<s>`; an oral tablet has the undissolved amount `Asolid_<seg>_<s>`
   (in the first segment the dose state `PODOSE_<s>`), which dissolves with
   the dissolution of its formulation (`pkpdsim.pbpk.routes`) and moves with
-  the transit too; the bile drains into the duodenum (the single lumen);
+  the transit too; an enteric-coated tablet does not dissolve in the
+  stomach, it empties undissolved and dissolves from the duodenum on; the
+  bile drains into the duodenum (the single lumen);
   the fed state `FED = 1` slows the gastric emptying (the stomach transit
   time of the fed state);
 - the absorption: `ka_<s>` (1/hr) is the absorption rate constant of the
@@ -86,8 +88,8 @@ from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.routes import ORAL
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import FrozenMap, Q, Value
-from pkpdsim.pbpk.variants.gut import GUT_ORGANS, GutBuilder
+from pkpdsim.pbpk.values import FrozenMap, Q, Value, check_positive, check_unit
+from pkpdsim.pbpk.variants.gut import GUT_ORGANS, GutBuilder, mucosal_substances
 from pkpdsim.pbpk.variants.lumen_options import (
     COLON,
     LARGE,
@@ -104,10 +106,10 @@ from pkpdsim.pbpk.variants.segments import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
-
+    from pkpdsim.pbpk.chemistry import CustomReaction, Metabolism, Transport
     from pkpdsim.pbpk.definition import PBPKDefinition
     from pkpdsim.pbpk.routes import Route
+    from pkpdsim.pbpk.substance import Substance
 
 __all__ = ["PerSubstance", "SegmentedIntestine", "SingleLumen", "absorbed_substances"]
 
@@ -161,6 +163,101 @@ def _check_keys(
                 f"{attribute}: '{sid}' has no oral route, only the substances "
                 f"{sorted(allowed)} can have it"
             )
+
+
+def _mucosa_map(
+    spec: "Mapping[str, Q] | None", per_volume: bool
+) -> "FrozenMap[Q] | None":
+    """Store `mucosa_ps` as a hashable read-only mapping, its values checked.
+
+    The values are checked as the `ps` of an organ is
+    (`PBPKDefinition.validate`): positive, and a `Value` in the unit of the
+    form (1/min per litre of mucosa, l/min of the mucosa of the small
+    intestine). A negative exchange gives a negative hybrid flow, so the flows
+    of the mucosa run backwards; zero cuts the enterocytes off from the blood.
+    A `Formula` passes both checks: its value is only known when the model is
+    built, as for the `ps` of an organ, so a formula which can turn negative
+    is the model's responsibility.
+
+    Args:
+        spec: the exchange of the mucosa by substance id, or `None`.
+        per_volume: the values are per litre of mucosa
+            (`mucosa_ps_per_volume`).
+
+    Returns:
+        The read-only copy, `None` for `None`.
+
+    Raises:
+        ValueError: for a form which is no bool or is given without
+            `mucosa_ps`, for anything but a mapping (the permeability-limited
+            mucosa is opt-in per substance, there is no value for all of
+            them), and for a value which is not positive or is a `Value` in
+            another unit.
+    """
+    if not isinstance(per_volume, bool):
+        raise ValueError(
+            f"mucosa_ps_per_volume: must be a bool, got {per_volume!r}: the exchange "
+            "is given per litre of mucosa (True) or of the mucosa of the small "
+            "intestine (False)"
+        )
+    if spec is None:
+        if not per_volume:
+            raise ValueError(
+                "mucosa_ps_per_volume: without mucosa_ps it changes nothing, the "
+                "mucosa of every substance is flow-limited; name the substances "
+                "with the exchange of the mucosa of their small intestine in "
+                "mucosa_ps"
+            )
+        return None
+    if not isinstance(spec, Mapping):
+        raise ValueError(
+            f"mucosa_ps: a mapping from substance id to its exchange, not {spec!r}: "
+            "the permeability-limited mucosa is given per substance"
+        )
+    unit = U.per_min if per_volume else U.l_per_min
+    problems: list[str] = []
+    for sid, q in spec.items():
+        problems += check_positive("mucosa_ps", f"the exchange of '{sid}'", q)
+        problems += check_unit("mucosa_ps", f"the exchange of '{sid}'", q, unit)
+    if problems:
+        raise ValueError("; ".join(problems))
+    return FrozenMap(spec)
+
+
+def _check_mucosa_ps(
+    spec: "Mapping[str, Q] | None",
+    substances: "Sequence[Substance]",
+    chemistry: "Sequence[Metabolism | Transport | CustomReaction]",
+) -> dict[str, Q]:
+    """Check `mucosa_ps` against the substances with a mucosa.
+
+    Args:
+        spec: the exchange of the mucosa by substance id, `None` for none.
+        substances: the substances of the definition.
+        chemistry: the processes of the definition.
+
+    Returns:
+        The exchange by substance id, empty without the option.
+
+    Raises:
+        ValueError: for a key which is no substance of the definition or has
+            no mucosa species (no chemistry of the small intestine).
+    """
+    if spec is None:
+        return {}
+    known = frozenset(s.sid for s in substances)
+    _check_keys("mucosa_ps", spec, known, None)
+    mucosal = mucosal_substances(substances, chemistry)
+    for sid in spec:
+        if sid not in mucosal:
+            raise ValueError(
+                f"mucosa_ps: '{sid}' has no mucosa: only a substance with "
+                "chemistry of the small intestine (a substrate, a product, a "
+                "transported substance, or an inhibitor, inducer or stabiliser "
+                "of a protein of such a process) has mucosa species; the "
+                f"substances with a mucosa are {sorted(mucosal)}"
+            )
+    return dict(spec)
 
 
 def _only(spec: "PerSubstance | None", oral: frozenset[str]) -> frozenset[str]:
@@ -321,11 +418,15 @@ class _Absorption(NamedTuple):
         colon: the value of `f_ka_colon_<s>` by substance (of `f_ka_colon`
             or of the group `colon` of a profile).
         profiles: the regional absorption profiles by substance.
+        mucosa_ps: the exchange of the permeability-limited mucosa by
+            substance (not a factor of the absorption, checked in the same
+            place).
     """
 
     fabs: frozenset[str]
     colon: dict[str, Q]
     profiles: dict[str, RegionalAbsorption]
+    mucosa_ps: dict[str, Q]
 
 
 @dataclass(frozen=True)
@@ -370,6 +471,22 @@ class SegmentedIntestine:
             (no generic profile, see `RegionalAbsorption`). A substance with
             `f_ka_colon` may have a profile of the small intestine only.
         conversions: the conversions in the lumen.
+        mucosa_ps: the exchange between the mucosal blood and the enterocytes
+            of the substances in it (`PS_mu_<seg>_<s>`), which makes their
+            mucosa permeability-limited instead of flow-limited (the Qgut
+            model, see the intestine page); the mucosa of every other
+            substance is flow-limited, and `None` (the default) creates
+            nothing. A substance without mucosa species is refused.
+        mucosa_ps_per_volume: the values of `mucosa_ps` are per litre of
+            mucosa (`kps_mu_<s>`, 1/min), so the exchange of a segment follows
+            the mucosa of the individual; `False` takes them as the exchange
+            of the mucosa of the small intestine (`PS_mu_ref_<s>`, l/min, the
+            `CLperm` of the Qgut model, which the literature measures for that
+            organ), of which a segment has its share by mucosa volume relative
+            to the mucosa of the small intestine: the segments of the small
+            intestine sum to the given value and the colon has its own share
+            at the same exchange per litre of mucosa. Both forms are the one
+            quantity `PS_mu_ref_<s>/Vmu_si`.
 
     Raises:
         ValueError: (on build) for a key of a mapping which is no substance of
@@ -378,7 +495,8 @@ class SegmentedIntestine:
             `f_ka_colon` and a factor of the large intestine; for a
             conversion of a substance which is no substance of the
             definition or never reaches the lumen, or two conversions of the
-            same substrate and product.
+            same substrate and product; for a `mucosa_ps` of a substance
+            without mucosa species.
     """
 
     name: str = "segmented"
@@ -387,6 +505,8 @@ class SegmentedIntestine:
     f_ka_colon: "PerSubstance | None" = None
     regional: "RegionalAbsorption | Mapping[str, RegionalAbsorption] | None" = None
     conversions: Sequence[LumenConversion] = ()
+    mucosa_ps: "Mapping[str, Q] | None" = None
+    mucosa_ps_per_volume: bool = True
 
     def __post_init__(self) -> None:
         """Store a mapping as a hashable read-only mapping, the conversions as a tuple."""
@@ -397,14 +517,22 @@ class SegmentedIntestine:
                 self, "regional", FrozenMap[RegionalAbsorption](self.regional)
             )
         object.__setattr__(self, "conversions", tuple(self.conversions))
+        object.__setattr__(
+            self, "mucosa_ps", _mucosa_map(self.mucosa_ps, self.mucosa_ps_per_volume)
+        )
 
     @property
     def replaces(self) -> tuple[Organ, ...]:
         """The organs the intestine replaces: small and large intestine."""
         return GUT_ORGANS
 
-    def _resolve(self, sids: "Iterable[str]", routes: "Sequence[Route]") -> _Absorption:
-        """The factors of the absorption by substance, checked.
+    def _resolve(
+        self,
+        substances: "Sequence[Substance]",
+        routes: "Sequence[Route]",
+        chemistry: "Sequence[Metabolism | Transport | CustomReaction]",
+    ) -> _Absorption:
+        """The factors of the absorption by substance, and the mucosa, checked.
 
         The one place which body_objects and build use, so that neither can
         drop a key silently. `f_ka_colon` is the shorthand of the group
@@ -414,9 +542,10 @@ class SegmentedIntestine:
             ValueError: for a key which is no substance or (`fabs`,
                 `f_ka_colon`, `regional`) has no oral route, a substance with
                 `f_ka_colon` and a factor of the large intestine in its
-                profile, or a conversion of an unknown substance or twice.
+                profile, a conversion of an unknown substance or twice, or a
+                `mucosa_ps` of a substance without mucosa species.
         """
-        sids = list(sids)
+        sids = [s.sid for s in substances]
         known, oral = frozenset(sids), _oral(routes)
         _check_keys("ka", self.ka, known, None)
         _check_keys("fabs", self.fabs, known, oral)
@@ -448,7 +577,12 @@ class SegmentedIntestine:
         for sid, p in profiles.items():
             if COLON in p.factors:
                 colon[sid] = p.factors[COLON]
-        return _Absorption(_only(self.fabs, oral), colon, profiles)
+        return _Absorption(
+            _only(self.fabs, oral),
+            colon,
+            profiles,
+            _check_mucosa_ps(self.mucosa_ps, substances, chemistry),
+        )
 
     def absorption(self, definition: "PBPKDefinition") -> dict[str, tuple[str, ...]]:
         """Get the absorbed substances with the options of their absorption.
@@ -465,7 +599,9 @@ class SegmentedIntestine:
         Returns:
             The options by substance id, in the order of the substances.
         """
-        a = self._resolve((s.sid for s in definition.substances), definition.routes)
+        a = self._resolve(
+            definition.substances, definition.routes, definition.chemistry
+        )
         result = {}
         for sid in absorbed_substances(definition, self.ka):
             options = []
@@ -482,7 +618,9 @@ class SegmentedIntestine:
 
     def body_objects(self, definition: "PBPKDefinition") -> list[Sbase]:
         """Get `ka_<s>`, `fabs_<s>`, `f_ka_colon_<s>`, the regional factors, the conversion rates, `FED`."""
-        a = self._resolve((s.sid for s in definition.substances), definition.routes)
+        a = self._resolve(
+            definition.substances, definition.routes, definition.chemistry
+        )
         return [
             *_ka_objects(definition, self.ka),
             *(
@@ -518,7 +656,7 @@ class SegmentedIntestine:
                 transport of the mucosa; a conversion of a substance which
                 never reaches the lumen.
         """
-        a = self._resolve((s.sid for s in ctx.substances), ctx.routes)
+        a = self._resolve(ctx.substances, ctx.routes, ctx.chemistry)
         return GutBuilder(
             ctx,
             self.name,
@@ -528,6 +666,8 @@ class SegmentedIntestine:
             colon=frozenset(a.colon),
             regional={sid: p.segments for sid, p in a.profiles.items()},
             conversions=tuple(self.conversions),
+            mucosa_ps=a.mucosa_ps,
+            mucosa_ps_per_volume=self.mucosa_ps_per_volume,
         ).build()
 
 
@@ -549,7 +689,9 @@ class SingleLumen:
 
     The single lumen has no segments: a regional absorption profile and the
     conversions in the lumen need the segmented intestine, `regional` and
-    `conversions` are refused with that message.
+    `conversions` are refused with that message; it has no stomach and no
+    fed state, so an enteric-coated tablet and a factor of the dissolution
+    in the fed state are refused on build, naming the substance.
 
     Attributes:
         name: the name of the component.
@@ -560,10 +702,19 @@ class SingleLumen:
             `None`; in a mapping a substance missing from it has 1.
         regional: refused if set (no segments).
         conversions: refused if set (no segments).
+        mucosa_ps: the exchange between the mucosal blood and the enterocytes
+            of the substances in it, which makes their mucosa
+            permeability-limited (as of `SegmentedIntestine`; the one mucosa
+            of the single lumen is that of the small intestine).
+        mucosa_ps_per_volume: the values of `mucosa_ps` are per litre of
+            mucosa (1/min), else the exchange of the mucosa of the small
+            intestine (l/min), which the one mucosa of the single lumen is.
 
     Raises:
         ValueError: for `regional` or `conversions`; (on build) for a key of
-            a mapping which is no substance of the definition.
+            a mapping which is no substance of the definition, an
+            enteric-coated tablet or a fed factor of a dissolution, or a
+            `mucosa_ps` of a substance without mucosa species.
     """
 
     name: str = "single_lumen"
@@ -571,6 +722,8 @@ class SingleLumen:
     fabs: "PerSubstance | None" = None
     regional: "RegionalAbsorption | Mapping[str, RegionalAbsorption] | None" = None
     conversions: Sequence[LumenConversion] = ()
+    mucosa_ps: "Mapping[str, Q] | None" = None
+    mucosa_ps_per_volume: bool = True
 
     def __post_init__(self) -> None:
         """Store a mapping as a hashable read-only mapping, refuse the options of the segments.
@@ -587,21 +740,33 @@ class SingleLumen:
                 "intestine (SegmentedIntestine), the single lumen has one lumen"
             )
         object.__setattr__(self, "conversions", ())
+        object.__setattr__(
+            self, "mucosa_ps", _mucosa_map(self.mucosa_ps, self.mucosa_ps_per_volume)
+        )
 
     @property
     def replaces(self) -> tuple[Organ, ...]:
         """The organs the intestine replaces: small and large intestine."""
         return GUT_ORGANS
 
-    def _check(self, sids: "Iterable[str]") -> None:
+    def _check(
+        self,
+        substances: "Sequence[Substance]",
+        chemistry: "Sequence[Metabolism | Transport | CustomReaction]",
+    ) -> dict[str, Q]:
         """Check the keys of the mappings (any substance has `fabs_<s>`).
 
+        Returns:
+            The exchange of the permeability-limited mucosa by substance.
+
         Raises:
-            ValueError: for a key which is no substance.
+            ValueError: for a key which is no substance, or a `mucosa_ps` of
+                a substance without mucosa species.
         """
-        known = frozenset(sids)
+        known = frozenset(s.sid for s in substances)
         _check_keys("ka", self.ka, known, None)
         _check_keys("fabs", self.fabs, known, None)
+        return _check_mucosa_ps(self.mucosa_ps, substances, chemistry)
 
     def absorption(self, definition: "PBPKDefinition") -> dict[str, tuple[str, ...]]:
         """Get the absorbed substances with the options of their absorption.
@@ -616,7 +781,7 @@ class SingleLumen:
         Returns:
             The options by substance id, in the order of the substances.
         """
-        self._check(s.sid for s in definition.substances)
+        self._check(definition.substances, definition.chemistry)
         fabs = self.fabs
         return {
             sid: (
@@ -629,7 +794,7 @@ class SingleLumen:
 
     def body_objects(self, definition: "PBPKDefinition") -> list[Sbase]:
         """Get `ka_<s>` and `fabs_<s>` of every substance."""
-        self._check(s.sid for s in definition.substances)
+        self._check(definition.substances, definition.chemistry)
         return [
             *_ka_objects(definition, self.ka),
             *_fabs_objects(
@@ -643,14 +808,17 @@ class SingleLumen:
         """Build the model of the intestine and its boundary.
 
         Raises:
-            ValueError: for chemistry the intestine cannot place, or a key of
-                a mapping which is no substance.
+            ValueError: for chemistry the intestine cannot place, a key of
+                a mapping which is no substance, an enteric-coated tablet or
+                a fed factor of a dissolution.
         """
-        self._check(s.sid for s in ctx.substances)
+        mucosa_ps = self._check(ctx.substances, ctx.chemistry)
         return GutBuilder(
             ctx,
             self.name,
             single_lumen(intestine_table(ctx.species)),
             single=True,
             fabs=frozenset(s.sid for s in ctx.substances),
+            mucosa_ps=mucosa_ps,
+            mucosa_ps_per_volume=self.mucosa_ps_per_volume,
         ).build()

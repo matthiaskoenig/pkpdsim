@@ -122,7 +122,7 @@ from pkpdsim.pbpk.placement import (
     value_parameter,
 )
 from pkpdsim.pbpk.pregnancy import pregnancy_objects, pregnancy_physiology_factors
-from pkpdsim.pbpk.routes import ORAL, route_objects
+from pkpdsim.pbpk.routes import DEPOT, ORAL, depot_site, route_objects
 from pkpdsim.pbpk.sinks import sink_objects
 from pkpdsim.pbpk.stationary import (
     SteadyPlan,
@@ -268,8 +268,9 @@ def organ_context(
             (`pkpdsim.pbpk.stationary.steady_plan`), `None` for none.
 
     Returns:
-        The substances with their parts in the organ, the chemistry and the
-        inhibitions and inductions of the substances.
+        The substances with their parts in the organ, the chemistry, the
+        inhibitions, inductions and stabilisations of the substances and the
+        degradation rate constants of the proteins of the definition.
     """
     chemistry = tuple(definition.chemistry)
     substances = tuple(definition.substances)
@@ -280,6 +281,8 @@ def organ_context(
         chemistry=chemistry,
         inhibitions=tuple((s.sid, i) for s in substances for i in s.inhibits),
         inductions=tuple((s.sid, i) for s in substances for i in s.induces),
+        stabilisations=tuple((s.sid, i) for s in substances for i in s.stabilises),
+        turnover=definition.turnover,
         sex=definition.sex,
         species=definition.species,
         routes=tuple(definition.routes),
@@ -2011,11 +2014,11 @@ class _Top:
         )
 
     def _interactions(self, s: Substance) -> None:
-        """The constants of the inhibitions and inductions of a substance.
+        """The constants of the inhibitions, inductions and stabilisations of a substance.
 
         Only of a protein which a process of the definition uses: the organs
         with such a process read them (`Ki`, `Kiu`, `kinact`, `Emax`,
-        `EC50`), one value for every organ.
+        `EC50`, `Kstab`), one value for every organ.
         """
         used = {
             p.protein
@@ -2097,6 +2100,29 @@ class _Top:
                         "ec50",
                         protein=ind.protein,
                     ),
+                ]
+            )
+        for stab in s.stabilises:
+            if stab.protein not in used:
+                continue
+            self.add(
+                [
+                    annotate(
+                        value_parameter(
+                            ids.kstab(stab.protein, s.sid),
+                            stab.ki,
+                            U.mM,
+                            f"Kstab {stab.protein} {s.sid}",
+                            SBO.INHIBITORY_CONSTANT,
+                            f"Unbound concentration of {s.sid} which halves the "
+                            f"degradation of {stab.protein}, `kdeg*E/(1 + I/Kstab)`: "
+                            "the bound substance protects the protein from its "
+                            "degradation.\n\nSource of the mechanism: "
+                            f"{cite('Roberts1995')}",
+                        ),
+                        "ki",
+                        protein=stab.protein,
+                    )
                 ]
             )
 
@@ -2492,6 +2518,7 @@ class _Top:
         """
         by_id = {s.sid: s for s in self.definition.substances}
         seen: set[tuple[str, str]] = set()
+        sites: set[str] = set()
         for route in self.definition.routes:
             key = (route.kind, route.substance)
             if key in seen:
@@ -2500,6 +2527,10 @@ class _Top:
                     "given twice."
                 )
             seen.add(key)
+            # the compartment of the depots of a route kind, once
+            if route.kind in DEPOT and route.kind not in sites:
+                sites.add(route.kind)
+                self.add([depot_site(route)])
             self.add(route_objects(route, by_id[route.substance]))
 
     # --- organs ----------------------------------------------------------

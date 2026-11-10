@@ -61,13 +61,20 @@ from pkpdsim.pbpk.physiology import (
     reference_individual,
 )
 from pkpdsim.pbpk.pregnancy import Pregnancy
-from pkpdsim.pbpk.proteins import PROTEINS, Induction, Inhibition, Protein
+from pkpdsim.pbpk.proteins import (
+    PROTEINS,
+    Induction,
+    Inhibition,
+    Protein,
+    Stabilisation,
+)
 from pkpdsim.pbpk.regional import (
     derive_regional_absorption,
     regional_key,
     release_auc_ratios,
 )
 from pkpdsim.pbpk.routes import (
+    Depot,
     DoseDependentDissolution,
     FirstOrderDissolution,
     Route,
@@ -160,6 +167,7 @@ __all__ = [
     "BuildResult",
     "Circadian",
     "CustomReaction",
+    "Depot",
     "Direction",
     "DoseDependentDissolution",
     "Equilibration",
@@ -208,6 +216,7 @@ __all__ = [
     "SlowPool",
     "Source",
     "Species",
+    "Stabilisation",
     "StandardOrgan",
     "Substance",
     "ThresholdReabsorption",

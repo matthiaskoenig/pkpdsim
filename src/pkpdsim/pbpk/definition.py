@@ -26,6 +26,7 @@ from pkpdsim.pbpk.organ import OrganComponent
 from pkpdsim.pbpk.organs import Organ, Part, Pool, as_member, as_organ_keys
 from pkpdsim.pbpk.pd import PDComponent
 from pkpdsim.pbpk.physiology import DEFAULT_POPULATION, Sex
+from pkpdsim.pbpk.placement import turnover_proteins
 from pkpdsim.pbpk.populations import POPULATIONS
 from pkpdsim.pbpk.pregnancy import Pregnancy
 from pkpdsim.pbpk.proteins import PROTEINS
@@ -39,10 +40,12 @@ from pkpdsim.pbpk.values import (
     FrozenMap,
     ModelParameter,
     Q,
+    Value,
     check_positive,
     check_unit,
     equal_by_value,
     number,
+    unit_text,
 )
 from pkpdsim.species import Species
 
@@ -55,9 +58,12 @@ _RESERVED = (
     "free",
     "blood",
     *ids.GUT_SEGMENTS,
+    "im",
+    "sc",
 )
 """The tokens of the id scheme which a substance id must not start with (the
-segment tokens follow `Clumen_`, `Cmu_` and `Asolid_`)."""
+segment tokens follow `Clumen_`, `Cmu_` and `Asolid_`, the tokens of the depot
+routes `ka_`, `f_` and `ti_`: `ka_im_<s>`, `f_rec_<s>`)."""
 
 _ZONE = re.compile(r"z\d+_")
 """The zone tokens (`z1_`) of the id scheme, which follow the part in the ids
@@ -207,6 +213,14 @@ class PBPKDefinition:
             flow fractions, the plasma proteins and the hepatic enzymes, and
             with an effect the body weight as a state which the physiology
             follows; `None` (the default) for a model without it.
+        turnover: the degradation rate constants of proteins by their id
+            (key of `PROTEINS`): a number or a `Value` in 1/hr with its
+            source, as `[turnover]` of `database/tables/proteins.toml`, or a
+            `Value` in 1/min (a fitted value of `kdeg_<protein>` with its
+            uncertainty). It replaces the value of the organ in every organ
+            where the protein has a turnover state
+            (`<ORGAN>__kdeg_<protein>`, 1/min); a protein without it keeps
+            the values of the organs.
     """
 
     sid: str
@@ -233,14 +247,16 @@ class PBPKDefinition:
     circadian: Circadian | None = None
     pregnancy: Pregnancy | None = None
     adipose: Adipose | None = None
+    turnover: Mapping[str, Q] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        """Normalise the sex and the species to their members and freeze the starts."""
+        """Normalise the sex and the species and freeze the starts and the turnover."""
         object.__setattr__(self, "sex", as_member(Sex, self.sex, "PBPKDefinition.sex"))
         object.__setattr__(
             self, "species", as_member(Species, self.species, "PBPKDefinition.species")
         )
         object.__setattr__(self, "starts", FrozenMap(self.starts))
+        object.__setattr__(self, "turnover", FrozenMap(self.turnover))
 
     @classmethod
     def combine(cls, *definitions: "PBPKDefinition", sid: str) -> "PBPKDefinition":
@@ -248,9 +264,10 @@ class PBPKDefinition:
 
         The substances, the chemistry, the routes, the PD components, the
         dynamic parameters, the observers and parameters of the definitions,
-        the deltas, the readouts, the slow pools and the creators are the
-        unions of the definitions (the observers of the library follow from
-        the substances), the organ variants are merged; there is
+        the deltas, the readouts, the slow pools, the turnover of the
+        proteins and the creators are the unions of the definitions (the
+        observers of the library follow from the substances), the organ
+        variants are merged; there is
         one physiology, so the definitions must agree on sex, population and
         the arm vein preset. Substance ids are unique over all packages, so
         nothing is renamed: an id which two definitions define is accepted
@@ -277,7 +294,8 @@ class PBPKDefinition:
             ValueError: if no definition is given, the definitions differ in
                 sex, population or arm vein preset, two definitions define an
                 id (substance, process, route, PD component, observer,
-                parameter, the slow pool of a substance) differently, or
+                parameter, the slow pool of a substance, the turnover of a
+                protein) differently, or
                 choose different variants of an organ; naming the id.
         """
         if not definitions:
@@ -370,6 +388,14 @@ class PBPKDefinition:
                 (x for d in definitions for x in d.slow_pools),
                 lambda x: x.substance,
             ),
+            turnover=dict(
+                _union(
+                    sid,
+                    "turnover of the protein",
+                    (x for d in definitions for x in d.turnover.items()),
+                    lambda x: x[0],
+                )
+            ),
         )
 
     def parameter_value(self, sid: str) -> float:
@@ -446,6 +472,7 @@ class PBPKDefinition:
         problems += self._check_observers()
         problems += self._check_parameters()
         problems += self._check_starts()
+        problems += self._check_turnover()
         problems += self._check_deltas()
         problems += self._check_readouts()
         if self.population not in POPULATIONS:
@@ -550,6 +577,42 @@ class PBPKDefinition:
             problems += check_unit(f"start '{sid}'", "value", q, U.mM)
         return problems
 
+    def _check_turnover(self) -> list[str]:
+        """Check the degradation rate constants of the proteins.
+
+        A known protein which has a turnover state (a substance inactivates,
+        induces or stabilises it and a process of the chemistry uses it), a
+        positive number or `Value` in 1/hr, or a `Value` in 1/min; a fitted
+        value with its uncertainty in 1/min, the unit of `kdeg_<protein>`.
+        """
+        problems: list[str] = []
+        regulated = turnover_proteins(self.substances, self.chemistry)
+        for protein, q in self.turnover.items():
+            where = f"turnover of {protein}"
+            if protein not in PROTEINS:
+                problems.append(f"{where}: unknown protein '{protein}'")
+                continue
+            if protein not in regulated:
+                problems.append(
+                    f"{where}: {protein} has no turnover state, no substance "
+                    "inactivates, induces or stabilises it in a process of the "
+                    "chemistry"
+                )
+            if isinstance(q, Formula):
+                problems.append(f"{where}: a number or a Value, not a Formula")
+                continue
+            problems += check_positive(where, "kdeg", q)
+            if isinstance(q, Value):
+                unit = unit_text(q.unit)
+                if unit not in (unit_text(U.per_hr), unit_text(U.per_min)):
+                    problems.append(f"{where}: must be in 1/hr or 1/min, got {unit}")
+                elif q.uncertainties and unit != unit_text(U.per_min):
+                    problems.append(
+                        f"{where}: a fitted value with its uncertainty is in "
+                        "1/min, the unit of kdeg_<protein>"
+                    )
+        return problems
+
     def _check_deltas(self) -> list[str]:
         """Check the ids of the deltas: SIds, each once.
 
@@ -627,6 +690,11 @@ class PBPKDefinition:
         for ind in s.induces:
             if ind.protein not in PROTEINS:
                 problems.append(f"{s.sid}: unknown protein '{ind.protein}' (induction)")
+        for stab in s.stabilises:
+            if stab.protein not in PROTEINS:
+                problems.append(
+                    f"{s.sid}: unknown protein '{stab.protein}' (stabilisation)"
+                )
         problems += _check_interactions(s)
         problems += check_positive(s.sid, "mr", s.mr)
         if s.binding is not None:
@@ -975,16 +1043,17 @@ def _check_reabsorption(s: Substance) -> list[str]:
 
 
 def _check_interactions(s: Substance) -> list[str]:
-    """Check the inhibitions and inductions of a substance.
+    """Check the inhibitions, inductions and stabilisations of a substance.
 
-    One inhibition and one induction per protein (a mechanism-based
-    inhibition includes the competitive part), the constants of the kind of
-    the inhibition and none other, positive constants.
+    One inhibition, one induction and one stabilisation per protein (a
+    mechanism-based inhibition includes the competitive part), the constants
+    of the kind of the inhibition and none other, positive constants.
     """
     problems: list[str] = []
     for what, proteins in (
         ("inhibitions", [i.protein for i in s.inhibits]),
         ("inductions", [i.protein for i in s.induces]),
+        ("stabilisations", [i.protein for i in s.stabilises]),
     ):
         twice = sorted({p for p in proteins if proteins.count(p) > 1})
         if twice:
@@ -1006,4 +1075,8 @@ def _check_interactions(s: Substance) -> list[str]:
         where = f"{s.sid} (induction of {ind.protein})"
         problems += check_positive(where, "emax", ind.emax)
         problems += check_positive(where, "ec50", ind.ec50)
+    for stab in s.stabilises:
+        problems += check_positive(
+            f"{s.sid} (stabilisation of {stab.protein})", "ki", stab.ki
+        )
     return problems

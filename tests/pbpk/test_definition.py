@@ -126,13 +126,17 @@ def test_substance_id_collides_with_physiology_id(sid: str) -> None:
         "du_x",
         "z1_x",
         "z12_x",
+        "im_x",
+        "sc_x",
+        "rec_x",
     ],
 )
 def test_invalid_sid(sid: str) -> None:
     """Ids which are no SId, contain '__' or take a token of the id scheme.
 
-    The tokens of the parts, pools, observers, lumen segments (`du_`) and the
-    zones of a zonated organ (`z1_`), which precede the substance in an id.
+    The tokens of the parts, pools, observers, lumen segments (`du_`), the
+    zones of a zonated organ (`z1_`) and the depot routes (`im_`, `sc_`,
+    `rec_`), which precede the substance in an id.
     """
     with pytest.raises(ValueError, match=sid):
         _definition(substances=[_api(sid=sid)], chemistry=[], routes=[]).validate()
@@ -331,6 +335,7 @@ def test_proteins_table() -> None:
         "CYP2C19",
         "CYP2D6",
         "CYP3A4",
+        "CYP3A5",
         "UGT1A1",
         "UGT1A9",
         "UGT2B7",
@@ -348,9 +353,17 @@ def test_proteins_table() -> None:
         "ABCC3",
         "ABCC4",
         "SLC6A8",
+        "CES1",
+        "CYP2E1",
+        "UGT2B15",
+        "UGT1A3",
     ]
     assert set(required) <= set(PROTEINS)
     assert PROTEINS["CYP3A4"].uniprot == "P08684"
+    assert (PROTEINS["CYP3A5"].uniprot, PROTEINS["CYP3A5"].ncit) == (
+        "P20815",
+        "C45999",
+    )
     assert PROTEINS["SLC22A6"].ncit is None
     assert PROTEINS["ABCC3"].uniprot == "O15438"
     assert PROTEINS["ABCC4"].uniprot == "O15439"

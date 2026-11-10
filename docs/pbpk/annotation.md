@@ -113,6 +113,14 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | amount of compound absorbed from the intestinal lumen | `OUTPUT_PARAMETER` |
 | fraction of the oral dose absorbed from the intestinal lumen | `OUTPUT_PARAMETER` |
 | amount of the oral dose applied to the intestinal lumen | `OUTPUT_PARAMETER` |
+| intramuscular depot compartment | `COMPARTMENT` |
+| subcutaneous depot compartment | `COMPARTMENT` |
+| rectal depot compartment | `COMPARTMENT` |
+| rectal exposure | `ROUTE_OF_EXPOSURE` (`BQB.IS_VERSION_OF`) |
+| application time of a depot dose | `PARAMETER` |
+| cumulative amount of a depot dose which is not absorbed | `AMOUNT_OF_COMPOUND_IN_COMPARTMENT` |
+| loss of a depot dose at the site of the injection | none, the terms of other ontologies only |
+| fraction of the absorbed rectal dose into the portal vein | `PHYSIOLOGICAL_PARAMETER` |
 | `CONCENTRATION_IN_HEART` | `CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT` |
 | `CONCENTRATION_IN_PANCREAS` | `CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT` |
 | `CONCENTRATION_IN_MUSCLE` | `CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT` |

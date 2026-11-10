@@ -1,6 +1,6 @@
 # Intestine and routes
 
-A route applies a dose of a substance: intravenous (bolus and infusion), oral tablet (with dissolution) and oral solution. A dose is a dose state in mg which an experiment sets or adds to (`PKPDSimulationExperiment.add_doses`, `"PODOSE_api + 10.0"`), applied by a first order process, the convention of the hand-written models; the dose in mg becomes mmole with the molecular weight `Mr_<s>`. The oral routes need an intestine with a lumen: the segmented intestine (the default) or the single lumen, which replace small and large intestine with one submodel `GU`, own the lumen, apply the oral doses and take the bile.
+A route applies a dose of a substance: intravenous (bolus and infusion), oral tablet (with dissolution), oral solution, intramuscular, subcutaneous and rectal. A dose is a dose state in mg which an experiment sets or adds to (`PKPDSimulationExperiment.add_doses`, `"PODOSE_api + 10.0"`), applied by a first order process, the convention of the hand-written models; the dose in mg becomes mmole with the molecular weight `Mr_<s>`. The oral routes need an intestine with a lumen: the segmented intestine (the default) or the single lumen, which replace small and large intestine with one submodel `GU`, own the lumen, apply the oral doses and take the bile.
 
 ## Routes
 
@@ -9,8 +9,11 @@ A route applies a dose of a substance: intravenous (bolus and infusion), oral ta
 | intravenous | `Route.iv("api")` | `IVDOSE_api` (mg) | `ti_api` (half-life of the injection, s), `Ri_api` (infusion, mg/min) | the venous plasma `Cve_api` |
 | oral tablet | `Route.oral("api", formulation)` | `PODOSE_api` (mg) | the dissolution of the formulation (`Ka_dis_api`, 1/hr, by default) | the stomach, undissolved |
 | oral solution | `Route.oral_solution("api")` | `SOLDOSE_api` (mg) | `Ka_sol_api` (1/hr) | the stomach lumen, dissolved |
+| intramuscular | `Route.im("api")` | `IMDOSE_api` (mg) | `ti_im_api` (s), `ka_im_api` (1/hr), `f_im_api` | the depot `Aim_api`, absorbed into the venous plasma `Cve_api` |
+| subcutaneous | `Route.sc("api")` | `SCDOSE_api` (mg) | `ti_sc_api` (s), `ka_sc_api` (1/hr), `f_sc_api` | the depot `Asc_api`, absorbed into the venous plasma `Cve_api` |
+| rectal | `Route.rectal("api")` | `RECDOSE_api` (mg) | `ti_rec_api` (s), `ka_rec_api` (1/hr), `f_rec_api`, `f_rec_portal_api` | the depot `Arec_api`, absorbed into the portal plasma `Cpo_api` and the venous plasma `Cve_api` |
 
-The dose states and the parameters of the routes are parameters of the top model; the intestine reads the oral ones through its ports and owns their reactions and rate rules. Subcutaneous, intramuscular, inhalation, sublingual and buccal, rectal, transdermal and vaginal routes and the glucose and insulin clamps are designed for (a route is a component with dose parameters) and implemented when the models which need them are migrated.
+The dose states and the parameters of the routes are parameters of the top model; the intestine reads the oral ones through its ports and owns their reactions and rate rules. Inhalation, sublingual and buccal, transdermal and vaginal routes and the glucose and insulin clamps are designed for (a route is a component with dose parameters) and implemented when the models which need them are migrated.
 
 ```equations title="intravenous (top model)"
 J_iv_<s>: -> Cve_<s> = Kiv_<s> * IVDOSE_<s> / Mr_<s>
@@ -26,7 +29,33 @@ J_trs_st_<s>: -> Asolid_du_<s> = PODOSE_<s> / Mr_<s> / ((T_st + FED * (T_st_fed 
 d(PODOSE_<s>)/dt = -(J_po_<s> + J_trs_st_<s>) * Mr_<s>
 ```
 
-`PODOSE_<s>` is the undissolved tablet in the stomach: it dissolves into the stomach lumen and empties undissolved with the stomach into the duodenum. In the next segments the undissolved drug is a species of its own, `Asolid_<seg>_<s>`, which dissolves there and moves on undissolved into the feces.
+`PODOSE_<s>` is the undissolved tablet in the stomach: it dissolves into the stomach lumen and empties undissolved with the stomach into the duodenum. In the next segments the undissolved drug is a species of its own, `Asolid_<seg>_<s>`, which dissolves there and moves on undissolved into the feces. An enteric-coated tablet does not dissolve in the stomach (see [Dissolution](#dissolution)).
+
+### Depot routes
+
+The intramuscular, subcutaneous and rectal routes give their dose into a depot at the site of the administration, an amount of the top model in a compartment of the route (`Aim_<s>` in `Vim`, `Asc_<s>` in `Vsc`, `Arec_<s>` in `Vrec`, mmole; the compartments are compartments of amounts with the nominal volume 1 l, as the urine). The dose state drains into the depot with the half-life of the application `ti_<k>_<s>` (10 s by default, as the intravenous bolus, a choice of the library), so a dose which an experiment adds to the dose state (`add_doses`, `"IMDOSE_api + 10.0"`) adds to the depot. The depot is absorbed with first order: the fraction `f_<k>_<s>` (1 by default) into the venous plasma, the rest into a sink, `Aloss_im_<s>` and `Aloss_sc_<s>` (degraded at the site of the injection, amounts in the depot compartment) or the feces `Afeces_<s>` (the rectal dose which is not absorbed). Of the absorbed rectal dose the fraction `f_rec_portal_<s>` enters the portal plasma and passes the liver (the superior rectal vein drains into the portal vein), the rest enters the venous plasma (the middle and inferior rectal veins drain into the vena cava).
+
+```equations title="intramuscular (subcutaneous: sc) and rectal (top model)"
+J_im_<s>: -> Aim_<s> = ln(2) / ti_im_<s> * 60 s_per_min * IMDOSE_<s> / Mr_<s>
+d(IMDOSE_<s>)/dt = -J_im_<s> * Mr_<s>
+J_im_abs_<s>: Aim_<s> -> Cve_<s> = f_im_<s> * ka_im_<s> / 60 min_per_hr * Aim_<s>
+J_im_loss_<s>: Aim_<s> -> Aloss_im_<s> = (1 - f_im_<s>) * ka_im_<s> / 60 min_per_hr * Aim_<s>
+J_rec_<s>: -> Arec_<s> = ln(2) / ti_rec_<s> * 60 s_per_min * RECDOSE_<s> / Mr_<s>
+d(RECDOSE_<s>)/dt = -J_rec_<s> * Mr_<s>
+J_rec_abs_<s>: Arec_<s> -> Cve_<s> = f_rec_<s> * (1 - f_rec_portal_<s>) * ka_rec_<s> / 60 min_per_hr * Arec_<s>
+J_rec_abs_po_<s>: Arec_<s> -> Cpo_<s> = f_rec_<s> * f_rec_portal_<s> * ka_rec_<s> / 60 min_per_hr * Arec_<s>
+J_rec_loss_<s>: Arec_<s> -> Afeces_<s> = (1 - f_rec_<s>) * ka_rec_<s> / 60 min_per_hr * Arec_<s>
+```
+
+The defaults are those of the data (`database/tables/routes.toml`): the absorption rates `ka_<k>_<s>` are 1/hr, a choice of the library which is not verified, since the absorption from a depot depends on the substance, its formulation and the site (the fitted rates of the hand-written models: diazepam intramuscularly 1.3/hr, morphine intramuscularly 4.4/hr and subcutaneously 4.0/hr); the portal fraction of the rectal route is 0.45, from the systemic availability of lidocaine rectally (0.71, repeated 0.67) and orally (0.34, 0.27) in de Boer 1979 (`(1 - F_rectal)/(1 - F_oral)` with complete absorption, the abstract: slightly more than half of the rectal dose bypasses the liver), one drug, and the fraction depends on the site in the rectum. A model sets or fits its own values with the arguments of the route, numbers, `Value`s with a source or fitted values, which are the fields of `Depot`:
+
+```python
+# not executed
+Route.im("mor", ka=fitted(FITS.parameter("ka_im_mor", unit=U.per_hr)))
+Route.rectal("mor", ka=1.2, fraction=0.6, portal=0.5, application=600.0)
+```
+
+A depot dose is a dose of the equilibration (`DOSE_PREFIXES`): given before the initialization it moves to the start; the depot is a drug-free zero and the sink of an injected depot is set back at the start as the urine.
 
 ### Dissolution
 
@@ -34,9 +63,9 @@ The dissolution rate `kdis` (1/min) acts on the undissolved amount of every segm
 
 - `FirstOrderDissolution(k, fed, release)`: `kdis = k` (`Ka_dis_<s>`, 1/hr), with two optional factors (see below); the default (2/hr, the default of the hand-written models, a choice of the library) when the route states no formulation;
 - `WeibullDissolution(t50, shape, lag)`: the fraction dissolved `F = 1 - exp(-ln2*((t - lag)/t50)^shape)` after the lag time, applied as its hazard on the undissolved amount, with the time since the dose the mean age of the undissolved drug (`age_dis_<s>`); exact for one dose, doses which overlap share one clock (the amount-weighted mean age);
-- `DoseDependentDissolution(k, dose50)`: `kdis = k*D50/(D50 + D)` with the undissolved amount `D` (mg) of all segments, a dissolution which saturates with the dose (solubility-limited).
+- `DoseDependentDissolution(k, dose50, fed)`: `kdis = k*D50/(D50 + D)` with the undissolved amount `D` (mg) of all segments, a dissolution which saturates with the dose (solubility-limited), with the optional factor of the fed state.
 
-The first order dissolution has two optional factors, each creating a dimensionless parameter of the body only if it is set (without them the model has neither parameter and the rate is `Ka_dis_<s>`): `fed` creates `f_dis_fed_<s>`, the factor of the rate in the fed state (`FED = 1`; food slows the dissolution), and `release` creates `f_dis_release_<s>`, the factor of a modified-release formulation (the given value, 1 for the immediate-release tablet; the experiments of a prolonged-release tablet set it, e.g. 0.2). The single lumen has no fed state, a `fed` factor there raises.
+The first order dissolution has two optional factors, each creating a dimensionless parameter of the body only if it is set (without them the model has neither parameter and the rate is `Ka_dis_<s>`): `fed` creates `f_dis_fed_<s>`, the factor of the rate in the fed state (`FED = 1`; food slows the dissolution), and `release` creates `f_dis_release_<s>`, the factor of a modified-release formulation (the given value, 1 for the immediate-release tablet; the experiments of a prolonged-release tablet set it, e.g. 0.2). The dose-dependent dissolution has the factor of the fed state as well, `kdis = Ka_dis*(1 + FED*(f_dis_fed - 1))*D50/(D50 + D)`. The single lumen has no fed state, a `fed` factor there raises.
 
 ```equations title="first order dissolution with the factors of the formulation and the fed state"
 J_po_<s>: -> Clumen_st_<s> = Ka_dis_<s> / 60 min_per_hr * f_dis_release_<s> * (1 + FED * (f_dis_fed_<s> - 1)) * PODOSE_<s> / Mr_<s>
@@ -45,6 +74,13 @@ J_po_<s>: -> Clumen_st_<s> = Ka_dis_<s> / 60 min_per_hr * f_dis_release_<s> * (1
 ```equations title="Weibull dissolution (t50, shape, lag of the tablet)"
 kdis_<s> = piecewise(0, age_dis_<s> <= lag_dis_<s>, 0.693147180559945 * shape_dis_<s> / t50_dis_<s> * ((age_dis_<s> - lag_dis_<s>) / t50_dis_<s> + 1e-9)^(shape_dis_<s> - 1))
 J_dis_du_<s>: Asolid_du_<s> -> Clumen_du_<s> = kdis_<s> * Asolid_du_<s>
+```
+
+An enteric-coated tablet does not dissolve in the stomach: `FirstOrderDissolution(..., enteric=True)` and `DoseDependentDissolution(..., enteric=True)` leave out the dissolution in the stomach, `J_po_<s>`, so the stomach has no dissolution rate of the tablet (it is 0, not a reaction with the rate 0). The undissolved tablet leaves the stomach with the gastric emptying of the condition, the transit time `(T_st + FED*(T_st_fed - T_st))*fimp_t_stomach` (`T_st_eff`), as the undissolved drug of every tablet does, and dissolves from the duodenum on with the dissolution of its formulation. The coated tablet in the stomach is not exposed to the intestinal fluid, so it does not saturate a dose-dependent dissolution: `D` is the undissolved amount of all segments without the coated tablet in the stomach, `Mr_<s>*(Asolid_du_<s> + ... + Asolid_rec_<s>)`, and the food effect on the emptying does not change the dissolution of the drug already emptied. The coat creates no parameter; without it the model is unchanged. The emptying is first order with the mean transit time of the stomach (of liquids, see the data of the segments); a tablet which does not disintegrate empties with the migrating motor complex, which the model does not have. The single lumen has no stomach, an enteric tablet there raises.
+
+```equations title="enteric-coated tablet: the stomach only empties"
+d(PODOSE_<s>)/dt = -J_trs_st_<s> * Mr_<s>
+J_trs_st_<s>: -> Asolid_du_<s> = PODOSE_<s> / Mr_<s> / ((T_st + FED * (T_st_fed - T_st)) * fimp_t_stomach)
 ```
 
 ## Segmented intestine
@@ -177,7 +213,7 @@ J_out_pl_<s>: Cpl_<s> -> Cpo_<s> = Qgu * (1 - HCT) * Cout_<s>
 
 ### Mucosa
 
-A substance with chemistry of the intestine (substrate, product, transported substance, inhibitor or inducer of a protein of a process of `Organ.SMALL_INTESTINE`) has a mucosa (enterocyte) species per segment, `Cmu_<seg>_<s>`: flow-limited with the mucosa to plasma coefficient `K_mu_<s>` (the Kp of the small intestine, 1 without), perfused by arterial blood with the mucosa share of the blood flow of its region times the transit share of the segment in the region, and draining into the portal vein; the absorbed drug enters it. Its volume is carved out of the tissue of the wall, so wall and mucosa together have the capacity of the wall of a substance without mucosa. The mucosa is a tenth of the tissue of the intestine and receives 70 % of its blood flow, choices of the library (`database/tables/intestine_human.toml`). The chemistry of the small intestine is placed into the mucosa segments by the relative expression of its protein (CYP3A4 of Paine 1997) times the mucosa volume, the sum kept: the Vmax stays per litre of small intestine. A protein without expression data, and a process without protein, is placed by mucosa volume over the segments of the small intestine only, the organ of the process; the colon mucosa carries none of it, so the gut first pass of such a process equals that of the single lumen. An apical efflux moves the drug from the mucosa into the lumen of its segment, an apical influx back.
+A substance with chemistry of the intestine (substrate, product, transported substance, inhibitor or inducer of a protein of a process of `Organ.SMALL_INTESTINE`) has a mucosa (enterocyte) species per segment, `Cmu_<seg>_<s>`: flow-limited by default (`mucosa_ps` makes it permeability-limited, see below) with the mucosa to plasma coefficient `K_mu_<s>` (the Kp of the small intestine, 1 without), perfused by arterial blood with the mucosa share of the blood flow of its region times the transit share of the segment in the region, and draining into the portal vein; the absorbed drug enters it. Its volume is carved out of the tissue of the wall, so wall and mucosa together have the capacity of the wall of a substance without mucosa. The mucosa is a tenth of the tissue of the intestine and receives 70 % of its blood flow, choices of the library (`database/tables/intestine_human.toml`). The chemistry of the small intestine is placed into the mucosa segments by the relative expression of its protein (CYP3A4 of Paine 1997) times the mucosa volume, the sum kept: the Vmax stays per litre of small intestine. A protein without expression data, and a process without protein, is placed by mucosa volume over the segments of the small intestine only, the organ of the process; the colon mucosa carries none of it, so the gut first pass of such a process equals that of the single lumen. An apical efflux moves the drug from the mucosa into the lumen of its segment, an apical influx back.
 
 ```equations title="mucosa of the duodenum (a gut metabolism of drg into drg_m)"
 Vmu_du = f_mucosa_volume * Vsi * (1 - f_vas_si) * 0.0744792
@@ -191,7 +227,30 @@ w_cyp3a4_du = 31 * Vmu_du / (31 * Vmu_du + 31 * Vmu_jej1 + 24 * Vmu_jej2 + 17 * 
 DRGGU_du: Cmu_du_drg -> Cmu_du_drg_m = f_cyp3a4 * fimp_cyp3a4 * w_cyp3a4_du * DRGGU_Vmax * Vsi * (fu_drg / K_mu_drg * Cmu_du_drg) / (DRGGU_Km + fu_drg / K_mu_drg * Cmu_du_drg)
 ```
 
-The number `0.0744792` is the transit share of the duodenum in the small intestine. A protein which a substance inactivates or induces has one turnover state for the intestine, driven by the unbound mucosa concentration weighted by the placement of the protein. ABCB1, ABCG2 and every protein but CYP3A4 are placed by mucosa volume over the small intestine until their abundances along the intestine (Drozdzik 2014) are transcribed and verified.
+The number `0.0744792` is the transit share of the duodenum in the small intestine. A protein which a substance inactivates or induces has one turnover state for the intestine, driven by the unbound mucosa concentration weighted by the placement of the protein. ABCB1, ABCG2, CYP3A5 and every protein but CYP3A4 are placed by mucosa volume over the small intestine until their abundances along the intestine (Drozdzik 2014) are transcribed and verified.
+
+### Permeability-limited mucosa
+
+The flow-limited mucosa is perfused with the arterial blood of the mucosa, so the enterocytes see the total concentration of that blood and any gut extraction `E_G` of the absorbed drug extracts systemic drug with about `Qmu*E_G`, the mucosal blood flow being 70 % of the intestinal flow (about 29 l/hr of blood). A drug whose total clearance is far below that flow cannot have a gut first pass this way: with the gut availability 0.3 of a drug with fu 0.08 and a blood to plasma ratio of 142 (sirolimus, blood clearance 1.5 to 4 l/hr) the gut alone clears 20.6 l/hr of blood (`tests/pbpk/test_mucosa.py`).
+
+`SegmentedIntestine(mucosa_ps={"rap": 0.5})` (and `SingleLumen(mucosa_ps=...)`) makes the mucosa of the substances it names permeability-limited: the enterocytes exchange with the mucosal blood through the permeability-surface product of their basolateral membrane on the unbound concentrations, in the convention of `ps` of an organ (`fu*(C_blood - Cmu/K_mu)`), while the absorbed drug still enters them from the lumen and the gut chemistry and the apical efflux still act on them. The mucosal blood is a fraction of the mucosa, so it is in quasi steady state, which leaves the hybrid flow of the Qgut model (Yang 2007, Gertz 2010), `Qgut = Qmu*carrier*fu*PS/(Qmu*carrier + fu*PS)` with the carrier of the mucosal blood flow (`1 - HCT` for a substance whose flows carry plasma, `BP_<s>` for erythrocytes in equilibrium, as in the flow-limited mucosa above; `Qmu*BP` is 69.8 l/min for sirolimus and the fence below shows the plasma form of its toy): the enterocytes see `Qgut` in place of the mucosal blood flow in the same two flows `J_mu_in_<seg>_<s>` and `J_mu_out_<seg>_<s>`, and the rest of the mucosal blood passes them from the artery into the portal vein (`J_mu_blood_<seg>_<s>`). A linear gut metabolism then has the gut availability of the Qgut model, `F_G = Qgut/(Qgut + fu*CLint)`, and the gut clears systemic drug with `Qgut*(1 - F_G)` of the arterial plasma: a small `PS` separates the two (sirolimus with a `CLperm` of 100 l/hr: the same gut availability 0.3 costs 0.039 l/hr of blood clearance instead of 20.6), and a large `PS` is the flow-limited mucosa, whose flows the model returns to (`Qgut` approaches `Qmu*carrier` and the bypass vanishes). Because the enterocytes are a compartment behind a barrier, the absorbed drug reaches the blood with the time constant `Vmu_<seg>*K_mu_<s>/Qgut_<seg>_<s>`, the same in every segment and about 0.47 minutes per unit of `K_mu_<s>` at a `CLperm` of 100 l/hr (0.0008 minutes with the flow-limited mucosa): a drug with a large mucosa to plasma coefficient is held in the mucosa for minutes, which is the physiology of the barrier and part of the option.
+
+```equations title="permeability-limited mucosa of the duodenum (the exchange per litre of mucosa, a substance whose flows carry plasma)"
+PS_mu_du_<s> = kps_mu_<s> * Vmu_du
+Qgut_du_<s> = Qmu_du * (1 - HCT) * fu_<s> * PS_mu_du_<s> / (Qmu_du * (1 - HCT) + fu_<s> * PS_mu_du_<s>)
+J_mu_in_du_<s>: Car_<s> -> Cmu_du_<s> = Qgut_du_<s> * Car_<s>
+J_mu_out_du_<s>: Cmu_du_<s> -> Cpo_<s> = Qgut_du_<s> * Cmu_du_<s> / K_mu_<s>
+J_mu_blood_du_<s>: Car_<s> -> Cpo_<s> = (Qmu_du * (1 - HCT) - Qgut_du_<s>) * Car_<s>
+```
+
+```equations title="the other form: the exchange of the mucosa of the small intestine"
+Vmu_si = Vmu_du + Vmu_jej1 + Vmu_jej2 + Vmu_ile1 + Vmu_ile2
+PS_mu_du_<s> = PS_mu_ref_<s> * Vmu_du / Vmu_si
+```
+
+The values are per litre of mucosa (1/min, `kps_mu_<s>`), so the exchange of a segment follows the mucosa of the individual; `mucosa_ps_per_volume=False` takes them as the exchange of the mucosa of the small intestine (l/min, `PS_mu_ref_<s>`, the `CLperm` of the Qgut model, which the literature gives for the small intestine and which the library normalises over the same organ as the chemistry of a protein without an expression profile). A segment has its share of it by mucosa volume, `PS_mu_ref_<s>*Vmu_<seg>/Vmu_si`, so the five segments of the small intestine sum to the given value and the colon adds its own share at the same exchange per litre of mucosa (its mucosa is 56.9 % of the small intestinal mucosa, so its segments sum to 0.569 of the value): the colon mucosa is permeability-limited as well, which keeps the drug absorbed there able to reach the blood (an exchange of zero would trap it in the colon enterocytes, which carry no chemistry). The colonic share is an extrapolation of the small intestinal density, and the one assumption of the option which the Qgut literature does not cover: `CLperm` is measured for the small intestine, and the colon has no villi, so its surface per litre of mucosa is smaller and the library overestimates its permeability (the error moves the colon towards the flow-limited mucosa, which is what a model gets without the option). The single lumen has one mucosa segment, the mucosa of the small intestine, so it gets the whole value and both intestines agree on the small intestine (it normalises over `Vmu_total`, which is that volume, and has no `Vmu_si`). Both forms mean the same exchange per litre of mucosa, `PS_mu_ref_<s>/Vmu_si`, and either is a number, a `Value` (fitted, in 1/min or l/min of its form) or a `Formula`; a number or a `Value` which is not positive is refused when the intestine is created (a negative exchange would run the flows of the mucosa backwards, zero would cut the enterocytes off from the blood), as is a `Value` in the unit of the other form; a `Formula` is not checked, as for the `ps` of an organ, since its value is only known when the model is built.
+
+A substance which is not named keeps the flow-limited mucosa and nothing is created for it; a `mucosa_ps` of a substance without mucosa species is refused, naming the substances which have one. Use it for a drug with a gut first pass whose systemic clearance is below the mucosal blood flow, and the flow-limited mucosa (the default) for a drug which the mucosa extracts from the blood as fast as the flow delivers it. The blood cells of the mucosal blood pass the mucosa either way, and a basolateral transporter of the enterocytes is still not available (a basolateral transport of the small intestine is refused).
 
 ## Single lumen
 
@@ -221,4 +280,5 @@ Every substance has the amounts in urine `Aurine_<s>` and feces `Afeces_<s>` (co
 - The single lumen has no segments: `SingleLumen(regional=...)` and `SingleLumen(conversions=...)` are refused with a message, a regional profile and the conversions in the lumen need the segmented intestine.
 - A regional profile is given to a substance with an oral route (as `fabs` and `f_ka_colon`): the product of a conversion without an oral route absorbs with `ka_<m>*f_area_<seg>` only.
 - Only CYP3A4 has an expression profile along the intestine; every other protein is placed by mucosa volume over the small intestine, so a process expressed in the colon needs expression data (or a hook for the large intestine). The pH of the segments is data no process reads.
+- The mucosa has no basolateral transporter: a basolateral transport of the small intestine is refused, the enterocytes exchange with the mucosal blood passively (flow-limited, or through the permeability of `mucosa_ps`). A permeability-limited mucosa is a passive permeability; a drug taken up into the enterocytes by a basolateral transporter needs one.
 - The gastric emptying and small intestinal transit factors of chronic kidney disease are 1 (see [Impairment](impairment.md#limitations)).

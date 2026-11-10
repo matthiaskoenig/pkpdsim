@@ -6,7 +6,8 @@ COMBINE archive of a model carries it (`create_archive(..., figure=True)`):
 - the title, the substances (a chip in the color of the substance, its name
   and its mechanisms: binding, erythrocytes, distribution, baseline (an
   endogenous substance: with a given baseline, or produced with the baseline
-  solved by the library), inhibitions and inductions), the routes, the PD components and the key;
+  solved by the library), inhibitions, inductions and stabilisations), the
+  routes, the PD components and the key;
 - the circulation: the venous blood on the left, the arterial blood on the
   right, the lung in series between them, the organs which the arterial
   blood perfuses and which drain into the venous blood, the liver with the
@@ -648,6 +649,8 @@ class _Figure:
             parts.append(f"inhibits {i.protein} ({i.kind})")
         for i in s.induces:
             parts.append(f"induces {i.protein}")
+        for i in s.stabilises:
+            parts.append(f"stabilises {i.protein}")
         return "; ".join(parts)
 
     def _route_text(self) -> str:
@@ -658,8 +661,10 @@ class _Figure:
                 words.append(f"iv {r.substance}")
             elif r.kind == "oral":
                 words.append(f"oral tablet {r.substance}")
-            else:
+            elif r.kind == "oral_solution":
                 words.append(f"oral solution {r.substance}")
+            else:
+                words.append(f"{r.kind} {r.substance}")
         return "routes: " + ("; ".join(words) if words else "none")
 
     # --- drawing -----------------------------------------------------------
@@ -941,12 +946,20 @@ class _Figure:
 
         body_top = y
         rows_top = body_top + 2 * self.k.line + 14
-        # the intravenous routes enter the venous blood from the band above the
-        # first row, so the blood columns start at the top
-        iv = list(dict.fromkeys(r.substance for r in self.d.routes if r.kind == "iv"))
+        # the intravenous and the depot routes enter the venous blood from the
+        # band above the first row, so the blood columns start at the top
+        entries = [
+            f"{kind}: " + ", ".join(sids)
+            for kind in ("iv", "im", "sc", "rectal")
+            if (
+                sids := list(
+                    dict.fromkeys(r.substance for r in self.d.routes if r.kind == kind)
+                )
+            )
+        ]
         band_x = self.k.mx0
-        if iv:
-            text = "iv: " + ", ".join(iv)
+        if entries:
+            text = "; ".join(entries)
             mid = body_top + 4 + self.k.line / 2
             c.elements.append(icons.syringe(self.k.mx0 + 13, mid, 22, rot=90))
             c.text(self.k.mx0 + 30, self.k.baseline(body_top + 4, _SIZE), text)
@@ -1201,16 +1214,22 @@ def _dissolution(route: Route) -> str:
     f = route.formulation
     if isinstance(f, WeibullDissolution):
         return "Weibull dissolution"
-    if isinstance(f, DoseDependentDissolution):
-        return "dose-dependent dissolution"
-    if isinstance(f, FirstOrderDissolution):
-        factors = [
-            name
-            for name, q in (("fed factor", f.fed), ("release factor", f.release))
-            if q is not None
-        ]
-        return ", ".join(["first order dissolution", *factors])
-    return "first order dissolution"
+    if f is None:
+        return "first order dissolution"
+    release = f.release if isinstance(f, FirstOrderDissolution) else None
+    options = [
+        name
+        for name, q in (("fed factor", f.fed), ("release factor", release))
+        if q is not None
+    ]
+    if f.enteric:
+        options.append("enteric-coated")
+    kind = (
+        "dose-dependent dissolution"
+        if isinstance(f, DoseDependentDissolution)
+        else "first order dissolution"
+    )
+    return ", ".join([kind, *options])
 
 
 def builds_text(sexes: Sequence[Sex]) -> str:

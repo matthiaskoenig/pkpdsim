@@ -7,6 +7,7 @@ observers and the fits agree on them. A flat id is `<ORGAN>__<local id>`
 
 import re
 from collections.abc import Iterable
+from typing import Literal
 
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 
@@ -60,6 +61,7 @@ __all__ = [
     "LBW",
     "MLEAN",
     "MUCOSA_FLOW_TOTAL",
+    "MUCOSA_VOLUME_SMALL",
     "MUCOSA_VOLUME_TOTAL",
     "PS_VAS",
     "QH",
@@ -107,6 +109,16 @@ __all__ = [
     "condition_factor",
     "delta",
     "delta_base",
+    "depot",
+    "depot_absorption",
+    "depot_absorption_rate",
+    "depot_application",
+    "depot_application_time",
+    "depot_compartment",
+    "depot_dose",
+    "depot_fraction",
+    "depot_loss",
+    "depot_loss_reaction",
     "dissolution",
     "dissolution_age",
     "dissolution_clock",
@@ -165,6 +177,7 @@ __all__ = [
     "kp_slow",
     "kps",
     "kslow",
+    "kstab",
     "lumen",
     "lumen_amount",
     "lumen_conversion_rate",
@@ -174,6 +187,10 @@ __all__ = [
     "mucosa",
     "mucosa_coefficient",
     "mucosa_flow",
+    "mucosa_kps",
+    "mucosa_ps",
+    "mucosa_ps_ref",
+    "mucosa_qgut",
     "mucosa_reaction",
     "mucosa_unbound",
     "mucosa_volume",
@@ -207,6 +224,7 @@ __all__ = [
     "rate_ratio",
     "reabsorption_n",
     "reabsorption_threshold",
+    "rectal_portal_fraction",
     "ref",
     "regional_absorption_factor",
     "segment_process",
@@ -386,6 +404,12 @@ MUCOSA_FLOW_TOTAL = "Qmu_total"
 """The local blood flow of the mucosa of all segments."""
 MUCOSA_VOLUME_TOTAL = "Vmu_total"
 """The local volume of the mucosa of all segments."""
+MUCOSA_VOLUME_SMALL = "Vmu_si"
+"""The local volume of the mucosa of the segments of the small intestine, over
+which the exchange of the mucosa of the small intestine of a
+permeability-limited mucosa is normalised (`PS_mu_ref_<s>`); an intestine whose
+whole mucosa is that of the small intestine (the single lumen) uses
+`Vmu_total`."""
 WALL_FRACTION = "f_wall"
 """The local fraction of the intestinal tissue without the mucosa, `1 - Vmu_total/Vti`."""
 F_MUCOSA_VOLUME = "f_mucosa_volume"
@@ -1058,6 +1082,50 @@ def mucosa_coefficient(s: str) -> str:
     return f"K_mu_{s}"
 
 
+def mucosa_kps(s: str) -> str:
+    """The local id of the exchange of the mucosa per litre of mucosa, `kps_mu_<s>`.
+
+    The permeability-surface product of the mucosa of a substance given per
+    litre of mucosa (`mucosa_ps` of the intestine with
+    `mucosa_ps_per_volume`, 1/min): a segment has
+    `PS_mu_<seg>_<s> = kps_mu_<s> * Vmu_<seg>`.
+    """
+    return f"kps_mu_{s}"
+
+
+def mucosa_ps_ref(s: str) -> str:
+    """The local id of the exchange of the mucosa of the small intestine, `PS_mu_ref_<s>`.
+
+    The permeability-surface product of the mucosa of the small intestine in
+    l/min (`mucosa_ps` of the intestine with `mucosa_ps_per_volume=False`, the
+    `CLperm` of the Qgut model, which the literature measures for that organ):
+    a segment has its share of it by mucosa volume relative to the mucosa of
+    the small intestine (`PS_mu_ref_<s>*Vmu_<seg>/Vmu_si`), so the segments of
+    the small intestine sum to it and the colon has its own share at the same
+    exchange per litre of mucosa.
+    """
+    return f"PS_mu_ref_{s}"
+
+
+def mucosa_ps(s: str, seg: str | None = None) -> str:
+    """The local id of the exchange of the mucosa of a segment, `PS_mu_du_<s>`.
+
+    The permeability-surface product between the mucosal blood and the
+    enterocytes of the segment (l/min), of the permeability-limited mucosa.
+    """
+    return _segment("PS_mu", s, seg)
+
+
+def mucosa_qgut(s: str, seg: str | None = None) -> str:
+    """The local id of the hybrid flow of the mucosa of a segment, `Qgut_du_<s>`.
+
+    The `Qgut` of the Qgut model (Yang 2007) of the permeability-limited
+    mucosa, the series of the mucosal blood flow and the permeability
+    clearance of the unbound drug (l/min).
+    """
+    return _segment("Qgut", s, seg)
+
+
 def transit_time(seg: str | None = None) -> str:
     """The local id of the transit time of a lumen segment, `T_du` (single: `t_lumen`)."""
     return T_LUMEN if seg is None else f"T_{seg}"
@@ -1122,8 +1190,10 @@ def dissolution_reaction(s: str, seg: str) -> str:
 def mucosa_reaction(kind: str, s: str, seg: str | None = None) -> str:
     """The local id of a flow of the mucosa of a segment, `J_mu_in_du_<s>`.
 
-    `kind` is `in` (arterial inflow), `out` (outflow into the portal vein)
-    or `bc` (the blood cells of the mucosal blood, which pass it).
+    `kind` is `in` (the arterial inflow of the mucosa), `out` (its outflow
+    into the portal vein), `bc` (the blood cells of the mucosal blood, which
+    pass it) or `blood` (of the permeability-limited mucosa: the mucosal blood
+    which passes the enterocytes, from the artery into the portal vein).
     """
     return _segment(f"J_mu_{kind}", s, seg)
 
@@ -1235,6 +1305,84 @@ def po_dose(s: str) -> str:
 def sol_dose(s: str) -> str:
     """The id of the oral dose state of a solution (mg), `SOLDOSE_<s>`."""
     return f"SOLDOSE_{s}"
+
+
+type _DepotKind = Literal["im", "sc", "rectal"]
+"""The kinds of the depot routes (`Route.kind`)."""
+
+_DEPOT_TOKENS: dict[str, str] = {"im": "im", "sc": "sc", "rectal": "rec"}
+"""The token of a depot route in its ids: intramuscular, subcutaneous, rectal."""
+
+
+def depot_dose(kind: _DepotKind, s: str) -> str:
+    """The id of the dose state of a depot route (mg), `IMDOSE_<s>`, `SCDOSE_<s>`, `RECDOSE_<s>`."""
+    return f"{_DEPOT_TOKENS[kind].upper()}DOSE_{s}"
+
+
+def depot(kind: _DepotKind, s: str) -> str:
+    """The id of the depot of a depot route (mmole), `Aim_<s>`, `Asc_<s>`, `Arec_<s>`.
+
+    The amount at the site of the administration (muscle, subcutis, rectum)
+    which the dose state applies and which is absorbed from there, a
+    species of the top model in the depot compartment of the route.
+    """
+    return f"A{_DEPOT_TOKENS[kind]}_{s}"
+
+
+def depot_compartment(kind: _DepotKind) -> str:
+    """The id of the compartment of the depots of a route, `Vim`, `Vsc`, `Vrec`.
+
+    A compartment of amounts with the nominal volume 1 l, as the urine.
+    """
+    return f"V{_DEPOT_TOKENS[kind]}"
+
+
+def depot_application_time(kind: _DepotKind, s: str) -> str:
+    """The id of the half-life of the application of a depot dose (s), `ti_im_<s>`."""
+    return f"ti_{_DEPOT_TOKENS[kind]}_{s}"
+
+
+def depot_absorption_rate(kind: _DepotKind, s: str) -> str:
+    """The id of the rate of the absorption from a depot (1/hr), `ka_im_<s>`, `ka_rec_<s>`."""
+    return f"ka_{_DEPOT_TOKENS[kind]}_{s}"
+
+
+def depot_fraction(kind: _DepotKind, s: str) -> str:
+    """The id of the fraction of a depot which is absorbed, `f_im_<s>`, `f_rec_<s>`."""
+    return f"f_{_DEPOT_TOKENS[kind]}_{s}"
+
+
+def rectal_portal_fraction(s: str) -> str:
+    """The id of the fraction of the absorbed rectal dose which enters the portal vein, `f_rec_portal_<s>`."""
+    return f"f_rec_portal_{s}"
+
+
+def depot_loss(kind: _DepotKind, s: str) -> str:
+    """The id of the amount of an injected depot which is not absorbed (mmole), `Aloss_im_<s>`.
+
+    The sink of the intramuscular and the subcutaneous depot (degraded at
+    the site of the injection); the rectal depot which is not absorbed
+    leaves into the feces `Afeces_<s>`, which this function gives for it.
+    """
+    if kind == "rectal":
+        return feces(s)
+    return f"Aloss_{_DEPOT_TOKENS[kind]}_{s}"
+
+
+def depot_application(kind: _DepotKind, s: str) -> str:
+    """The id of the application of a depot dose into the depot, `J_im_<s>`, `J_rec_<s>`."""
+    return dose_reaction(_DEPOT_TOKENS[kind], s)
+
+
+def depot_absorption(kind: _DepotKind, s: str, portal: bool = False) -> str:
+    """The id of the absorption from a depot, `J_im_abs_<s>`; `J_rec_abs_po_<s>` into the portal vein."""
+    suffix = "_po" if portal else ""
+    return f"J_{_DEPOT_TOKENS[kind]}_abs{suffix}_{s}"
+
+
+def depot_loss_reaction(kind: _DepotKind, s: str) -> str:
+    """The id of the part of a depot which is not absorbed, into its sink, `J_im_loss_<s>`."""
+    return f"J_{_DEPOT_TOKENS[kind]}_loss_{s}"
 
 
 def dissolution(s: str) -> str:
@@ -1430,6 +1578,15 @@ def ec50(protein: str, s: str) -> str:
     return f"EC50_{protein.lower()}_{s}"
 
 
+def kstab(protein: str, s: str) -> str:
+    """The id of the stabilisation constant of `s` on a protein, `Kstab_cyp2e1_<s>`.
+
+    The unbound concentration of the stabiliser which halves the degradation
+    of the protein, `kdeg*E/(1 + I/Kstab)`.
+    """
+    return f"Kstab_{protein.lower()}_{s}"
+
+
 _PARTS = "|".join(p.value for p in Part)
 _POOLS = "|".join(p.value for p in Pool)
 _SEGMENTS = "|".join(GUT_SEGMENTS)
@@ -1449,14 +1606,16 @@ def species_of(s: str, ids: Iterable[str]) -> list[str]:
     Returns:
         The ids which are an organ species (of a zone as well), a slow
         pool of a tissue, a pool species, a blood cell pool species, a lumen,
-        undissolved or mucosa species, a tubule species of `s`, in the order
-        of `ids`.
+        undissolved or mucosa species, a tubule species or the depot of a
+        depot route (`Aim_<s>`) of `s`, in the order of `ids`.
     """
+    depots = "|".join(_DEPOT_TOKENS.values())
     pattern = re.compile(
         rf"(?:C(?:(?:{_PARTS})(?:_z\d+)?|(?:{_POOLS})(?:_{Part.BLOOD_CELLS.value})?"
         r"|slow|pla|fet)"
         rf"|(?:Clumen|Cmu|Asolid)(?:_(?:{_SEGMENTS}))?"
-        rf"|Ctub_(?:{_TUBULE}))_{re.escape(s)}"
+        rf"|Ctub_(?:{_TUBULE})"
+        rf"|A(?:{depots}))_{re.escape(s)}"
     )
     return [i for i in ids if pattern.fullmatch(i.rsplit("__", 1)[-1])]
 

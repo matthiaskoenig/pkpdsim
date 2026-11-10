@@ -8,7 +8,7 @@ from typing import Literal
 from sbmlutils.metadata import BQB
 
 from pkpdsim.pbpk.organs import Organ, as_member, as_organ_keys, as_organs
-from pkpdsim.pbpk.proteins import Induction, Inhibition
+from pkpdsim.pbpk.proteins import Induction, Inhibition, Stabilisation
 from pkpdsim.pbpk.values import Q, Value, check_literals, number, unit_text
 from pkpdsim.sbml.values import DIFFUSION_UNITS
 
@@ -259,9 +259,8 @@ class Substance:
         excretion: the excretion.
         inhibits: the inhibitions of proteins by the substance.
         induces: the inductions of proteins by the substance.
-        diffusion: the aqueous diffusion coefficient, a `Value` in an area per
-            time (`DIFFUSION_UNITS`); `None` derives it from the molar mass
-            (`pkpdsim.zonation.transport`).
+        stabilises: the stabilisations of proteins by the substance (the
+            protection of a protein from its degradation).
         baseline: the plasma concentration (mM) of an endogenous substance at
             the start, `baseline_<s>`; `None` starts every species at 0.
             Every plasma species starts at it, every other species of the
@@ -270,6 +269,9 @@ class Substance:
             tubule and the sinks at 0. A `Formula` may read the parameters of
             the top model and the observers of the definition (a production
             over a clearance), not what changes during the simulation.
+        diffusion: the aqueous diffusion coefficient, a `Value` in an area per
+            time (`DIFFUSION_UNITS`); `None` derives it from the molar mass
+            (`pkpdsim.zonation.transport`).
     """
 
     sid: str
@@ -282,6 +284,7 @@ class Substance:
     excretion: Excretion = field(default_factory=Excretion)
     inhibits: tuple[Inhibition, ...] = ()
     induces: tuple[Induction, ...] = ()
+    stabilises: tuple[Stabilisation, ...] = ()
     baseline: Q | None = None
     diffusion: Value | None = None
 

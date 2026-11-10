@@ -35,6 +35,7 @@ from pkpdsim.credibility import (
     InputStatus,
     input_checks,
 )
+from pkpdsim.credibility.battery import LEGACY_DOSE_STATES
 from pkpdsim.credibility.inputs import (
     InputCheck,
     InputsRecord,
@@ -43,6 +44,7 @@ from pkpdsim.credibility.inputs import (
     _magnitude,
     check_covariate,
     check_dose,
+    dose_prefixes,
     inputs_record,
     inputs_statement,
     read_study_tables,
@@ -52,6 +54,8 @@ from pkpdsim.credibility.inputs import (
     section_record,
 )
 from pkpdsim.model import PKPDModel
+from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.equilibration import DOSE_PREFIXES as LIBRARY_DOSES
 
 
 def _inputs(context: ContextResult) -> InputsRecord | None:
@@ -183,6 +187,21 @@ def test_the_doses() -> None:
     assert (
         reported_doses(StudyTables(*(pd.DataFrame(),) * 3), ["D25"], "mg", ureg) == []
     )
+
+
+def test_the_dose_prefixes_are_those_of_the_library() -> None:
+    """Every dose state of the PBPK library is a dose of the equivalency.
+
+    A subset and not an equality: the dose states of the models which the
+    library does not build are doses of the equivalency as well
+    (`LEGACY_DOSE_STATES` of the battery). The infusion rate of the library
+    is no dose: it is a rate in mg/min and the reported interventions of a
+    study give a dose.
+    """
+    prefixes = set(dose_prefixes())
+    assert set(LIBRARY_DOSES) - {ids.infusion_rate("")} <= prefixes
+    assert ids.infusion_rate("") not in prefixes
+    assert set(LEGACY_DOSE_STATES) <= prefixes
 
 
 def test_the_values_of_the_changes() -> None:

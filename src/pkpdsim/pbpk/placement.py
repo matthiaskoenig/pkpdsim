@@ -149,6 +149,7 @@ __all__ = [
     "species_start",
     "start_formula",
     "stoichiometry",
+    "turnover_proteins",
     "unbound",
     "value_notes",
     "value_parameter",
@@ -498,7 +499,7 @@ def has_turnover(protein: str, ctx: "OrganContext") -> bool:
     """Check whether a protein has a turnover state.
 
     A protein has one when a substance of the definition inactivates it
-    (mechanism-based) or induces it.
+    (mechanism-based), induces it or stabilises it.
 
     Args:
         protein: the protein id.
@@ -507,9 +508,39 @@ def has_turnover(protein: str, ctx: "OrganContext") -> bool:
     Returns:
         `True` if the protein needs the state `E_<protein>`.
     """
-    return any(
-        i.protein == protein and i.kind == "mechanism" for _, i in ctx.inhibitions
-    ) or any(i.protein == protein for _, i in ctx.inductions)
+    return (
+        any(i.protein == protein and i.kind == "mechanism" for _, i in ctx.inhibitions)
+        or any(i.protein == protein for _, i in ctx.inductions)
+        or any(i.protein == protein for _, i in ctx.stabilisations)
+    )
+
+
+def turnover_proteins(
+    substances: Iterable[Substance],
+    chemistry: Iterable[Metabolism | Transport | CustomReaction],
+) -> set[str]:
+    """Get the proteins with a turnover state in some organ.
+
+    A protein which a substance inactivates (mechanism-based), induces or
+    stabilises and which a metabolism or transport of the chemistry uses.
+
+    Args:
+        substances: the substances of the definition.
+        chemistry: the processes of the definition.
+
+    Returns:
+        The ids of the proteins.
+    """
+    regulated: set[str] = set()
+    for s in substances:
+        regulated |= {i.protein for i in s.inhibits if i.kind == "mechanism"}
+        regulated |= {i.protein for i in (*s.induces, *s.stabilises)}
+    used = {
+        p.protein
+        for p in chemistry
+        if isinstance(p, Metabolism | Transport) and p.protein is not None
+    }
+    return regulated & used
 
 
 def _activity(protein: str | None, ctx: "OrganContext") -> str:

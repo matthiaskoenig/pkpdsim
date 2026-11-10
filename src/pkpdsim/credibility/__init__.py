@@ -14,13 +14,14 @@ fields of the domain `DOMAIN_FIELDS`, the extensions and the battery hook):
   simulated and the reported inputs of the subjects (`inputs`) and the
   provenance of the study data (`studies`);
 - the battery hook of the PK checks (`PK_BATTERY`, `pkpdsim.credibility.battery`):
-  mass balance, zero dose and superposition on the doses of every route of
-  every substance, with the fates of the doses.
+  the dose states of the model, mass balance, zero dose and superposition on
+  the doses of every route of every substance, with the fates of the doses.
 """
 
 from typing import Final
 
 from pkpdsim.credibility.battery import (
+    DOSE_STATES,
     MASS_BALANCE,
     PK_BATTERY,
     PK_CHECKS,
@@ -67,6 +68,7 @@ EXTENSIONS: Final = (RATIOS, TEMPORAL, INPUTS, STUDIES)
 __all__ = [
     "DEFAULT_COVARIATES",
     "DEFAULT_RATIO_ACCEPTANCE",
+    "DOSE_STATES",
     "EXTENSIONS",
     "GUEST_DELTA",
     "INPUTS",

@@ -130,6 +130,8 @@ One id scheme for every model, built by the functions of `pkpdsim.pbpk.ids`, so 
 | `Aurine_<s>` | the amount in urine | `ids.urine(s)` |
 | `Rurine_<s>` | the urinary excretion rate (mmole/min), an output of the kidney | `ids.urine_rate(s)` |
 | `Afeces_<s>` | the amount in feces | `ids.feces(s)` |
+| `Aim_<s>` | the depot of a depot route (mmole), `Asc_<s>`, `Arec_<s>` | `ids.depot("im", s)` |
+| `Aloss_im_<s>` | the amount of an injected depot which is not absorbed (mmole), `Aloss_sc_<s>`; the rectal depot leaves into `Afeces_<s>` | `ids.depot_loss("im", s)` |
 | `Alumen_<s>` | the dissolved amount in the intestinal lumen, the sum over the segments (mmole), a readout of the intestine | `ids.lumen_amount(s)` |
 | `Rabs_<s>` | the absorption rate, the fluxes from the lumen into the intestinal wall (mmole/min), a readout of the intestine | `ids.absorption_rate(s)` |
 | `Reff_<s>` | the efflux rate, the fluxes from the intestinal wall into the lumen (mmole/min), a readout of the intestine | `ids.efflux_rate(s)` |
@@ -167,6 +169,7 @@ One id scheme for every model, built by the functions of `pkpdsim.pbpk.ids`, so 
 | `Ri_<s>` | the intravenous infusion (mg/min) | `ids.infusion_rate(s)` |
 | `PODOSE_<s>` | the oral dose state of a tablet (mg) | `ids.po_dose(s)` |
 | `SOLDOSE_<s>` | the oral dose state of a solution (mg) | `ids.sol_dose(s)` |
+| `IMDOSE_<s>` | the dose state of a depot route (mg): intramuscular, `SCDOSE_<s>` subcutaneous (`"sc"`), `RECDOSE_<s>` rectal (`"rectal"`) | `ids.depot_dose("im", s)` |
 | `Ka_dis_<s>` | the first order dissolution of a tablet (1/hr) | `ids.dissolution(s)` |
 | `ka_<s>` | the absorption rate constant of the small intestine (1/hr) | `ids.absorption(s)` |
 | `Clumen_<seg>_<s>` | the dissolved substance in a lumen segment | `ids.lumen(s, seg)` |
@@ -258,12 +261,14 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `f_mucosa_volume` | the fraction of the intestinal tissue which is mucosa (local id) | `ids.F_MUCOSA_VOLUME` |
 | `Qmu_total` | the blood flow of the mucosa of all segments (local id) | `ids.MUCOSA_FLOW_TOTAL` |
 | `Vmu_total` | the volume of the mucosa of all segments (local id) | `ids.MUCOSA_VOLUME_TOTAL` |
+| `Vmu_si` | the volume of the mucosa of the segments of the small intestine (local id) | `ids.MUCOSA_VOLUME_SMALL` |
 | `k_bile` | the rate of the transit of the bile into the intestinal lumen | `ids.K_BILE` |
 | `t_lumen` | the transit time of the single intestinal lumen into the feces (local id) | `ids.T_LUMEN` |
 | `T_st_fed` | the transit time of the stomach in the fed state (local id) | `ids.T_STOMACH_FED` |
 | `T_st_eff` | the transit time of the stomach of the condition, `(T_st + FED*(T_st_fed - T_st))*fimp_t_stomach` (min), an output of the segmented intestine, an id of the top model | `ids.T_STOMACH` |
 | `Vbile` | the volume of the bile, the compartment of `Cbile_<s>` | `ids.VBILE` |
 | `Vfeces` | the compartment of the feces amounts `Afeces_<s>` | `ids.VFECES` |
+| `Vim` | the compartment of the depots of a depot route, `Vsc`, `Vrec` (amounts, nominal volume 1 l) | `ids.depot_compartment("im")` |
 | `Vlumen` | the volume of the single intestinal lumen, the compartment of `Clumen_<s>` (local id) | `ids.VLUMEN` |
 | `Vurine` | the compartment of the urine amounts `Aurine_<s>` | `ids.VURINE` |
 | `<O>` | the submodel of an organ | `ids.submodel(o)` |
@@ -296,6 +301,10 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `Kiv_<s>` | the rate of an intravenous injection | `ids.injection_rate(s)` |
 | `ti_<s>` | the half-life of an intravenous injection (s) | `ids.injection_time(s)` |
 | `Ka_sol_<s>` | the rate of the application of a solution | `ids.solution(s)` |
+| `ti_im_<s>` | the half-life of the application of a depot dose into its depot (s), `ti_sc_<s>`, `ti_rec_<s>` | `ids.depot_application_time("im", s)` |
+| `ka_rec_<s>` | the rate of the absorption from a depot (1/hr), `ka_im_<s>`, `ka_sc_<s>` | `ids.depot_absorption_rate("rectal", s)` |
+| `f_im_<s>` | the fraction of a depot which is absorbed, `f_sc_<s>`, `f_rec_<s>` | `ids.depot_fraction("im", s)` |
+| `f_rec_portal_<s>` | the fraction of the absorbed rectal dose which enters the portal vein | `ids.rectal_portal_fraction(s)` |
 | `fabs_<s>` | the fraction of the absorbed flux which enters the body | `ids.fraction_absorbed(s)` |
 | `f_ka_colon_<s>` | the factor of the absorption in the large intestine (segmented intestine) | `ids.colon_absorption_factor(s)` |
 | `f_ka_<seg>_<s>` | the factor of the absorption in a lumen segment, the regional absorption profile (segmented intestine) | `ids.regional_absorption_factor(s, seg)` |
@@ -319,6 +328,10 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `Qmu_<seg>` | the blood flow of the mucosa of a segment (local id) | `ids.mucosa_flow(seg)` |
 | `K_mu_<s>` | the mucosa to plasma coefficient (local id) | `ids.mucosa_coefficient(s)` |
 | `Cu_mu_<seg>_<s>` | the unbound concentration in the mucosa of a segment (local id) | `ids.mucosa_unbound(s, seg)` |
+| `kps_mu_<s>` | the exchange between the mucosal blood and the enterocytes per litre of mucosa (local id) | `ids.mucosa_kps(s)` |
+| `PS_mu_ref_<s>` | the exchange between the mucosal blood and the enterocytes of the mucosa of the small intestine (local id) | `ids.mucosa_ps_ref(s)` |
+| `PS_mu_<seg>_<s>` | the exchange between the mucosal blood and the enterocytes of a segment (local id) | `ids.mucosa_ps(s, seg)` |
+| `Qgut_<seg>_<s>` | the hybrid flow of the permeability-limited mucosa of a segment (local id) | `ids.mucosa_qgut(s, seg)` |
 | `Ctub_<tseg>_<s>` | the concentration in the lumen of a tubule segment of the nephron kidney (local id) | `ids.tubule(s, tseg)` |
 | `Vtub_<tseg>` | the volume of the lumen of a tubule segment (local id) | `ids.tubule_volume(tseg)` |
 | `f_tub_<tseg>` | the tubular flow leaving a segment as fraction of the GFR (local id) | `ids.tubule_flow_fraction(tseg)` |
@@ -327,6 +340,7 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `kinact_<protein>_<s>` | the maximal inactivation rate of a mechanism-based inhibition | `ids.kinact(protein, s)` |
 | `Emax_<protein>_<s>` | the maximal induction of a protein | `ids.emax(protein, s)` |
 | `EC50_<protein>_<s>` | the half-maximal inducing concentration | `ids.ec50(protein, s)` |
+| `Kstab_<protein>_<s>` | the stabilisation constant of a substance on a protein (halves the degradation) | `ids.kstab(protein, s)` |
 | `p_cyp3a4_<zone>` | the relative abundance of a profile in a zone (local id) | `ids.placement_profile('cyp3a4', zone)` |
 | `w_cyp3a4_<seg>` | the share of a process in a segment or a zone (local id) | `ids.placement_weight('cyp3a4', seg)` |
 | `API2M_<seg>` | a process of the chemistry in a segment or a zone (local id) | `ids.segment_process('API2M', seg)` |
@@ -337,6 +351,9 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `Carm_api_0` | the base of a delta, the value of an observer at the start (`PBPKDefinition.deltas`) | `ids.delta_base('Carm_api')` |
 | `Carm_api_delta` | the change of an observer over its start (`PBPKDefinition.deltas`) | `ids.delta('Carm_api')` |
 | `J_<kind>_<s>` | the application of a dose state (`iv`, `po`, `sol`) | `ids.dose_reaction(kind, s)` |
+| `J_im_<s>` | the application of a depot dose into its depot, `J_sc_<s>`, `J_rec_<s>` | `ids.depot_application("im", s)` |
+| `J_rec_abs_po_<s>` | the absorption from a depot into the venous plasma (`J_im_abs_<s>`), of the rectal depot also into the portal plasma | `ids.depot_absorption("rectal", s, portal=True)` |
+| `J_sc_loss_<s>` | the part of a depot which is not absorbed, into its sink | `ids.depot_loss_reaction("sc", s)` |
 | `J_ti_<s>` | the passive exchange into a part of an organ (local id) | `ids.exchange_reaction(Part.TISSUE, s)` |
 | `J_slow_<s>` | the exchange between the tissue and its slow pool (local id) | `ids.slow_reaction(s)` |
 | `J_in_ar_<part>_<s>` | the inflow from a pool into an organ (local id) | `ids.inflow_reaction(Pool.ARTERIAL, part, s)` |
