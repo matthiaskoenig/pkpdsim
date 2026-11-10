@@ -273,7 +273,7 @@ def test_the_builds_a_caller_cannot_avoid_do_not_warn(
     """The warning has to be one a correct caller can avoid.
 
     The numerical dispersion of the engine's own defaults is of the order of
-    the aqueous diffusion of a small solute (1.66e-9 m**2/s against 0.9e-9 of
+    the aqueous diffusion of a small solute (1.63e-9 m**2/s against 0.9e-9 of
     glucose at ten zones of a rat liver), so a comparison with the bare
     dispersion fired for every physiological build and five test modules muted
     it; it is `DISPERSION_FACTOR` now. A chain without an axial diffusion (one

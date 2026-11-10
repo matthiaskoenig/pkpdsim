@@ -17,7 +17,7 @@ Every zone has up to six layers, each a compartment `V<layer>_z<k>` which carrie
 | hepatocyte (the cell model) | yes | 78.0 % |
 | bile canaliculus | yes | 0.4 % |
 
-The fractions are those of the rat liver, Blouin, Bolender and Weibel 1977 (J Cell Biol 72:441), and are entered in the parameter table `tables/zonation.toml` (see [Parameter database](database.md)), the lumen 10.6 % split by the haematocrit. The Kupffer cells (2.1 %) and the stellate cells (1.4 %) are in the table and get no compartment, by decision: their volume stays unassigned, so the represented volume does not inflate. The human liver carries the rat fractions with the note `fallback: rat` until a sourced human stereology is entered; its density (1.0 kg/l) and haematocrit (0.43) are human values. The haematocrit of the rat is 0.45, a model choice.
+The fractions are those of the rat liver, Blouin, Bolender and Weibel 1977 (J Cell Biol 72:441), and are entered in the parameter table `tables/zonation.toml` (see [Parameter database](database.md)), the lumen 10.6 % split by the haematocrit. Blouin reports them as fractions of the parenchyma, which is what the engine computes with (`f_par * mass / density`, `f_par` 1.0 until a model enters a parenchymal fraction). The Kupffer cells (2.1 %) and the stellate cells (1.4 %) are in the table and get no compartment, by decision: their volume stays unassigned, so the represented volume does not inflate. The human liver carries the rat fractions with the note `fallback: rat` until a sourced human stereology is entered; its density (1.0 kg/l, the convention of `physiology_human.toml` for an organ to which ICRP 89 gives no specific gravity, a model choice) and its haematocrit (0.43, the male reference of ICRP 89) are human values. The rat values are the library's: the density 1.05 kg/l of `physiology_rat.toml` and the systemic haematocrit 0.46 of He 2017, an upper bound for the lumen, whose haematocrit is lower because of the plasma skimming the engine does not model. There is one haematocrit per species and no sex, so a female human build splits the lumen with the male 0.43 unless the caller passes its own.
 
 A volume is the fraction of the layer times the parenchyma of the liver mass over the density, shared evenly over the zones, so a change of the mass before the simulation sets all volumes. The geometry (`SinusoidGeometry`, per species from the table) gives only areas and lengths: the sinusoid radius `r_sin` 4.4 um and length `L_sin` 300 um, the endothelium of 0.165 um, the space of Disse of 1.0 um (model choices, taken over from the models of pkdb_models), and the number of sinusoids follows from the lumen volume. The axial exchange uses the prism identity, the conductance `D * A / dx` with `A / dx = n**2 * V_k / L_sin**2`, so no radius enters it.
 
@@ -227,16 +227,16 @@ The ids follow one convention: zones are `z<k>`, a profile factor is `p_<process
 
 ## Velocity
 
-The velocity of the blood in the sinusoid is the reference flow of the caller over the lumen of the table geometry: 110 um/s for the rat and 47 um/s for the human (default settings, the reference flow of the PBPK library). Both are outputs of the engine and not measurements. The intravital literature gives roughly 100 to 500 um/s for the rat and 100 to 300 um/s for the human, so the rat value is at the low end of its range and the human value, 47 um/s, lies below its range of 100 to 300 um/s, by more than a factor of two against its lower end. The engine states this gap and leaves it. The cause is the pairing of the reference flow with the geometry of the table (the sinusoid count follows from the lumen volume, the radius and the length are model choices); the geometry is not adjusted to hit a velocity, and the question is open (the comment of `ZonationBuilder.velocity`).
+The velocity of the blood in the sinusoid is the reference flow of the caller over the lumen of the table geometry: 108 um/s for the rat and 47 um/s for the human (default settings, the reference flow of the PBPK library). Both are outputs of the engine and not measurements. The intravital literature gives roughly 100 to 500 um/s for the rat and 100 to 300 um/s for the human, so the rat value is at the low end of its range and the human value, 47 um/s, lies below its range of 100 to 300 um/s, by more than a factor of two against its lower end. The engine states this gap and leaves it. The cause is the pairing of the reference flow with the geometry of the table (the sinusoid count follows from the lumen volume, the radius and the length are model choices); the geometry is not adjusted to hit a velocity, and the question is open (the comment of `ZonationBuilder.velocity`).
 
 ## Numerical dispersion
 
 The convection is a first order upwind scheme, so a chain of `n` stirred zones disperses like `n` tanks in series. Two Peclet numbers are to be told apart:
 
 - the Peclet number of the discretization alone, `v * L / (v * dx / 2) = 2 n`, with no physical diffusion: 20 at the default 10 zones. This is the value the notes of a built model record ("a Peclet number of 20 without physical diffusion") and what the design's rule of thumb of about `2 n` says;
-- the Peclet number with the physical diffusion of a solute, `v * L / (d_eff + v * dx / 2)`, which `effective_peclet(settings, d_eff)` returns: 12.96 at 10 zones for `d_eff` of glucose (0.9e-9 m2/s), lower than 20 because the diffusion adds to the dispersion.
+- the Peclet number with the physical diffusion of a solute, `v * L / (d_eff + v * dx / 2)`, which `effective_peclet(settings, d_eff)` returns: 12.87 at 10 zones for `d_eff` of glucose (0.9e-9 m2/s), lower than 20 because the diffusion adds to the dispersion.
 
-This is not small. At 10 zones, for the rat with the velocity above, the numerical dispersion `v * dx / 2` is 1.66e-9 m2/s, the same order as the aqueous diffusion of a small solute (0.9e-9 m2/s for glucose, the reference of the derivation above). The zone count therefore shares the setting of the axial gradient with the physics, and a finer chain is what separates them: at 40 zones the numerical dispersion is 4.1e-10 m2/s, a Peclet number of 25 with glucose, 80 without physical diffusion. The build warns when the dispersion dominates a diffusion by more than `DISPERSION_FACTOR` (ten times, `pkpdsim.zonation.builder`): the two being of the same order at the defaults, a warning at the bare dispersion fires for every physiological build and says nothing, while a coefficient ten times below it is decoration and the zone count alone sets the gradient.
+This is not small. At 10 zones, for the rat with the velocity above, the numerical dispersion `v * dx / 2` is 1.63e-9 m2/s, the same order as the aqueous diffusion of a small solute (0.9e-9 m2/s for glucose, the reference of the derivation above). The zone count therefore shares the setting of the axial gradient with the physics, and a finer chain is what separates them: at 40 zones the numerical dispersion is 4.06e-10 m2/s, a Peclet number of 25 with glucose, 80 without physical diffusion. The build warns when the dispersion dominates a diffusion by more than `DISPERSION_FACTOR` (ten times, `pkpdsim.zonation.builder`): the two being of the same order at the defaults, a warning at the bare dispersion fires for every physiological build and says nothing, while a coefficient ten times below it is decoration and the zone count alone sets the gradient.
 
 ```python
 from pkpdsim.pbpk.physiology import reference_flow
@@ -246,11 +246,11 @@ from pkpdsim.zonation.settings import ZonationSettings
 
 settings = ZonationSettings(n_zones=10, reference_flow=reference_flow(Species.RAT))
 assert effective_peclet(settings, 0.0) == 20.0
-assert round(effective_peclet(settings, 0.9e-9), 2) == 12.96
+assert round(effective_peclet(settings, 0.9e-9), 2) == 12.87
 
 fine = ZonationSettings(n_zones=40, reference_flow=reference_flow(Species.RAT))
 assert effective_peclet(fine, 0.0) == 80.0
-assert round(effective_peclet(fine, 0.9e-9), 1) == 25.2
+assert round(effective_peclet(fine, 0.9e-9), 1) == 24.9
 ```
 
 ## Water in the pressure mode

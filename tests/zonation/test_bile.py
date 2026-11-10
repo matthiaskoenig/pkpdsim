@@ -143,8 +143,8 @@ def test_the_transit_time_is_the_bile_volume_over_the_flow(
     """The mean transit from z10 to the duct is the bile volume over `Q_bile`, at any mass.
 
     10 tanks of a tenth of the bile volume each in series: per kg of liver
-    3.738 ml (0.4 % of the 0.9346 l at 1.07 kg/l) over 2.1607 ml/min (0.01562
-    ml/min of 7.229 g of rat liver, times 1000 g / 7.229 g) is 1.730 min. Both
+    3.810 ml (0.4 % of the 0.9524 l at 1.05 kg/l) over 2.1607 ml/min (0.01562
+    ml/min of 7.229 g of rat liver, times 1000 g / 7.229 g) is 1.763 min. Both
     the volume and the flow are proportional to the mass, so the time is the
     same for 1000 g, 2000 g and the 7.229 g of the reference liver. The mean
     time is the area above the curve of the duct amount.
@@ -153,10 +153,10 @@ def test_the_transit_time_is_the_bile_volume_over_the_flow(
     released = _released(r, 10)
     # the equality: the bile volume over the flow, read from the model
     volume = sum(r[ids.volume(Layer.BILE, ids.zone(k))] for k in range(1, 11))
-    assert volume / r["Q_bile"] == pytest.approx(1.730, rel=2e-3)
+    assert volume / r["Q_bile"] == pytest.approx(1.763, rel=2e-3)
     out = r.simulate(0, 40, 40001, selections=["time", DUCT])
     mean = np.trapezoid(1.0 - out[:, 1] / released, out[:, 0])
-    assert mean == pytest.approx(1.730, rel=2e-3)
+    assert mean == pytest.approx(1.763, rel=2e-3)
 
 
 def test_the_bile_flow_follows_the_liver_mass(tmp_path: Path) -> None:
@@ -226,7 +226,7 @@ def test_the_first_conductance_of_the_diffusive_chain(tmp_path: Path) -> None:
     r = _bile_chain(tmp_path, n=10, released_in_zone=1, mode=BileTransport.DIFFUSIVE)
     d = r["D_tr"]
     assert 1e-10 < d < 1e-9  # the order of a small solute in water
-    area = 0.004 * (1.0 / 1.07 * 1e-3) / 300e-6
+    area = 0.004 * (1.0 / 1.05 * 1e-3) / 300e-6
     k = 2.0 * d * area / 30e-6 * 1e3 * 60.0  # l/min
     # the amount which left in a short time, the neighbour has not given back yet
     t = 1e-4

@@ -294,17 +294,17 @@ def test_the_fenestral_permeability_by_hand(tmp_path: Path) -> None:
 def test_the_lateral_areas_by_hand(tmp_path: Path) -> None:
     """The areas of zone 1 of 4 in a rat liver of 1 kg without erythrocytes.
 
-    The liver is 1 / 1.07 = 0.934579 l, the plasma 10.6 % of it, a quarter of
-    that per zone: 0.0247664 l = 2.47664e-5 m3. With the radius 4.4 um of the
-    sinusoid the area of the lumen is 2 * 2.47664e-5 / 4.4e-6 = 11.2574 m2.
+    The liver is 1 / 1.05 = 0.952381 l, the plasma 10.6 % of it, a quarter of
+    that per zone: 0.0252381 l = 2.52381e-5 m3. With the radius 4.4 um of the
+    sinusoid the area of the lumen is 2 * 2.52381e-5 / 4.4e-6 = 11.4719 m2.
     The abluminal face of the endothelial cell lies at 4.4 + 0.165 = 4.565 um,
-    the interface of the hepatocyte at 4.565 + 1.0 = 5.565 um: 11.2574 *
-    4.565 / 4.4 = 11.6796 m2 and 11.2574 * 5.565 / 4.4 = 14.2381 m2.
+    the interface of the hepatocyte at 4.565 + 1.0 = 5.565 um: 11.4719 *
+    4.565 / 4.4 = 11.9021 m2 and 11.4719 * 5.565 / 4.4 = 14.5093 m2.
     """
     r = _barrier(tmp_path, haematocrit=0.0)
-    assert r["A_pd_z1"] == pytest.approx(11.2574, rel=1e-4)
-    assert r["A_pe_z1"] == pytest.approx(11.6796, rel=1e-4)
-    assert r["A_dh_z1"] == pytest.approx(14.2381, rel=1e-4)
+    assert r["A_pd_z1"] == pytest.approx(11.4719, rel=1e-4)
+    assert r["A_pe_z1"] == pytest.approx(11.9021, rel=1e-4)
+    assert r["A_dh_z1"] == pytest.approx(14.5093, rel=1e-4)
 
 
 def test_the_lateral_area_follows_the_mass(tmp_path: Path) -> None:

@@ -176,6 +176,13 @@ __all__ = ["ZonationBuilder", "effective_peclet"]
 AXIAL_DIFFUSION = "axial_diffusion"
 """The process of the axial diffusion, which a profile scales by zone."""
 
+FILTRATION_FLOOR = 1e-9
+"""The net filtration of a sinusoid below this share of the inflow of its lumen is none.
+
+The symmetric filtration of the default oncotic pressure cancels exactly in
+the physics and to 2e-16 of the inflow in floating point, a genuine net
+filtration is tens of percent of it (`ZonationBuilder._net_filtration`)."""
+
 POROSITY = "porosity"
 """The process of the fenestral porosity, which a profile scales by zone."""
 
@@ -197,7 +204,7 @@ has to lie for the build to warn.
 
 The upwind convection of `n` zones disperses like `v * dx / 2`, which adds to
 the physical diffusion: at the physiological defaults of the engine the two are
-of the same order (1.66e-9 m**2/s against 0.9e-9 m**2/s of glucose at ten
+of the same order (1.63e-9 m**2/s against 0.9e-9 m**2/s of glucose at ten
 zones of a rat liver), so a warning at the first m**2/s of dispersion above the
 coefficient fires for every build a correct caller can write and says nothing.
 A factor of ten is the point where the dispersion dominates: the Peclet number
@@ -648,7 +655,7 @@ class ZonationBuilder:
         """The velocity (m/s) of the blood in the sinusoid, 0 without a flow."""
         # TODO(geometry): both numbers are outputs of this geometry paired with
         # the PBPK reference flow (default settings), none is a measurement:
-        # 110 um/s for the rat (the lower end of the intravital literature,
+        # 108 um/s for the rat (the lower end of the intravital literature,
         # roughly 100 to 500 um/s) and 47 um/s for the human (below the roughly
         # 100 to 300 um/s of the literature). The velocity comes from pairing
         # the reference flow with the table geometry, not from the calibration
@@ -1323,6 +1330,25 @@ class ZonationBuilder:
         flows = self._plasma_flows()
         return tuple(flows[0] - q for q in flows)
 
+    def _net_filtration(self) -> float:
+        """The filtrate flow (l/min) which leaves at the pericentral end, 0 for none.
+
+        The last entry of `_filtrate_flows`, with a flow below
+        `FILTRATION_FLOOR` of the inflow of the lumen read as none: at the
+        default oncotic pressure the tube filters and reabsorbs the same
+        amount by the symmetry of the zone positions, so the balance is zero
+        and nothing leaves, and the cancellation of the two is exact in the
+        physics and not in floating point (2e-16 of the inflow at the table
+        geometry of the rat). A genuine net filtration is tens of percent of
+        the inflow, so the floor separates the two by seven orders of
+        magnitude and the decision does not hang on the last bit.
+        """
+        flows = self._filtrate_flows()
+        inflow = self._plasma_flows()[0]
+        if inflow <= 0.0 or abs(flows[-1]) <= FILTRATION_FLOOR * inflow:
+            return 0.0
+        return flows[-1]
+
     def _filtrate_objects(self) -> tuple[list[Parameter], list[AssignmentRule]]:
         """The filtrate flow of every zone and the reflection of every substance.
 
@@ -1983,7 +2009,6 @@ class ZonationBuilder:
         if not self._has_filtrate():
             return []
         n = self.settings.n_zones
-        flows = self._filtrate_flows()
         out: list[Reaction] = []
         for substance in self.substances:
             sid = substance.sid
@@ -1992,7 +2017,7 @@ class ZonationBuilder:
                     out.append(self._drag_reaction(substance, k))
             for k in range(2, n):
                 out.append(self._filtrate_reaction(sid, ids.zone(k), ids.zone(k + 1)))
-            if flows[-1] != 0.0:
+            if self._net_filtration() != 0.0:
                 out.append(
                     self._filtrate_reaction(sid, ids.zone(n), ids.OUTFLOW, lymph=True)
                 )
@@ -2058,7 +2083,7 @@ class ZonationBuilder:
         (the default oncotic pressure) or carries no filtrate at all. The
         observers add it to the outflow ledger.
         """
-        if not self._has_filtrate() or self._filtrate_flows()[-1] == 0.0:
+        if not self._has_filtrate() or self._net_filtration() == 0.0:
             return None
         zone = ids.zone(self.settings.n_zones)
         return (

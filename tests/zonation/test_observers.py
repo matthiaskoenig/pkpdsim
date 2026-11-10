@@ -18,10 +18,11 @@ from sbmlutils.factory import Parameter, Reaction, create_model
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
+from pkpdsim.species import Species
 from pkpdsim.zonation import ZonationBuilder, ids, observers
 from pkpdsim.zonation.builder import effective_peclet
 from pkpdsim.zonation.flow import ImposedFlow, PressureFlow
-from pkpdsim.zonation.geometry import Layer
+from pkpdsim.zonation.geometry import Layer, geometry
 from pkpdsim.zonation.observers import (
     add_observers,
     observer_objects,
@@ -421,8 +422,11 @@ def test_the_amounts_of_the_layers_sum_to_the_organ(
         and sid.removeprefix("amount_drg_") in {*(str(x) for x in Layer), ids.VASCULAR}
     }
     assert reported == set(layers)
+    # the erythrocyte layer exists where the lumen is split, so the default is
+    # the haematocrit of the table and not a number copied out of it
+    default_hct = geometry(Species.RAT).haematocrit.value
     assert ("rbc" in layers) == (
-        kwargs.get("haematocrit", 0.45) != 0.0 and "geometry" not in kwargs
+        kwargs.get("haematocrit", default_hct) != 0.0 and "geometry" not in kwargs
     )
     assert ("vas" in layers) == (kwargs.get("geometry") is Geometry.WELL_STIRRED)
     assert ("bile" in layers) == (kwargs.get("bile", 1) is not None)

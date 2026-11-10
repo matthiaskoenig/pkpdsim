@@ -92,6 +92,18 @@ def _text(notes: object) -> str:
     return " ".join(html.unescape(plain).split())
 
 
+def _dense(notes: object) -> str:
+    """The text of a note with its whitespace and its backticks removed.
+
+    A note of a table is markdown and reaches the SBML element as the XHTML
+    sbmlutils renders it, which turns a backticked identifier into a `code`
+    element: the text of the element has no backticks and a space where the
+    tags were, so a note of a table is looked for in the note of a parameter
+    with both removed on either side.
+    """
+    return re.sub(r"[\s`]+", "", _text(notes))
+
+
 def _row_note(species: Species, key: str) -> str:
     """The note of a row of the table, whitespace collapsed.
 
@@ -125,17 +137,18 @@ def test_every_value_of_the_table_reaches_the_model_with_its_source(
         _text(p.notes) for p in _parameters(model) if "Source:" in _text(p.notes)
     ]
     assert sourced, "no parameter of the zonated liver carries a source"
-    citations = [_text(cite(key)) for key in sources()]
+    citations = [_dense(cite(key)) for key in sources()]
     for notes in sourced:
-        assert any(c in notes for c in citations), notes
+        assert any(c in _dense(notes) for c in citations), notes
     keys = _keys(species)
     assert len(keys) > len(UNASSIGNED)
+    dense = [_dense(notes) for notes in sourced]
     for key in keys:
         if key in UNASSIGNED:
             continue
         note = _row_note(species, key)
         assert note, f"the row '{key}' of the table has no note"
-        assert any(note in text for text in sourced), key
+        assert any(_dense(note) in text for text in dense), key
 
 
 @pytest.mark.parametrize("species", list(SECTIONS))

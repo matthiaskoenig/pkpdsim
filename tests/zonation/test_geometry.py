@@ -77,18 +77,18 @@ def test_volumes_scale_with_mass_and_split_over_zones() -> None:
     assert v20[(Layer.CELL, 1)].value == pytest.approx(2 * v1[(Layer.CELL, 1)].value)
 
 
-def test_hepatocyte_volume_is_fraction_of_liver_volume() -> None:
+def test_hepatocyte_volume_is_a_fraction_of_the_parenchyma() -> None:
     geo, fr = geometry(Species.RAT), fractions(Species.RAT)
     v = layer_volumes(mass_g(10.0), 1, geo, fr)[(Layer.CELL, 1)]
-    # 10 g at 1.07 kg/l is 9.346 ml
-    assert v.value == pytest.approx(0.780 * 10.0 / 1070.0)
+    # 10 g at the 1.05 kg/l of the library is 9.524 ml of parenchyma (f_par 1)
+    assert v.value == pytest.approx(0.780 * 10.0 / 1050.0)
 
 
 def test_axial_area_is_volume_over_length() -> None:
     geo, fr = geometry(Species.RAT), fractions(Species.RAT)
     a = axial_area(Layer.PLASMA, mass_g(10.0), geo, fr)
     assert a.value > 0
-    v_plasma = 0.55 * 0.106 * 10.0 / 1070.0  # l, the plasma at haematocrit 0.45
+    v_plasma = 0.54 * 0.106 * 10.0 / 1050.0  # l, the plasma at haematocrit 0.46
     assert a.value == pytest.approx(v_plasma * 1e-3 / geo.L_sin.value)
 
 
@@ -98,11 +98,20 @@ def test_sinusoid_count_fills_the_lumen() -> None:
     assert n > 1e5
 
 
-def test_human_haematocrit_and_density_are_icrp89_not_fallbacks() -> None:
+def test_human_haematocrit_and_density_are_human_values_not_fallbacks() -> None:
+    """The two human rows which are not the rat's, each with the source it has.
+
+    The haematocrit is the male reference of ICRP 89; the density is the
+    convention of `physiology_human.toml` that an organ to which ICRP 89
+    gives no specific gravity has 1.0 kg/l, which its own note states, so it
+    is a `ModelChoice` as the same number is in `perfusion.toml` and not a
+    value cited to a publication which does not give it.
+    """
     geo = geometry(Species.HUMAN)
     assert geo.haematocrit.value == pytest.approx(0.43)
     assert geo.density.value == pytest.approx(1.0)
+    assert table_value("liver_human", "haematocrit").source == "ICRP89"
+    assert table_value("liver_human", "density").source == "ModelChoice"
     for key in ("haematocrit", "density"):
-        e = table_value("liver_human", key)
-        assert e.source == "ICRP89"
-        assert "fallback" not in (e.notes or "").replace("not a rat fallback", "")
+        notes = table_value("liver_human", key).notes or ""
+        assert "fallback: rat" not in notes

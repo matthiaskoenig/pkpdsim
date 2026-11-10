@@ -546,9 +546,9 @@ def test_the_calibrated_factor_follows_the_geometry() -> None:
     longer = dataclasses.replace(base, L_sin=2.0 * base.L_sin.value)
     wider = dataclasses.replace(base, r_sin=1.2 * base.r_sin.value)
     rat = reference_flow(Species.RAT)
-    assert calibrated_resistance_factor(Species.RAT, base, rat) == _eq(52.17, 1e-3)
-    assert calibrated_resistance_factor(Species.RAT, longer, rat) == _eq(18.80, 1e-3)
-    assert calibrated_resistance_factor(Species.RAT, wider, rat) == _eq(69.86, 1e-3)
+    assert calibrated_resistance_factor(Species.RAT, base, rat) == _eq(53.16, 1e-3)
+    assert calibrated_resistance_factor(Species.RAT, longer, rat) == _eq(19.16, 1e-3)
+    assert calibrated_resistance_factor(Species.RAT, wider, rat) == _eq(71.19, 1e-3)
 
 
 @pytest.mark.parametrize(("n_zones", "ratio"), [(10, 0.82885), (1, 0.74724)])
