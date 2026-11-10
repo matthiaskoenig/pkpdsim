@@ -144,6 +144,7 @@ __all__ = [
     "process_source",
     "product_reaction",
     "rate_law",
+    "reads_zone",
     "species_compartment",
     "species_start",
     "start_formula",
@@ -753,7 +754,10 @@ def place(
             `None` for the organ. A custom reaction placed in a zone reads
             the species, compartments and observers of that zone
             (`zone_ids`), so its rate law spans the parts of its zone; it is
-            placed once per zone and its rate is not scaled.
+            placed once per zone and its rate is not scaled, which is why a
+            rate law which reads no id of its zone is refused (`reads_zone`):
+            such a rate is stated for the whole organ and every zone would
+            run it in full.
         apical: the apical side of the cell of a variant (the lumen of the
             proximal tubule of the nephron kidney), `None` for the sink of
             the organ.
@@ -765,7 +769,9 @@ def place(
         ValueError: if the process is of another organ, transports a substance
             without interstitial and intracellular species, is apical in an
             organ without sink, is an apical influx from the urine of the
-            standard kidney, or acts in a part which is not built.
+            standard kidney, acts in a part which is not built, or is a
+            custom reaction of a zone whose rate law reads no id of that
+            zone.
     """
     if process.organ is not ctx.organ:
         raise ValueError(
@@ -1354,6 +1360,24 @@ def zone_ids(
     return mapping
 
 
+def reads_zone(expression: str, mapping: Mapping[str, str]) -> bool:
+    """Whether an expression reads an id which belongs to a zone (`zone_ids`).
+
+    An id of the zone is an id the mapping renames, so an expression which
+    the renaming leaves unchanged reads none of them: it is stated for the
+    whole organ. Every id of `zone_ids` gets the zone appended, so no key is
+    its own image and the comparison is exact.
+
+    Args:
+        expression: the equation or the rate law.
+        mapping: the ids of the zone by the id without zone (`zone_ids`).
+
+    Returns:
+        Whether the expression reads one of them.
+    """
+    return _in_zone(expression, mapping) != expression
+
+
 def _in_zone(expression: str, mapping: Mapping[str, str]) -> str:
     """An equation or a rate law with the ids of a zone (`zone_ids`).
 
@@ -1395,6 +1419,20 @@ def _custom(
         if zone is None
         else zone_ids(ctx, parts, zone, [str(sp.sid) for sp in process.species])
     )
+    if zone is not None and not reads_zone(process.formula, mapping):
+        raise ValueError(
+            f"Custom reaction '{process.sid}' cannot be placed in zone "
+            f"'{zone}' of organ '{process.organ.value}': its rate law "
+            f"'{process.formula}' reads no species, compartment or observer "
+            "of the zone, so the rate is stated for the whole organ and "
+            "every zone would run it in full, the organ at the zone count "
+            "times its rate. Either write the rate over the ids of the zone, which the "
+            "placement substitutes (the species `Cti_<zone>_<s>` and the "
+            "volume `Vti_<zone>` of the zone, so the zones sum to the rate "
+            "of the organ, or a constant rate scaled by `Vti_<zone>/Vli`), "
+            "or build the organ as the standard variant, where the rate of "
+            "the whole organ is what a custom reaction states."
+        )
     return annotate(
         Reaction(
             sid=ids.segment_process(process.sid, zone),

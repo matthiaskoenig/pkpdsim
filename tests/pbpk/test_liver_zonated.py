@@ -1197,6 +1197,64 @@ def test_a_custom_reaction_is_placed_per_zone() -> None:
     assert "no elements of the organ" in str(error.value)
 
 
+def _inextensive_reaction(formula: str) -> CustomReaction:
+    """A custom reaction whose rate law reads no id of its zone.
+
+    Args:
+        formula: the rate law, over the constants of the definition and the
+            ids of the whole organ only.
+
+    Returns:
+        The reaction `<formula>` from the tissue into the plasma.
+    """
+    return CustomReaction(
+        sid="CUSTOM",
+        organ=Organ.LIVER,
+        part=Part.TISSUE,
+        equation=(
+            f"{ids.species(Part.TISSUE, S)} -> {ids.species(Part.PLASMA, 'drg_m')}"
+        ),
+        formula=formula,
+        parameters=[SbmlParameter("k_custom", 0.1, U.mmole_per_min)],
+    )
+
+
+@pytest.mark.parametrize(
+    "formula",
+    ["k_custom", "k_custom * 2 dimensionless", "k_custom * Vli"],
+    ids=["constant", "scaled_constant", "organ_volume"],
+)
+def test_a_custom_reaction_which_is_not_extensive_in_its_zone_is_refused(
+    formula: str,
+) -> None:
+    """A rate stated for the whole organ cannot be placed once per zone.
+
+    A custom reaction is placed in every zone with the rate law the modeller
+    wrote and without the `1/n` share which every metabolism, transport and
+    passive exchange of a zone receives, because the modeller may state the
+    rate over the ids of the zone. A rate law which reads no id of its zone
+    (a constant production, a rate over the volume of the whole organ, a
+    clearance of the unzoned plasma) is therefore run `n_zones` times: the
+    build would succeed, validate and simulate with that mechanism at `n`
+    times its intended rate, which is a defect nothing downstream shows.
+
+    The placement refuses it instead, naming the reaction, its rate law and
+    the two ways out. The criterion is what the ids of the zone are
+    (`placement.zone_ids`): a rate law the zoning leaves unchanged is one
+    which spans no part of its zone.
+    """
+    ctx = organ_context(
+        definition(chemistry=[_drg2m(), _inextensive_reaction(formula)]), Organ.LIVER
+    )
+    with pytest.raises(ValueError, match=r"CUSTOM.*zone 'z1'") as error:
+        ZonatedLiver(n_zones=4).build(ctx)
+    message = str(error.value)
+    assert "reads no species, compartment or observer of the zone" in message
+    assert formula in message
+    assert "Vti_<zone>" in message, "the message names the rate over the zone"
+    assert "standard variant" in message, "the message names the other way out"
+
+
 def test_a_custom_reaction_runs_in_every_zone(tmp_path: Path) -> None:
     """The zones together run a volume-extensive custom reaction as the standard liver.
 

@@ -1243,7 +1243,14 @@ class StandardBuilder(OrganBuilder):
         if zone is not None:
             raise ValueError(
                 f"{s.sid}: a declared process of the zonated organ "
-                f"'{self.organ.value}', which refuses custom reactions."
+                f"'{self.organ.value}', which has no steady state per zone. "
+                "The stationary start collects one unzoned contribution per "
+                "declared process (`pkpdsim.pbpk.stationary`) and there is no "
+                "closed form for the plasma of a zone, so what is missing is "
+                "the per zone steady state and not the process: the zonated "
+                "organ places a custom reaction in every zone. Drop the "
+                "declaration of the stationary start for this substance, or "
+                "give the organ the standard variant."
             )
         parts = self.ctx.parts[s.sid]
         carrier = (
