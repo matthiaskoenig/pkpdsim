@@ -1,8 +1,9 @@
 """The ids of the perfusion library which the zonation engine names.
 
 The vascular space, the chain and the cells of a zone of a liver are the
-engine's (`pkpdsim.zonation.ids`) and the cellular core is a submodel of the
-zone, so the ids of the perfusion library return the names of the flat model.
+engine's (`pkpdsim.zonation.ids`); the ids of the perfusion library are the names
+of the flat model, for the cells of a zone as well (the liver exposes the states
+of its cell submodels under them).
 """
 
 import pytest
@@ -27,14 +28,14 @@ def test_the_perfusion_ids_of_a_zone_are_those_of_the_engine() -> None:
 @pytest.mark.parametrize(
     ("made", "expected"),
     [
-        (perf_ids.species("glc", "z3_cell", submodel=True), "M03__glc_cell"),
-        (perf_ids.species("alt", "z12_dead", submodel=True), "M12__alt_dead"),
-        (perf_ids.reaction("GLC2PYR", "z3", submodel=True), "M03__GLC2PYR"),
-        (perf_ids.buffer("z3", submodel=True), "M03__BUF_ext"),
-        (perf_ids.ph("z3", submodel=True), "M03__pH_ext"),
-        (perf_ids.alive("z3", submodel=True), "M03__f_alive"),
-        (perf_ids.necrosis_rate("z3", submodel=True), "M03__v_nec"),
-        (perf_ids.bile("z3", submodel=True), "M03__Vbile"),
+        (perf_ids.species("glc", "z3_cell"), "glc_z3_cell"),
+        (perf_ids.species("alt", "z12_dead"), "alt_z12_dead"),
+        (perf_ids.reaction("GLC2PYR", "z3"), "GLC2PYR_z3"),
+        (perf_ids.buffer("z3"), "BUF_z3"),
+        (perf_ids.ph("z3"), "pH_z3"),
+        (perf_ids.alive("z3"), "f_alive_z3"),
+        (perf_ids.necrosis_rate("z3"), "v_nec_z3"),
+        (perf_ids.bile("z3"), "Vbile_z3"),
         (perf_ids.profile("OXPHOS", "z3"), "p_OXPHOS_z3"),
         # the sites which are no zone are not changed
         (perf_ids.species("glc", "res"), "glc_res"),
@@ -48,26 +49,7 @@ def test_the_perfusion_ids_of_a_zone_are_those_of_the_engine() -> None:
 def test_the_perfusion_ids_of_the_cells_are_those_of_the_flat_model(
     made: str, expected: str
 ) -> None:
-    """The cell model of a zone is its submodel, so its elements are `M<kk>__<id>`."""
-    assert made == expected
-
-
-@pytest.mark.parametrize(
-    ("made", "expected"),
-    [
-        (perf_ids.species("glc", "z3_cell"), "glc_z3_cell"),
-        (perf_ids.species("alt", "z12_dead"), "alt_z12_dead"),
-        (perf_ids.reaction("GLC2PYR", "z3"), "GLC2PYR_z3"),
-        (perf_ids.buffer("z3"), "BUF_z3"),
-        (perf_ids.ph("z3"), "pH_z3"),
-        (perf_ids.alive("z3"), "f_alive_z3"),
-        (perf_ids.necrosis_rate("z3"), "v_nec_z3"),
-        (perf_ids.bile("z3"), "Vbile_z3"),
-    ],
-)
-def test_the_ids_of_cells_which_the_builder_emits_carry_no_submodel_prefix(
-    made: str, expected: str
-) -> None:
-    """The kidney and a generic organ have no submodel: their cells are named by the
-    zone, as the id of a flat model which was never composed."""
+    """The ids of a zone are the ids of the flat model of every organ: the cells of
+    the liver are a submodel, whose states the liver exposes under these names, the
+    cells of the kidney and a generic organ are emitted by the builder."""
     assert made == expected

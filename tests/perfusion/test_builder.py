@@ -86,6 +86,66 @@ def test_a_liver_is_written_with_its_cell_model_and_the_flat_model(
     ]
 
 
+def _problems(path: Path) -> list[tuple[str, int]]:
+    """The libsbml errors and warnings of a file."""
+    document = libsbml.readSBMLFromFile(str(path))
+    document.checkConsistency()
+    return [
+        (e.getSeverityAsString(), e.getErrorId())
+        for e in map(document.getError, range(document.getNumErrors()))
+    ]
+
+
+def test_the_composed_model_of_a_liver_with_cells_is_valid(tmp_path: Path) -> None:
+    """The composed model, which carries the structure and which a reader flattens
+    for himself, has no libsbml error and no warning: the observers of the cells
+    name elements of the composed model, never the ids a flattening produces."""
+    build(liver_definition(3), tmp_path)
+    assert _problems(tmp_path / "perfusion_liver.xml") == []
+
+
+def test_the_flat_ids_of_the_cells_are_the_ids_of_the_perfusion(
+    tmp_path: Path,
+) -> None:
+    """The ids of `pkpdsim.perfusion.ids` name elements of the flat model, whether
+    the cells of a zone are a submodel or not."""
+    definition = liver_definition(3)
+    flat = _ids(_model(build(definition, tmp_path)))
+    cell = _model(tmp_path / "perfusion_liver_core.xml")
+    reactions = [r.getId() for r in cell.getListOfReactions()]
+    for k in (1, 2, 3):
+        z = ids.zone_id(k)
+        expected = {
+            *(
+                ids.species(q, ids.cell_site(z))
+                for q in ids.cell_quantities(definition.released)
+            ),
+            *(ids.species(q, ids.dead_site(z)) for q in definition.released),
+            *(ids.reaction(r, z) for r in reactions if r != "BUF_ext"),
+            ids.buffer(z),
+            ids.alive(z),
+            ids.necrosis_rate(z),
+            ids.bile(z),
+            ids.ph(z),
+        }
+        assert expected <= flat, sorted(expected - flat)
+        # the proxies are merged with the elements of the submodel, not added
+        assert f"M{k:02}__f_alive" not in flat
+        assert f"M{k:02}__O2IM" not in flat
+
+
+def test_an_element_the_liver_does_not_expose_is_addressed_through_its_submodel(
+    tmp_path: Path,
+) -> None:
+    """The spec's addressing, `M<kk>__<id>`, stays for the cell elements the liver
+    does not observe: the temperature factor of the cell is one per zone, the
+    liver has its own."""
+    flat = _ids(_model(build(liver_definition(3), tmp_path)))
+    assert {"M01__f_T", "M02__f_T", "M03__f_T"} <= flat
+    assert "f_T" in flat
+    assert not {"f_T_z1", "f_T_z2", "f_T_z3"} & flat
+
+
 def test_two_definitions_in_one_folder_have_a_cell_model_each(tmp_path: Path) -> None:
     build(liver_definition(2, sid="one"), tmp_path)
     build(liver_definition(2, sid="two", profiles={"OXPHOS": [2, 1]}), tmp_path)
@@ -132,7 +192,7 @@ def test_zones_add_up_to_the_organ(tmp_path: Path, n: int) -> None:
     for q in ("alt", "ast", "ldh", "k"):
 
         def amount(z: str, q: str = q) -> str:
-            return f"{ids.species(q, ids.cell_site(z), submodel=True)}"
+            return f"{ids.species(q, ids.cell_site(z))}"
 
         assert total(many, amount, zones) == pytest.approx(
             one[amount("z1")], rel=1e-12
@@ -142,7 +202,7 @@ def test_zones_add_up_to_the_organ(tmp_path: Path, n: int) -> None:
             continue
 
         def rate(z: str, p: str = process) -> str:
-            return ids.reaction(p, z, submodel=True)
+            return ids.reaction(p, z)
 
         assert total(many, rate, zones) == pytest.approx(one[rate("z1")], rel=1e-12), (
             process
@@ -161,13 +221,8 @@ def test_a_profile_keeps_the_capacity_of_the_organ(tmp_path: Path) -> None:
             tmp_path,
         )
     )
-    rates = [
-        graded[ids.reaction("OXPHOS", ids.zone_id(k), submodel=True)]
-        for k in range(1, 5)
-    ]
-    assert sum(rates) == pytest.approx(
-        one[ids.reaction("OXPHOS", "z1", submodel=True)], rel=1e-12
-    )
+    rates = [graded[ids.reaction("OXPHOS", ids.zone_id(k))] for k in range(1, 5)]
+    assert sum(rates) == pytest.approx(one[ids.reaction("OXPHOS", "z1")], rel=1e-12)
     assert rates[0] == pytest.approx(4 * rates[3], rel=1e-12)
     assert graded[ids.profile("OXPHOS", "z1")] == pytest.approx(1.6, rel=1e-12)
 
@@ -227,16 +282,14 @@ def test_every_quantity_at_every_site(tmp_path: Path) -> None:
     }
     for site in sites:
         expected |= {ids.species(q, site) for q in (*ids.PERFUSATE, TRACER)}
-        expected |= {ids.po2(site), ids.pco2(site), ids.ph(site, submodel=True)}
+        expected |= {ids.po2(site), ids.pco2(site), ids.ph(site)}
         expected |= {ids.activity(e, site) for e in ids.ENZYMES}
     for site in [ids.zone_id(k) for k in range(1, n + 1)] + [
         ids.PERIPORTAL,
         ids.PERICENTRAL,
     ]:
-        expected |= {
-            ids.species(q, ids.cell_site(site), submodel=True) for q in ids.CELL
-        }
-        expected.add(ids.alive(site, submodel=True))
+        expected |= {ids.species(q, ids.cell_site(site)) for q in ids.CELL}
+        expected.add(ids.alive(site))
     for site in _sites(n):
         expected.add(ids.volume(site))
     for k in range(1, n + 1):
@@ -274,7 +327,7 @@ def test_the_observers_read_the_sites(tmp_path: Path) -> None:
     # the oxygen falls along the sinusoid
     assert r[ids.po2(ids.PERIPORTAL)] > r[ids.po2(ids.PERICENTRAL)]
     assert r[ids.BILE] == pytest.approx(
-        sum(r[ids.bile(ids.zone_id(k), submodel=True)] for k in range(1, n + 1)) * 1e6,
+        sum(r[ids.bile(ids.zone_id(k))] for k in range(1, n + 1)) * 1e6,
         rel=1e-8,
     )
     # µl per g: the bile (µl) over the mass of the organ (kg) in g

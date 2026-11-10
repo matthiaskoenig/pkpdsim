@@ -57,4 +57,4 @@ def test_a_cold_perfusion_runs_six_hours(path: Path) -> None:
     r = individual(path, **{ids.TEMPERATURE: 4.0})
     s = r.simulate(0, 360, 361)
     assert np.isfinite(np.asarray(s)).all()
-    assert r[ids.alive("z1", submodel=True)] > 0
+    assert r[ids.alive("z1")] > 0

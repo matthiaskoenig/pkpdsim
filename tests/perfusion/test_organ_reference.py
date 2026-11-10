@@ -128,6 +128,7 @@ def test_the_composed_liver_has_the_ids_of_the_engine_and_the_circuit() -> None:
     ids_ = model_ids(compose(DEFINITIONS["organ"]()))
     assert "V_vas_z3" in ids_
     assert "glc_vas_z3" in ids_
+    assert "atp_z3_cell" in ids_, "the liver exposes the states of its cells"
     assert "M03__atp_cell" not in ids_, "the cells are in the submodel"
     assert "Vvas_z3" not in ids_
 

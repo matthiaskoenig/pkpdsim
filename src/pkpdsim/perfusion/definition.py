@@ -325,11 +325,6 @@ class _Zonated(ABC):
     what: ClassVar[str] = "organ"
     """The organ in the problems of a definition."""
 
-    SUBMODEL_CELLS: ClassVar[bool] = False
-    """The cells of the zones are a submodel of the model (the zones are the
-    engine's), so their ids are those of the flat model, `M<kk>__<id>`; `False`
-    for the organs whose cells the builder emits itself."""
-
     TABLE_FIELDS: ClassVar[tuple[str, ...]] = (
         "vascular_fraction",
         "cell_fraction",
@@ -498,8 +493,6 @@ class LiverOrgan(_Zonated):
     """The organ token of the ids (`M_li`)."""
 
     what: ClassVar[str] = "liver"
-
-    SUBMODEL_CELLS: ClassVar[bool] = True
 
     mass: Value
     zones: int = 1

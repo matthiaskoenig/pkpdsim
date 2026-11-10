@@ -29,6 +29,23 @@ The wiring is anatomical:
   every submodel: the liver is isothermal (a gradient would be a profile).
 * Ids the caller replaces by its own model are deleted from every submodel
   (`deletions`).
+* A **state of the cell which the liver observes** (`expose`) is reached through
+  comp as well. The flat id of an element of a submodel, `M01__glc_cell`, exists
+  in no model until the flattening has happened, so the math of the liver cannot
+  name it. The engine adds to the liver one element per zone and exposed id, a
+  proxy which the caller names (`expose` maps the id in the cell model to a
+  function of the zone), of the same class as the element of the cell model (a
+  species in the compartment of the cell model's species, replaced onto the
+  same port compartment of the zone; a parameter; a reaction) with its unit,
+  and wires it with `comp:ReplacedBy` onto the element of the submodel. The
+  proxy is a name, not a state: it copies the class, units, compartment, flags and
+  initial value of the element of the cell model when the model is built (so it cannot
+  drift from it), has no rule or kinetic law, and the flattening merges it with the
+  element of the submodel: **the id which survives in the flat model is the proxy's**
+  (libsbml keeps the id of the parent element of a `ReplacedBy`), so the flat id of an
+  exposed element is the name the caller gives, and every element which is not
+  exposed stays `M<kk>__<id>`. The engine does not know how the caller names a
+  state.
 
 The source of the external model definition is `<cell_model_id>.xml`, relative
 to the folder of the model that is written, so that the written pair (the comp
@@ -37,7 +54,7 @@ model and the cell model) is portable. `write` requires that file and raises a
 stay separate: `build` is the engine model without a cell model.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -49,7 +66,10 @@ from sbmlutils.factory import (
     ExternalModelDefinition,
     Model,
     Parameter,
+    Reaction,
+    ReplacedBy,
     ReplacedElement,
+    Species,
     Submodel,
     create_model,
 )
@@ -100,6 +120,78 @@ def _port(sid: str) -> str:
     return f"{sid}{PORT_SUFFIX}"
 
 
+def _proxy(
+    cell_model: Model,
+    cell_id: str,
+    proxy_id: str,
+    sm: str,
+    compartments: Mapping[str, str],
+) -> Species | Parameter | Reaction:
+    """Get the proxy in the liver of an element of the cell model.
+
+    Args:
+        cell_model: the cell model, which gives the class, the unit and the
+            compartment of the element.
+        cell_id: the id of the element in the cell model.
+        proxy_id: the id of the proxy in the liver.
+        sm: the submodel of the zone.
+        compartments: the compartment of the liver of every compartment of the
+            cell model which a zone replaces (the ports).
+
+    Returns:
+        The proxy, replaced by the element of the submodel.
+
+    Raises:
+        ValueError: if the cell model has no such element, or a species in a
+            compartment which no port of the zone replaces.
+    """
+    by = ReplacedBy(submodelRef=sm, idRef=cell_id)
+    for x in cell_model.species or []:
+        if x.sid == cell_id:
+            if x.compartment not in compartments:
+                raise ValueError(
+                    f"The exposed species '{cell_id}' is in the compartment "
+                    f"'{x.compartment}' of the cell model, which no port of the "
+                    f"zone replaces ({sorted(compartments)})."
+                )
+            return Species(
+                proxy_id,
+                compartments[x.compartment],
+                initialAmount=x.initialAmount,
+                initialConcentration=x.initialConcentration,
+                substanceUnit=x.substanceUnits,
+                hasOnlySubstanceUnits=x.hasOnlySubstanceUnits,
+                constant=x.constant,
+                boundaryCondition=x.boundaryCondition,
+                name=x.name,
+                sboTerm=x.sboTerm,
+                replacedBy=by,
+            )
+    for p in cell_model.parameters or []:
+        if p.sid == cell_id:
+            return Parameter(
+                proxy_id,
+                p.value,
+                unit=p.unit,
+                constant=p.constant,
+                name=p.name,
+                sboTerm=p.sboTerm,
+                replacedBy=by,
+            )
+    for r in cell_model.reactions or []:
+        if r.sid == cell_id:
+            return Reaction(
+                proxy_id,
+                equation="",
+                reversible=r.reversible,
+                fast=r.fast,
+                name=r.name,
+                sboTerm=r.sboTerm,
+                replacedBy=by,
+            )
+    raise ValueError(f"The cell model '{cell_model.sid}' has no element '{cell_id}'.")
+
+
 def compose(
     builder: ZonationBuilder,
     cell_model_id: str,
@@ -108,6 +200,8 @@ def compose(
     exchange: Sequence[str] | None = None,
     temperature: Parameter | None = None,
     shared: Sequence[str] = (),
+    expose: Mapping[str, Callable[[str], str]] | None = None,
+    cell_model: Model | None = None,
 ) -> Model:
     """Compose the model of a builder with a cell model per zone.
 
@@ -134,11 +228,28 @@ def compose(
             liver replaces in every zone by its own parameter of the same id,
             which the caller adds to the model: a constant of the cell, one
             for all zones.
+        expose: the elements of the cell model (species, parameters, reactions)
+            which the math of the liver references: the id in the cell model
+            to a function of the zone token (`z1`) which gives the id of the
+            proxy in the liver. The engine adds one proxy per zone and id,
+            replaced by the element of the submodel, so that the liver names
+            the state of a cell by an id of its own model and not by the id
+            the flattening gives it (`M01__<id>`, which is the id of the flat
+            model, unchanged).
+        cell_model: the cell model, which `expose` needs for the class, the unit
+            and the compartment of the elements.
 
     Returns:
         The model of `builder.build()` with the external model definition,
-        one submodel per zone, the replaced elements and the deletions.
+        one submodel per zone, the replaced elements, the deletions and the
+        proxies of the exposed elements.
+
+    Raises:
+        ValueError: if `expose` is given without the cell model, or names an
+            element the cell model does not have.
     """
+    if expose and cell_model is None:
+        raise ValueError("`expose` needs the cell model (`cell_model`).")
     model = builder.build()
     s = builder.settings
     n = s.n_zones
@@ -213,6 +324,22 @@ def compose(
             (ids.profile(process, zone), ports.profile.format(process=process))
             for process in scaled
         )
+        if expose:
+            assert cell_model is not None
+            home = {
+                ports.external: ids.volume(disse, zone),
+                ports.cell: ids.volume(Layer.CELL, zone),
+            }
+            if s.bile is not None:
+                home[ports.bile] = ids.volume(Layer.BILE, zone)
+            for cell_id, name in expose.items():
+                proxy = _proxy(cell_model, cell_id, name(zone), sm, home)
+                if isinstance(proxy, Species):
+                    model.species.append(proxy)
+                elif isinstance(proxy, Parameter):
+                    model.parameters.append(proxy)
+                else:
+                    model.reactions.append(proxy)
         for element, port in wiring:
             if element in species:
                 # an annotated species of the cell model has a metaid, which

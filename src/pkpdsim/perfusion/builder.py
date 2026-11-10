@@ -16,9 +16,11 @@ the organ, the flow between the zones (`Q_li`, the pump flow of the circuit,
 which is the boundary of the chain), the zonal factors of the profiles and the
 cellular core (`pkpdsim.perfusion.cell_model`) as a submodel `M<kk>` of every
 zone, composed through SBML comp and flattened (`build` writes both and the
-cell model; the flat model is simulated). The elements of the cells are
-`M<kk>__<id>` in it (`pkpdsim.perfusion.ids`), the constants of the core are
-shared by the zones. The zones of the kidney and of a generic organ are emitted
+cell model; the flat model is simulated). The states of the cells which the
+liver observes are exposed under the ids of `pkpdsim.perfusion.ids`
+(`atp_z1_cell`, `f_alive_z1`, `O2IM_z1`, see `compose(expose=)` of the engine),
+the other elements of the cells are `M<kk>__<id>` in the flat model, the
+constants of the core are shared by the zones. The zones of the kidney and of a generic organ are emitted
 here, by the same core with the same ids, as are the circuit, the pump flow
 and the kidney. An organ with the token `<o>` (`li` the liver, `ki` the
 kidney, the key of a generic organ) has the mass `M_<o>` (kg), the density
@@ -54,6 +56,7 @@ generic organ has neither bile nor urine.
 """
 
 import dataclasses
+import math
 import re
 import textwrap
 from collections.abc import Mapping
@@ -294,25 +297,57 @@ def zone_cell_model(definition: PerfusionDefinition) -> Model | None:
     return cell
 
 
-def _flat_formula(
-    formula: str, k: int, cell: Model, replaced: Mapping[str, str]
-) -> str:
-    """Get a formula of the cell model as it reads in the flat model of zone `k`.
+def _cell_names(cell: Model, zone: str) -> dict[str, str]:
+    """Get the names in the liver of the states of the cell model of a zone.
 
-    The elements of the cell model are those of its submodel (`M<kk>__<id>`)
-    but the ports which the zone replaces, which are the elements of the zone.
+    The liver reaches a state of its cells through a proxy of its own model
+    (`zonation.composition.compose(expose=)`) whose id survives the flattening,
+    so it is the id of the flat model: the names of `pkpdsim.perfusion.ids`
+    (`<quantity>_<zone>_cell`, `<quantity>_<zone>_dead`, `f_alive_<zone>`,
+    `v_nec_<zone>`, `Vbile_<zone>`, `pH_<zone>`, `<reaction>_<zone>`).
+
+    The states of the cell are its species of the cells and the necrotic cells,
+    its reactions and its living fraction, necrosis, bile and pH. What the
+    liver has of its own (the temperature factor `f_T`, the concentrations in
+    the vascular space, the constants) is not exposed: the flat model has it
+    once, and the copies in the submodels stay `M<kk>__<id>`.
+
+    Returns:
+        The id of the element in the cell model to its name in the liver.
     """
-    local = {
-        str(x.sid)
-        for group in (cell.compartments, cell.species, cell.parameters, cell.reactions)
-        for x in group or []
-    }
+    names: dict[str, str] = {}
+    for x in cell.species or []:
+        sid = str(x.sid)
+        for site in (ids.cell_site(zone), ids.dead_site(zone)):
+            suffix = site[len(zone) + 1 :]
+            if sid.endswith(f"_{suffix}"):
+                names[sid] = ids.species(sid[: -len(suffix) - 1], site)
+    names.update({str(r.sid): ids.reaction(str(r.sid), zone) for r in cell.reactions})
+    names["BUF_ext"] = ids.buffer(zone)
+    names.update(
+        {
+            "f_alive": ids.alive(zone),
+            "v_nec": ids.necrosis_rate(zone),
+            "Vbile": ids.bile(zone),
+            "pH_ext": ids.ph(zone),
+        }
+    )
+    return names
+
+
+def _zone_formula(
+    formula: str, names: Mapping[str, str], replaced: Mapping[str, str]
+) -> str:
+    """Get a formula of the cell model as it reads in the liver of a zone.
+
+    Every element of the cell model is read under its name in the liver
+    (`names`, the proxies of its states; `replaced`, the ports the zone
+    replaces and what the liver has of its own, as the elements of the zone).
+    """
 
     def rename(token: re.Match[str]) -> str:
         t = token.group(0)
-        if t in replaced:
-            return replaced[t]
-        return zonation_ids.flat(k, t) if t in local else t
+        return replaced.get(t) or names.get(t) or t
 
     return re.sub(r"[A-Za-z_][A-Za-z0-9_]*", rename, formula)
 
@@ -378,6 +413,22 @@ def _liver(definition: PerfusionDefinition, organ: LiverOrgan) -> _Organ:
         ),
         *ARRHENIUS,
     ]
+    (rule,) = [r for r in cell.rate_rules if r.variable == "Vbile"]
+
+    def replaced_by(zone: str) -> dict[str, str]:
+        """The ports of the cell model which the zone replaces, by its elements."""
+        return {
+            **{sid: sid for sid in shared},
+            "Vli": ids.cells(zone),
+            ids.F_T: ids.F_T,
+            **{
+                f"p_{process}": ids.profile(process, zone) for process in organ.profiles
+            },
+        }
+
+    def names(zone: str) -> dict[str, str]:
+        return _cell_names(cell, zone)
+
     model = composition.compose(
         builder,
         cell.sid,
@@ -385,31 +436,45 @@ def _liver(definition: PerfusionDefinition, organ: LiverOrgan) -> _Organ:
         exchange=ids.perfusate_quantities(released),
         temperature=temperature,
         shared=shared,
+        expose={
+            sid: (lambda zone, sid=sid: names(zone)[sid]) for sid in sorted(names("z1"))
+        },
+        cell_model=cell,
     )
     # the species of the vascular space are those of the perfusion
     start = circuit.composition(definition.perfusate)
+    h = start.concentrations(released)["h"]
+    assert h is not None
+    for p in model.parameters:
+        if p.value is None and str(p.sid).startswith("pH_z"):
+            # the pH of the cells is a rule of the cell model, the proxy has the
+            # value of its start (`pH = 3 - log10(h/1 mM)`, h in mM)
+            p.value = 3 - math.log10(h)
     species: dict[str, Species] = {}
     out = core.CoreObjects()
     bile: list[str] = []
-    (rule,) = [r for r in cell.rate_rules if r.variable == "Vbile"]
     for k in range(1, n + 1):
         zone = ids.zone_id(k)
         vascular = ids.vascular(zone)
-        zone_species = core.perfusate_objects(zone, vascular, start, released).species
+        perfusate = core.perfusate_objects(zone, vascular, start, released)
+        zone_species = perfusate.species
         zone_species += [
             circuit.tracer_species(t, zone, vascular)
             for t in definition.perfusate.tracers
         ]
+        for x in zone_species:
+            if x.initialConcentration is None and str(x.sid).startswith("co2_"):
+                # the CO2 of the vascular space is at the equilibrium of the buffer,
+                # an initial assignment of the flat model (the cell's); a replaced
+                # species still carries its value, the assignment is not repeated
+                c = start.concentrations(released)
+                assert c["h"] is not None and c["hco3"] is not None
+                x.initialConcentration = (
+                    c["h"] * c["hco3"] / core.Buffer.default().ka.value
+                )
         species.update({str(x.sid): x for x in zone_species})
         out += circuit.fresh_assignments(zone, definition.perfusate, released)
-        replaced = {
-            **{sid: sid for sid in shared},
-            "Vli": ids.cells(zone),
-            **{
-                f"p_{process}": ids.profile(process, zone) for process in organ.profiles
-            },
-        }
-        bile.append(_flat_formula(str(rule.value), k, cell, replaced))
+        bile.append(_zone_formula(str(rule.value), names(zone), replaced_by(zone)))
     out += core.CoreObjects(
         species=[species.get(str(x.sid), x) for x in model.species],
         reactions=list(model.reactions),
@@ -750,11 +815,10 @@ def compose(definition: PerfusionDefinition) -> Model:
         circuit.quantities(perfusate, released),
         ids.cell_quantities(released),
         enzymes,
-        submodel=organ.SUBMODEL_CELLS,
     )
     if isinstance(organ, LiverOrgan):
         objects += observers.bile_objects(zones_of.bile, zones, ids.mass(organ.key))
-    objects += observers.uptake_objects(zones, submodel=organ.SUBMODEL_CELLS)
+    objects += observers.uptake_objects(zones)
 
     notes = (
         f"Machine perfusion of the {organ.what} ({organ.key}) of the "

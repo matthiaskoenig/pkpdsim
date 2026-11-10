@@ -18,7 +18,7 @@ from pkpdsim.zonation.geometry import Layer
 from pkpdsim.zonation.settings import Geometry, ZonationSettings
 
 from .conftest import liver_flow, mass_g
-from .data.toy_cell import TOY_ID, UPTAKE, create_toy_cell
+from .data.toy_cell import TOY_ID, UPTAKE, create_toy_cell, toy_cell_model
 
 DRUG = Substance("drg", "drug", Value(180.0, U.g_per_mole))
 
@@ -335,3 +335,117 @@ def test_a_cell_model_with_annotated_species_flattens_and_validates(
     flat = document.getModel()
     assert flat.getSpecies("M01__drg_ext") is None, "replaced by the Disse species"
     assert flat.getNumSpecies() > 0
+
+
+def _exposed(tmp_path: Path, n: int = 3) -> tuple[Model, Path]:
+    """The toy cell composed into `n` zones, three of its elements exposed."""
+    create_toy_cell(tmp_path, observed=True)
+    model = compose(
+        _builder(n),
+        TOY_ID,
+        CellPorts(),
+        expose={
+            "drg": lambda zone: f"drg_{zone}_cell",
+            "k_up": lambda zone: f"k_up_{zone}",
+            "UP": lambda zone: f"UP_{zone}",
+        },
+        cell_model=toy_cell_model(observed=True),
+    )
+    return model, write(model, tmp_path)
+
+
+def _all_ids(path: Path) -> set[str]:
+    """The ids of the compartments, species, parameters and reactions of a file."""
+    model = libsbml.readSBMLFromFile(str(path)).getModel()
+    return {
+        e.getId()
+        for group in (
+            model.getListOfCompartments(),
+            model.getListOfSpecies(),
+            model.getListOfParameters(),
+            model.getListOfReactions(),
+        )
+        for e in group
+    }
+
+
+def test_an_exposed_element_has_the_class_of_the_cell_element(tmp_path: Path) -> None:
+    """A species stays a species in the hepatocyte of its zone, a parameter a
+    parameter, a reaction a reaction, with the unit and the value of the cell model."""
+    model, _ = _exposed(tmp_path)
+    species = {x.sid: x for x in model.species}
+    parameters = {x.sid: x for x in model.parameters}
+    reactions = {x.sid: x for x in model.reactions}
+    assert species["drg_z2_cell"].compartment == ids.volume(Layer.CELL, "z2")
+    assert species["drg_z2_cell"].initialConcentration == 0.0
+    assert parameters["k_up_z2"].value == UPTAKE
+    assert parameters["k_up_z2"].unit == toy_cell_model().parameters[2].unit
+    assert "UP_z2" in reactions
+    for element in (
+        species["drg_z2_cell"],
+        parameters["k_up_z2"],
+        reactions["UP_z2"],
+    ):
+        assert element.replacedBy is not None
+        assert element.replacedBy.submodelRef == "M02"
+
+
+def test_the_composed_model_with_exposed_elements_is_valid(tmp_path: Path) -> None:
+    """The proxies are no state: no error and no warning, in both files."""
+    model, flat = _exposed(tmp_path)
+    assert _problems(tmp_path / f"{model.sid}.xml") == []
+    assert _problems(flat) == []
+
+
+def test_an_exposed_element_has_the_name_of_the_caller_in_the_flat_model(
+    tmp_path: Path,
+) -> None:
+    """The id of the proxy survives the flattening (libsbml keeps the id of the
+    parent of a `ReplacedBy`); what is not exposed stays `M<kk>__<id>`."""
+    _, flat = _exposed(tmp_path)
+    flat_ids = _all_ids(flat)
+    for k in (1, 2, 3):
+        assert {f"drg_z{k}_cell", f"k_up_z{k}", f"UP_z{k}"} <= flat_ids
+        assert not {f"M0{k}__drg", f"M0{k}__k_up", f"M0{k}__UP"} & flat_ids
+    # the spec's addressing of a cell element which is not exposed
+    (tmp_path / "plain").mkdir()
+    create_toy_cell(tmp_path / "plain", observed=True)
+    plain = write(compose(_builder(3), TOY_ID, CellPorts()), tmp_path / "plain")
+    assert {"M01__drg", "M02__k_up", "M03__UP"} <= _all_ids(plain)
+
+
+def test_the_exposed_flat_model_is_the_flat_model_without_exposing(
+    tmp_path: Path,
+) -> None:
+    """Exposing renames the elements, it adds none: same sizes, same trajectory."""
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    _, exposed = _exposed(tmp_path / "a")
+    create_toy_cell(tmp_path / "b", observed=True)
+    plain = write(compose(_builder(3), TOY_ID, CellPorts()), tmp_path / "b")
+    assert _counts(exposed) == _counts(plain)
+    assert len(_all_ids(exposed)) == len(_all_ids(plain))
+    ends = []
+    for path, names in (
+        (plain, [f"[M0{k}__drg]" for k in (1, 2, 3)]),
+        (exposed, [f"[drg_z{k}_cell]" for k in (1, 2, 3)]),
+    ):
+        rr = roadrunner.RoadRunner(str(path))
+        rr.timeCourseSelections = ["time", *names]
+        ends.append(rr.simulate(0, 10, 11)[-1])
+    # the drug is in the zones, and the same in the renamed elements
+    assert ends[0][1:] == pytest.approx(ends[1][1:], rel=1e-12)
+
+
+def test_expose_needs_the_cell_model_and_an_element_of_it() -> None:
+    """A missing cell model or element is an error, not a model without a proxy."""
+    with pytest.raises(ValueError, match="needs the cell model"):
+        compose(_builder(2), TOY_ID, CellPorts(), expose={"drg": lambda z: z})
+    with pytest.raises(ValueError, match="no element 'nothing'"):
+        compose(
+            _builder(2),
+            TOY_ID,
+            CellPorts(),
+            expose={"nothing": lambda z: z},
+            cell_model=toy_cell_model(),
+        )
