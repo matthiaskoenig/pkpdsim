@@ -49,6 +49,7 @@ from pkpdsim.pbpk import (
     create_archive,
     model_figure,
 )
+from pkpdsim.pbpk.visual.anatomy import anatomy_figure
 
 from .conftest import cardiac_pd, definition
 
@@ -605,6 +606,42 @@ def test_the_title_names_the_builds_of_the_archive(tmp_path: Path) -> None:
     female = dataclasses.replace(d, sex=Sex.FEMALE)
     path = model_figure(female, tmp_path / "female.svg")
     assert "simple: female build," in _title(path)
+
+
+def _subtitle(path: Path) -> str:
+    """The subtitle of an anatomical figure, the line under its title."""
+    root = ElementTree.parse(path).getroot()
+    texts = [e.text or "" for e in root.iter("{http://www.w3.org/2000/svg}text")]
+    return next(s for s in texts if "reference individuals" in s)
+
+
+def test_the_anatomical_figure_names_the_builds_of_the_archive(tmp_path: Path) -> None:
+    """The subtitle names the builds, not both sexes for a model built once.
+
+    The two bodies of the figure are the reference man and the reference
+    woman, which a model with one build is drawn on as well; the subtitle
+    says which builds exist (it named both sexes for every model until
+    2026-11-10), and without the sexes it names no build.
+    """
+    d = definition()
+    one = create_archive(
+        d, tmp_path / "one" / "models", model="simple", copyright="2026 M"
+    )
+    assert _subtitle(one["simple_body_svg"]["path"]) == (
+        "simple · male build · reference individuals"
+    )
+    both = create_archive(
+        d,
+        tmp_path / "both" / "models",
+        model="simple",
+        copyright="2026 M",
+        sexes=(Sex.MALE, Sex.FEMALE),
+    )
+    assert _subtitle(both["simple_body_svg"]["path"]) == (
+        "simple · male and female builds · reference individuals"
+    )
+    plain = anatomy_figure(d, tmp_path / "plain.svg")
+    assert _subtitle(plain) == "simple · reference individuals"
 
 
 def test_the_figure_refuses_builds_without_the_sex_of_the_definition(
