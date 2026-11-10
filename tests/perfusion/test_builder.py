@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 from pbpk.conftest import individual
 from sbmlutils.factory import Creator, Model, Parameter, Reaction, Species
+from sbmlutils.factory.core_elements import KineticLaw
 from sbmlutils.metadata import SBO
 from sbmlutils.validation import ValidationOptions, validate_doc
 
@@ -227,6 +228,44 @@ def test_an_extension_of_the_cells_is_one_mechanism_in_every_zone(
     # the constant of the mechanism is the liver's, not one per zone
     left = {f"M{k:02}__XP_k" for k in zones} & flat
     assert not left, sorted(left)
+
+
+def test_an_extension_which_replaces_a_law_of_the_library_drops_its_constants(
+    tmp_path: Path,
+) -> None:
+    """A constant of a law which the extension replaces is gone from both models and
+    is shared no more: the flat model holds it neither once nor per zone."""
+    gone = ("O2IM_Vmax", "O2IM_Km_o2")
+
+    def cell(model: Model) -> Model:
+        model = _mechanism(model)
+        model.parameters = [p for p in model.parameters if p.sid not in gone]
+        (uptake,) = [r for r in model.reactions if r.sid == "O2IM"]
+        uptake.formula = KineticLaw("XP_k * Vli * (o2_ext - o2_cell)", U.mmole_per_min)
+        return model
+
+    def composed(model: Model) -> Model:
+        model.parameters = [
+            *(p for p in model.parameters if p.sid not in gone),
+            Parameter(
+                "XP_k",
+                1.0,
+                U.per_min,
+                name="rate constant of the mechanism",
+                sboTerm=SBO.KINETIC_CONSTANT,
+            ),
+        ]
+        return model
+
+    zones = (1, 2)
+    extension = PerfusionExtension(cell=cell, shared=("XP_k",), composed=composed)
+    flat = _ids(_model(build(liver_definition(len(zones)), tmp_path, extension)))
+    left = {
+        *gone,
+        *(f"M{k:02}__{sid}" for k in zones for sid in gone),
+    } & flat
+    assert not left, sorted(left)
+    assert {ids.reaction("O2IM", ids.zone_id(k)) for k in zones} <= flat
 
 
 def test_a_shared_element_an_extension_leaves_out_of_the_liver_is_refused(

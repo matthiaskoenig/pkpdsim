@@ -139,7 +139,10 @@ class PerfusionExtension:
 
     Attributes:
         cell: the extension of the cell model of the zones, in place, which
-            returns it; `None` for a mechanism without cells of its own.
+            returns it; `None` for a mechanism without cells of its own. A
+            constant of the library whose law it replaces it removes from the
+            cell model, and the liver shares it no more (`composed` removes it
+            from the composed model as well).
         shared: the ids of the elements of `cell` which the liver holds once,
             its constants; every other element of the extension is one per
             zone. A shared element is a port of the cell model (which stays
@@ -534,10 +537,14 @@ def _liver(
         for p in circuit.temperature_objects(definition.temperature).parameters
         if p.sid == ids.TEMPERATURE
     )
+    held = {str(p.sid) for p in cell.parameters if p.sid is not None}
     shared = [
         *(
             str(p.sid)
             for p in cell_constants(definition.core, bile=True, released=released)
+            # an extension which replaces a law of the library removes the
+            # constants of that law from the cell model: they are shared no more
+            if str(p.sid) in held
         ),
         *ARRHENIUS,
         *(extension.shared if extension is not None else ()),
