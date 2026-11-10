@@ -88,3 +88,16 @@ def test_the_archive_of_a_liver_has_the_flat_model_as_its_master(
     )
     for name in ("liver_circuit.xml", "liver_circuit_core.xml"):
         assert (tmp_path / "models" / name).is_file()
+    # the three models the build writes are entries of the archive, the cell
+    # model among them: it stays loadable alone, for a mesh or another coupling
+    for key in ("liver_circuit", "liver_circuit_flat", "liver_circuit_core"):
+        assert results[key]["path"].is_file(), key
+    omex = Omex.from_omex(tmp_path / "liver_circuit_model.omex")
+    locations = {e.location for e in omex.manifest.entries}
+    assert {
+        "./models/liver_circuit.xml",
+        "./models/liver_circuit_flat.xml",
+        "./models/liver_circuit_core.xml",
+    } <= locations
+    masters = {e.location for e in omex.manifest.entries if e.master}
+    assert masters == {"./models/liver_circuit_flat.xml"}

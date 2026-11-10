@@ -16,9 +16,10 @@ from sbmlutils.validation import ValidationOptions, validate_doc
 from pkpdsim.database.tables import entry
 from pkpdsim.pbpk.values import Value
 from pkpdsim.perfusion import circuit, core, ids
-from pkpdsim.perfusion.builder import build
+from pkpdsim.perfusion.builder import build, zone_cell_model
 from pkpdsim.perfusion.definition import LiverOrgan, Perfusate
 from pkpdsim.perfusion.units import PU
+from pkpdsim.templates import terms_of_use
 
 from .conftest import liver_definition, load_circuit
 
@@ -605,3 +606,38 @@ def test_the_flow_through_the_liver_is_the_flow_of_the_pump(
     r = individual(path, **{ids.Q_PUMP: flow})
     assert r["Q_li"] == pytest.approx(flow, abs=0, rel=0)
     assert r[ids.Q_PUMP] == flow
+
+
+def test_the_cell_model_carries_the_terms_of_use_without_the_circuit(
+    tmp_path: Path,
+) -> None:
+    """The notes of a package are the description of its circuit and its terms of
+    use: the cell model of the zones is one cell, so it takes the terms alone."""
+    description = "A reservoir of 500 ml, the pump and the oxygenator."
+    definition = dataclasses.replace(
+        liver_definition(2, sid="noted"),
+        notes=f"    {description}\n{terms_of_use}",
+    )
+    cell = zone_cell_model(definition)
+    assert cell is not None and cell.notes is not None
+    assert "The cellular core of the liver" in cell.notes
+    # the notes are markdown, which sbmlutils converts: `## Terms of use`
+    assert "<h2>Terms of use</h2>" in cell.notes
+    assert "creativecommons.org" in cell.notes
+    assert description not in cell.notes
+    circuit_model = _model(build(definition, tmp_path))
+    notes = circuit_model.getNotesString()
+    assert description in notes and "Terms of use" in notes
+
+
+def test_the_notes_of_a_package_without_the_terms_of_use_stay_whole(
+    tmp_path: Path,
+) -> None:
+    """Notes the terms of use cannot be told from are not cut: a cell model which
+    says too much loses nothing, one without its licence is unusable."""
+    definition = dataclasses.replace(
+        liver_definition(1, sid="unlicensed"), notes="    Something else entirely."
+    )
+    cell = zone_cell_model(definition)
+    assert cell is not None and cell.notes is not None
+    assert "Something else entirely." in cell.notes

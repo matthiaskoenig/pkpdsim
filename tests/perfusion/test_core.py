@@ -402,3 +402,14 @@ def test_importing_the_library_is_light() -> None:
         "assert callable(p.core_parameters)"
     )
     subprocess.run([sys.executable, "-c", code], check=True)
+
+
+def test_the_package_exports_the_names_of_the_core() -> None:
+    """Every name of `__all__` resolves, the core objects and their names among
+    them: a caller outside the repository reaches `core_objects` and the
+    `CoreNames` it takes through the package, as it reaches their neighbours."""
+    import pkpdsim.perfusion as package
+
+    assert {"CoreNames", "core_objects"} <= set(package.__all__)
+    for name in package.__all__:
+        assert getattr(package, name) is not None, name

@@ -90,6 +90,7 @@ from pkpdsim.perfusion.definition import (
     PerfusionDefinition,
 )
 from pkpdsim.perfusion.units import PU
+from pkpdsim.templates import terms_of_use
 from pkpdsim.zonation import composition
 from pkpdsim.zonation import ids as zonation_ids
 from pkpdsim.zonation.builder import ZonationBuilder
@@ -108,6 +109,10 @@ __all__ = [
 ]
 
 _P = SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER
+
+_TERMS_START = textwrap.dedent(terms_of_use).strip().splitlines()[0]
+"""The first line of the terms of use of a model, where the notes of a package end
+and its terms begin (`_terms`)."""
 
 
 def zone_factors(organ: Organ) -> dict[str, dict[str, float]]:
@@ -297,6 +302,7 @@ def zone_cell_model(definition: PerfusionDefinition) -> Model | None:
             f"{definition.species}, the model which every zone of the composed "
             "model holds as a submodel (pkpdsim.perfusion).",
             definition,
+            terms_only=True,
         ),
         creators=list(definition.creators),
     )
@@ -304,16 +310,24 @@ def zone_cell_model(definition: PerfusionDefinition) -> Model | None:
     return cell
 
 
-def _notes(what: str, definition: PerfusionDefinition) -> str:
+def _notes(
+    what: str, definition: PerfusionDefinition, *, terms_only: bool = False
+) -> str:
     """Get the notes of a model of a definition: what it is and the notes of its package.
 
-    Every model a definition writes carries the notes of its package, which hold
-    its terms of use, so that the cell model is as usable alone as the composed
-    model is.
+    Every model a definition writes carries the terms of use of its package, so
+    that the cell model is as usable alone as the composed model is. The notes
+    of a package are the description of its model followed by its terms of use
+    (`pkpdsim.templates.terms_of_use`), and only the model of the circuit is
+    that model: the cell model of its zones is one cell, not the circuit, so it
+    takes the terms alone (`terms_only`). A description the terms cannot be
+    told from stays whole, which loses nothing and says too much.
 
     Args:
         what: the sentence which says what the model is.
         definition: the definition the model is written from.
+        terms_only: the model takes the terms of use of the package without the
+            description of its model, for a model which is not that model.
 
     Returns:
         The sentence, and the notes of the package below it where it has them.
@@ -321,7 +335,31 @@ def _notes(what: str, definition: PerfusionDefinition) -> str:
     if not definition.notes:
         return what
     # the notes of a model package are an indented block, as its terms of use
-    return f"{what}\n\n{textwrap.dedent(definition.notes).strip()}"
+    notes = textwrap.dedent(definition.notes).strip()
+    if terms_only:
+        notes = _terms(notes) or notes
+    return f"{what}\n\n{notes}"
+
+
+def _terms(notes: str) -> str | None:
+    """Get the terms of use at the end of the notes of a model package, `None` for none.
+
+    The terms are those of the template of the library
+    (`pkpdsim.templates.terms_of_use`), which every model package of the
+    repository appends to the description of its model, so the first line of
+    the template is where the description ends. A package which writes its own
+    terms, under another copyright, keeps them: nothing is substituted, the
+    notes are only cut.
+
+    Args:
+        notes: the notes of the package, without the indentation.
+
+    Returns:
+        The notes from the first line of the terms on, `None` where the notes
+        do not carry the terms of the template.
+    """
+    start = notes.find(_TERMS_START)
+    return None if start < 0 else notes[start:]
 
 
 def _cell_names(cell: Model, zone: str) -> dict[str, str]:
@@ -510,6 +548,8 @@ def _liver(definition: PerfusionDefinition, organ: LiverOrgan) -> _Organ:
         species=[species.get(str(x.sid), x) for x in model.species],
         reactions=list(model.reactions),
         parameters=list(model.parameters),
+        rules=list(model.rules),
+        rate_rules=list(model.rate_rules),
         assignments=list(model.assignments),
     )
     # the volume of the organ, `V_li = M_li/rho_li`, which `ids.organ_volume` names

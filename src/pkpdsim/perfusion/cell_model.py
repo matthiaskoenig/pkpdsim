@@ -49,7 +49,11 @@ from pkpdsim.zonation.composition import CellPorts
 __all__ = ["ARRHENIUS", "CELL_MODEL_ID", "cell_model", "constants"]
 
 CELL_MODEL_ID = "perfusion_core"
-"""The id of the cell model, and the stem of its file."""
+"""The id of the cell model of `cell_model`, which its caller renames where a
+folder holds the models of several definitions: `builder.zone_cell_model` names
+it `<sid>_core` after the model it belongs to, so that the file of every
+definition is its own (`zonation.composition.write` writes the cell model under
+its id)."""
 
 ARRHENIUS = (ids.TEMPERATURE_REF, ids.GAS_CONSTANT, ids.ACTIVATION_ENERGY)
 """The constants of the Arrhenius factor of the cell model (`circuit.temperature_objects`),
