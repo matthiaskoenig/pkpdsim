@@ -36,7 +36,7 @@ example (the cells of a liver of 10 g, a perfusate of 1 ml), which a
 composition replaces by the zone.
 """
 
-from sbmlutils.factory import Compartment, Model, Parameter
+from sbmlutils.factory import Compartment, Creator, Model, Parameter
 from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk.units import MODEL_UNITS, U
@@ -102,6 +102,8 @@ def cell_model(
     released: tuple[str, ...] = ids.RELEASABLE,
     processes: tuple[str, ...] = (),
     bile_port: bool = True,
+    notes: str | None = None,
+    creators: list[Creator] | None = None,
 ) -> Model:
     """Get the cellular core as a standalone model with the cell ports.
 
@@ -119,6 +121,11 @@ def cell_model(
         bile_port: the model has the bile compartment `Vbi` as a port, which a
             composition with a bile of the engine replaces; `False` for a
             liver without one, which then has no empty compartment per zone.
+        notes: the notes of the model, which carry the terms of use of the
+            package it belongs to; a model written without them says what it
+            is and under which licence it is not.
+        creators: the creators of the model, those of the package it belongs
+            to.
 
     Returns:
         The model `CELL_MODEL_ID`: the objects of `core.core_objects`
@@ -171,6 +178,8 @@ def cell_model(
     return Model(
         sid=CELL_MODEL_ID,
         name="cellular core of the machine perfusion library",
+        notes=notes,
+        creators=list(creators) if creators else None,
         units=PU,
         model_units=MODEL_UNITS,
         compartments=[

@@ -10,6 +10,7 @@ import libsbml
 import numpy as np
 import pytest
 from pbpk.conftest import individual
+from sbmlutils.factory import Creator
 from sbmlutils.validation import ValidationOptions, validate_doc
 
 from pkpdsim.database.tables import entry
@@ -538,6 +539,38 @@ def test_the_notes_of_a_definition_follow_the_description(tmp_path: Path) -> Non
     assert "<h2>Terms of use</h2>" in notes
     assert f"<p>{terms}</p>" in notes
     assert notes.index("Machine perfusion of the") < notes.index(terms)
+
+
+def test_the_cell_model_carries_the_notes_and_the_creators_of_its_definition(
+    tmp_path: Path,
+) -> None:
+    """The cell model is a model of its own, so it carries the terms of use and the
+    creators of its package as the composed model does: a reader who has only the
+    cell model has the licence it is under."""
+    terms = "This work is licensed under the terms of use of the test."
+    creator = Creator(
+        familyName="Tester", givenName="A", email="a@test.org", organization="Test"
+    )
+    d = dataclasses.replace(
+        liver_definition(3),
+        creators=(creator,),
+        notes=f"""
+    The liver of the test.
+
+    ## Terms of use
+    {terms}
+    """,
+    )
+    flat = build(d, tmp_path)
+    cell = _model(flat.parent / f"{d.sid}_core.xml")
+    notes = cell.getNotesString()
+    assert "cellular core" in notes
+    assert f"<p>{terms}</p>" in notes
+    # the creators of a model are its model history
+    history = cell.getModelHistory()
+    assert history is not None
+    assert history.getNumCreators() == 1
+    assert history.getCreator(0).getFamilyName() == "Tester"
 
 
 def test_a_zone_has_no_empty_bile_compartment(tmp_path: Path) -> None:

@@ -292,9 +292,36 @@ def zone_cell_model(definition: PerfusionDefinition) -> Model | None:
         released=definition.released,
         processes=tuple(organ.profiles),
         bile_port=False,
+        notes=_notes(
+            f"The cellular core of the {organ.what} ({organ.key}) of the "
+            f"{definition.species}, the model which every zone of the composed "
+            "model holds as a submodel (pkpdsim.perfusion).",
+            definition,
+        ),
+        creators=list(definition.creators),
     )
     cell.sid = f"{definition.sid}_core"
     return cell
+
+
+def _notes(what: str, definition: PerfusionDefinition) -> str:
+    """Get the notes of a model of a definition: what it is and the notes of its package.
+
+    Every model a definition writes carries the notes of its package, which hold
+    its terms of use, so that the cell model is as usable alone as the composed
+    model is.
+
+    Args:
+        what: the sentence which says what the model is.
+        definition: the definition the model is written from.
+
+    Returns:
+        The sentence, and the notes of the package below it where it has them.
+    """
+    if not definition.notes:
+        return what
+    # the notes of a model package are an indented block, as its terms of use
+    return f"{what}\n\n{textwrap.dedent(definition.notes).strip()}"
 
 
 def _cell_names(cell: Model, zone: str) -> dict[str, str]:
@@ -824,14 +851,12 @@ def compose(definition: PerfusionDefinition) -> Model:
         objects += observers.bile_objects(zones_of.bile, zones, ids.mass(organ.key))
     objects += observers.uptake_objects(zones)
 
-    notes = (
+    notes = _notes(
         f"Machine perfusion of the {organ.what} ({organ.key}) of the "
         f"{definition.species} with {organ.zones} zone(s) in a circuit "
-        "(pkpdsim.perfusion)."
+        "(pkpdsim.perfusion).",
+        definition,
     )
-    if definition.notes:
-        # the notes of a model package are an indented block, as its terms of use
-        notes = f"{notes}\n\n{textwrap.dedent(definition.notes).strip()}"
     model = Model(
         sid=definition.sid,
         name=definition.name,
