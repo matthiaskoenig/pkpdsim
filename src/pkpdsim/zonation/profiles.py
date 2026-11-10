@@ -31,8 +31,9 @@ Gauss-Legendre are exact to 1e-11) and `lobular_weight` is its derivative. The
 area of a zone is the difference of the areas of its ends, so the lobular
 weighting of the zones is the sequence `zone_areas(n)`, which is exact; a
 density handed over as a callable is taken at the centre of every zone, which
-for `lobular_weight` overstates the zone of its peak by 6.7 % and shifts a
-sharp profile by up to 1.5 % at 10 zones. The weight is 0 at both vessels,
+for `lobular_weight` overstates the zone of its peak by 6.7 % as computed
+(5.6 % after the levels are divided by their weighted mean, which is what a
+profile does to them) and shifts a sharp profile by up to 1.5 % at 10 zones. The weight is 0 at both vessels,
 peaks at
 `1 / (1 + sqrt(3))` where the isoline leaves the hexagon through the edges, and
 cuts the lobule in the ratio 2 to 1 at the bisectors, its 1/3 beyond the
@@ -319,7 +320,7 @@ def zone_areas(n: int) -> tuple[float, ...]:
     The exact area of a zone, the difference of the areas of its ends
     (`lobular_area`), and not the weight at its centre: at 10 zones the density
     at the centre overstates the zone which holds the peak of the weight by
-    7 %.
+    6.7 % as computed, 5.6 % after the normalisation of a profile.
 
     Args:
         n: the number of zones.
@@ -378,7 +379,8 @@ def normalized(
             of the lobule and the lobular weighting. A callable is a density of
             the lobular position and is taken at the centre of every zone,
             always, so `lobular_weight` as a callable samples the density and
-            overstates the zone which holds its peak by 6.7 % at 10 zones.
+            overstates the zone which holds its peak by 6.7 % at 10 zones as
+            computed, 5.6 % after the normalisation below.
 
     Returns:
         The levels divided by their weighted mean, so that a liver with the

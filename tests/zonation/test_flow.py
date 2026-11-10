@@ -33,6 +33,7 @@ from pkpdsim.zonation.flow import (
     PressureFlow,
     calibrated_resistance_factor,
     face_flows,
+    fenestra_counts,
     flow_objects,
     mean_flow,
     resolved_resistance_factor,
@@ -428,7 +429,10 @@ def test_the_table_count_of_fenestrae_agrees_with_the_measured_porosity() -> Non
 
     The count per zone is `porosity / (pi r_fen**2)`, 6.7e12 periportal and
     8.9e12 pericentral at the measured 6 % and 8 % porosity (Braet and Wisse
-    2002); the 1e13 of the table must lie within 35 % of that range.
+    2002); the 1e13 of the table must lie within 35 % of that range. The
+    per-zone counts of the engine (`fenestra_counts`, the function this
+    cross-check is the only caller of) lie inside the two ends and their mean
+    is the one porosity the leaky tube is evaluated at.
     """
     geo = geometry(ZonationSettings().species)
     counts = [
@@ -439,6 +443,10 @@ def test_the_table_count_of_fenestrae_agrees_with_the_measured_porosity() -> Non
     assert counts[1] == pytest.approx(8.90e12, rel=1e-2)
     assert min(counts) / 1.35 <= geo.n_fen.value <= max(counts) * 1.35
     assert geo.n_fen.value == pytest.approx(sum(counts) / 2.0, rel=0.35)
+    zoned = fenestra_counts(geo, 10)
+    assert len(zoned) == 10
+    assert counts[0] < zoned[0] < zoned[-1] < counts[1]
+    assert sum(zoned) / 10.0 == pytest.approx(sum(counts) / 2.0, rel=1e-12)
 
 
 def test_a_formula_flow_is_refused() -> None:

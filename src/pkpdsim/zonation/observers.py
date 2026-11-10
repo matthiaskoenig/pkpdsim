@@ -169,10 +169,9 @@ def balance_expression(substance: str, duct: bool) -> str:
     reactions declared as consumption: the axial convection and diffusion, the
     radial exchange and the bile in both transports, with and without a bile,
     at a haematocrit of 0, in the well-stirred geometry and with an imposed or a
-    pressure driven flow. A pressure flow does not conserve water (the fluid
-    which leaks through the fenestrae is not removed from the lumen), but the
-    solute is moved only by the reactions, each of which takes from one species
-    what it gives to another, and the boundary ledgers integrate the same flows
+    pressure driven flow. The solute is moved only by the reactions, each of
+    which takes from one species what it gives to another, and the boundary
+    ledgers integrate the same flows
     the first and last reaction use, so the balance holds there as well. It
     fails for a consumption or a dose which is not declared.
 

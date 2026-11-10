@@ -18,9 +18,13 @@ compartment. The zones are a chain from periportal to pericentral:
 
 - convection `FLOW_<s>_<layer>_z<k>_<layer>_z<k+1>` (`Q * c` of the upstream
   zone) carries the plasma and the erythrocytes (the vascular site of the
-  well-stirred geometry) from one zone to the next; the plasma and the
-  erythrocytes have the shares `1 - Hct` and `Hct` of the blood flow `Q_li`
-  (`Q_plasma_li`, `Q_rbc_li`), so they have one velocity. The inflow
+  well-stirred geometry) from one zone to the next; under an imposed flow the
+  plasma and the erythrocytes have the shares `1 - Hct` and `Hct` of the blood
+  flow `Q_li` (`Q_plasma_li`, `Q_rbc_li`), so they have one velocity. A
+  pressure flow has neither id: it carries the flow of the face a convection
+  crosses (`Q_plasma_li_<site>`, `Q_rbc_li_<site>`), the erythrocytes keep the
+  flow of the inflow and the plasma the rest, so the shares are those of the
+  periportal face and of no other. The inflow
   `FLOW_<s>_<layer>_in_<layer>_z1` brings the concentration `<s>_<layer>_in` (a
   parameter, 0) into the first zone and the outflow
   `FLOW_<s>_<layer>_z<n>_<layer>_out` takes the last zone's concentration out.
@@ -2049,10 +2053,14 @@ class ZonationBuilder:
     def _upwind(self, flux: str, source: str, target: str) -> str:
         """The concentration a flux carries: the source's where it is positive.
 
-        The first order upwind scheme of the chain, written so that the
-        direction follows the sign of the flux at any time: a flux which the
-        pressures of the model reverse carries the concentration of the site
-        it then comes from.
+        The first order upwind scheme of the filtrate: the solvent drag and
+        the convection along the space of Disse, whose direction follows the
+        sign of the flux at any time, so a flux which the pressures of the
+        model reverse carries the concentration of the site it then comes
+        from. The blood chain does not use it: a convection always carries
+        the concentration of its source, the build refusing a negative flow
+        (`face_flows`), so a run which reversed the pressures past that guard
+        would have the filtrate follow the sign and the blood chain not.
         """
         return f"piecewise({source}, {flux} > 0 l_per_min, {target})"
 

@@ -494,7 +494,17 @@ inflow, the pericentral face carrying the flow the periportal one received.
 
 Measured again when the chain moved its flows from the centres of the zones to
 their faces; over the centres it was a hump of 26 % with the first and the last
-zone at 1.0 (1.0, 1.094652, 1.175702, 1.235407, 1.267174, ...)."""
+zone at 1.0 (1.0, 1.094652, 1.175702, 1.235407, 1.267174, ...).
+
+These are the values at the faces and not the averages over the zones. The
+continuum cell averages of the same solute are 1.052444, 1.151758, 1.236736,
+1.299294, 1.332564 and symmetric about the middle, so the engine is +4.9 % in
+the first zone and -5.0 % in the last, and the pericentral zone of a solute
+which stays in the lumen is 1.052 and not the 1.0 of its face. The symmetry
+of this tuple about the middle is the artifact and not the physics (the
+continuum profile is the symmetric one). It is the first order error of the
+upwind scheme, documented and not fixed (`docs/zonation.md`, "Numerical
+dispersion")."""
 
 
 def _steady(

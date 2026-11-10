@@ -34,8 +34,14 @@ face (`x = k L / n`, `ids.zone_flow`). The inflow of the chain reads the flow
 of the periportal face, the convection out of a zone the flow of the face it
 crosses, and the outflow the flow at `x = L`, so the organ receives the flow at
 the portal face which the calibration targets, at every zone count. The
-volumes, the zonal profiles and the concentrations stay at the centres of the
-zones (`profiles.zone_positions`). spt evaluated the flow at `x = 0` only (its
+volumes and the zonal profiles stay at the centres of the zones
+(`profiles.zone_positions`), and a zone is read at its centre, but the upwind
+scheme gives it the value of its pericentral face wherever the flow varies
+along the chain: the steady concentration of a solute the fenestrae stop is
+`Q(0) / Q(x_k^face)`, +4.9 % in the first zone to -5.0 % in the last against
+the average over the zone at ten zones. That bias is the first order error of
+the scheme, which the zone count lowers and a higher order reconstruction
+would remove (`docs/zonation.md`, "Numerical dispersion"). spt evaluated the flow at `x = 0` only (its
 `FLOW: Q dependent on position`); this finishes it. The chain does not move the
 leaking fluid out of the lumen: the convection carries the solute with the flow
 of the face from zone to zone, and the leak of the solute is the fenestral

@@ -1,7 +1,18 @@
 """The geometry of the sinusoid, the volume fractions of the layers and the haematocrit.
 
 The fractions are those of the liver parenchyma (stereology, Blouin1977), the
-geometry is that of one sinusoid. The numbers are in
+geometry is that of one sinusoid. The two are two sources and not one
+cylinder: a shell of the endothelial thickness `t_endo` (0.165 um, the
+representative sinusoid of the predecessor spt model) around the lumen of
+radius 4.4 um is 0.81 % of the parenchyma where the stereology assigns the
+endothelium 2.8 %, a factor of 3.5 (the thickness consistent with the
+fraction would be 0.547 um; the 1.0 um shell of the space of Disse gives
+5.55 % against the 4.9 % of the table, which is close). So the fenestral
+conductance, whose path length is the thin wall
+(`transport.fenestral_permeability`), is about 3.3 times the one consistent
+with the volume it feeds. Nothing rests on it today: the transcellular
+permeabilities are 0 until a model sets them, and for a small solute neither
+conductance is limiting. The numbers are in
 `pkpdsim/database/tables/zonation.toml`, a section per species. The volume of
 a layer is its fraction of the volume of the parenchyma, `f_par * mass /
 density`, split evenly over the zones.
