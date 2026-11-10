@@ -86,6 +86,7 @@ __all__ = [
     "Partitioned",
     "Solute",
     "aqueous_diffusion",
+    "axial_diffusion_formula",
     "axial_velocity",
     "blood_cell_coefficient",
     "cytosolic_diffusion",
@@ -95,6 +96,7 @@ __all__ = [
     "dispersion",
     "erythrocytes_of",
     "fenestral_permeability",
+    "lateral_area_formula",
     "molecular_radius",
     "peclet",
     "radius_ratio",
@@ -223,6 +225,64 @@ def axial_velocity(length: float, lumen: float, flow: float) -> float:
     if lumen <= 0.0:
         raise ValueError(f"The lumen {lumen} l has no volume, so it has no velocity.")
     return length / (lumen / flow * 60.0)
+
+
+def axial_diffusion_formula(
+    diffusion: str,
+    volume: str,
+    length: str,
+    n_zones: int,
+    upstream: str,
+    downstream: str,
+) -> str:
+    """Get the kinetic law of the axial diffusion between two zones (mmole/min).
+
+    `D * V_zone * n**2 / L**2 * 60 s_per_min * (c_up - c_down)`: the
+    conductance `D * A / dx` of the prism identity, the cross-section of a
+    layer being its volume in all zones over the length of the sinusoid
+    (`A = n * V_zone / L`) and two zones `dx = L / n` apart, so it follows the
+    volume of the zone and needs no radius. The one law of the engine
+    (`ZonationBuilder.axial_diffusion`) and of the zonated liver of the PBPK
+    library (`pkpdsim.pbpk.variants.liver_zonated`), which wrote it twice;
+    a caller which scales it by zone appends its factor.
+
+    Args:
+        diffusion: the id of the diffusion coefficient (m**2/s).
+        volume: the id of the volume of the layer in the upstream zone (l).
+        length: the id of the length of the sinusoid (m).
+        n_zones: the number of zones.
+        upstream: the id of the concentration of the upstream zone.
+        downstream: the id of the concentration of the downstream zone.
+
+    Returns:
+        The formula.
+    """
+    return (
+        f"{diffusion} * {volume} * {n_zones**2} dimensionless / "
+        f"({length} * {length}) * 60 s_per_min * ({upstream} - {downstream})"
+    )
+
+
+def lateral_area_formula(lumen: str, radius: str) -> str:
+    """Get the formula of the lateral area of the lumen of a zone (m**2).
+
+    `2 * V_lumen / r_sin`, the surface of the cylinder of the lumen of the
+    zone, in m**2 from a volume in litres (`/ 1000 l_per_m3`): it follows the
+    volume of the zone, so a change of the organ before a simulation reaches
+    it. The one expression of the engine
+    (`ZonationBuilder._radial_assignments`) and of the zonated liver of the
+    PBPK library (`pkpdsim.pbpk.variants.liver_zonated`), which wrote it
+    twice; the two differ in what they call the lumen of a zone (the
+    sinusoidal lumen, the whole vascular space), not in the formula.
+
+    Args:
+        lumen: the expression of the volume of the lumen of the zone (l).
+        radius: the id of the radius of the lumen (m).
+
+    Returns:
+        The formula.
+    """
+    return f"2 dimensionless * {lumen} / {radius} / 1000 l_per_m3"
 
 
 def dispersion(velocity: float, length: float, n_zones: int) -> float:

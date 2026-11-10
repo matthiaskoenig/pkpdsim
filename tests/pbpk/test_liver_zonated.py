@@ -1389,3 +1389,64 @@ def test_mass_balance_zonated(tmp_path: Path, form: str) -> None:
         for part in _TISSUE[form]:
             assert r[_liver(ids.unbound(part, S, z))] > 0
         assert r[_liver(ids.unbound(Part.TISSUE, "inh", z))] > 0
+
+
+# --- the fixtures the sinusoid geometry and the means had avoided ------------
+
+
+def test_two_substances_in_the_full_form_share_the_lateral_area_of_a_zone(
+    tmp_path: Path,
+) -> None:
+    """The area is the geometry of the zone and of no substance.
+
+    `_ps_vas` is called once per substance and zone, and `_initial` has no
+    guard of its own, so the second substance in the permeability-limited
+    form appended a second initial assignment for `A_pd_<zone>` and the build
+    raised `An InitialAssignment for symbol 'A_pd_z1' exists already`. Every
+    sinusoid fixture had exactly one such substance.
+    """
+    drug = _permeable_drug()
+    metabolite = dataclasses.replace(
+        _METABOLITE,
+        binding=Binding(fu=0.6, protein="albumin"),
+        distribution=Kp(1.5, ftissue=8.0, mode=Mode.PERMEABILITY),
+    )
+    ctx = organ_context(
+        definition(substances=[drug, metabolite], chemistry=[_drg2m()]), Organ.LIVER
+    )
+    liver = ZonatedLiver(n_zones=3, geometry=Geometry.SINUSOID)
+    md, _ = liver.build(ctx)
+    symbols = [str(a.symbol) for a in md.assignments]
+    areas = [zids.area("pd", z) for z in _zones(3)]
+    assert [symbols.count(sid) for sid in areas] == [1, 1, 1]
+    for s in (S, metabolite.sid):
+        assert {str(p.sid) for p in md.parameters} >= {
+            ids.ps_vas(s, z) for z in _zones(3)
+        }
+    _model(
+        tmp_path, "two_full", liver, [_drg2m()], [drug, metabolite]
+    )  # the build writes
+
+
+def test_the_means_of_a_flow_limited_substance_are_built() -> None:
+    """`means=True` of the most common form of a substance.
+
+    `built_parts` returns `(Part.ORGAN,)` for a substance in the mode
+    `PERFUSION`, which `_PART_NAMES` did not hold: the modeller who asked for
+    the periportal and the pericentral mean of a zonated liver got a bare
+    `KeyError(Part.ORGAN)`.
+    """
+    flow_limited = dataclasses.replace(
+        simple_drug(), distribution=Kp(2.0, mode=Mode.PERFUSION)
+    )
+    ctx = organ_context(
+        definition(substances=[flow_limited, _METABOLITE], chemistry=[_drg2m()]),
+        Organ.LIVER,
+    )
+    elements = _sinusoid_elements(ZonatedLiver(n_zones=3, means=True), ctx)
+    expected = {
+        ids.zonal_mean(Part.ORGAN, S, periportal) for periportal in (True, False)
+    }
+    assert expected <= set(elements)
+    for sid in expected:
+        assert "organ" in str(elements[sid].name)

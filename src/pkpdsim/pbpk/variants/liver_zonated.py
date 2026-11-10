@@ -123,11 +123,13 @@ from pkpdsim.zonation.transport import (
     L_PER_M3,
     M2_PER_S,
     M_PER_S,
+    axial_diffusion_formula,
     axial_velocity,
     diffusion_of,
     diffusion_parameter,
     dispersion,
     fenestral_permeability,
+    lateral_area_formula,
     molecular_radius,
     peclet,
 )
@@ -178,8 +180,13 @@ _PART_NAMES: Mapping[Part, str] = {
     Part.INTERSTITIAL: "interstitium",
     Part.INTRACELLULAR: "cells",
     Part.TISSUE: "tissue",
+    Part.ORGAN: "organ",
 }
-"""The parts of a zone in words, for the names of the means."""
+"""The parts of a zone in words, for the names of the means.
+
+Every part `built_parts` can return, the flow-limited `ORGAN` of a substance in
+the mode `PERFUSION` included: it is the most common form, and `means=True`
+died with a bare `KeyError(Part.ORGAN)` for it."""
 
 
 _TABLE = (
@@ -694,7 +701,8 @@ class ZonatedBuilder(StandardBuilder):
         `2*V_lumen/r_sin`, the surface of the cylinder of the lumen of the
         zone (the engine, `ZonationBuilder._radial_assignments`), from the
         vascular volume of the zone, so that it follows the liver volume of
-        the individual.
+        the individual. It is the area of the zone and of no substance, so a
+        second substance reads the parameter the first one wrote.
 
         The lumen of a zone of this model is the whole vascular space of the
         liver (`f_vas`, the sinusoids and the larger vessels), where the
@@ -704,10 +712,17 @@ class ZonatedBuilder(StandardBuilder):
         velocity of the same volume). It changes no behaviour, since neither
         conductance limits the transfer of a small molecule.
         """
+        pid = zids.area("pd", zone)
+        if pid in self.parameters:
+            # the area is the geometry of the zone and not of a substance,
+            # while `_ps_vas` calls this once per substance and zone;
+            # `_initial` has no guard of its own, and a second initial
+            # assignment for one symbol is refused by the build
+            return pid
         lumen = self._share(f"{self.v} * {self.f_vas}", zone)
         return self._initial(
-            zids.area("pd", zone),
-            f"2 dimensionless * {lumen} / {self._radius()} / 1000 l_per_m3",
+            pid,
+            lateral_area_formula(lumen, self._radius()),
             U.m2,
             in_zone("lateral area plasma and interstitium [m2]", zone),
             "Lateral area between the plasma and the space of Disse of the zone: "
@@ -901,9 +916,9 @@ class ZonatedBuilder(StandardBuilder):
                 self._reaction(
                     ids.axial_reaction(part, s.sid, upstream),
                     f"{a} <-> {b}",
-                    f"{d} * {ids.compartment(part, upstream)} * {n * n} "
-                    f"dimensionless / ({length} * {length}) * 60 s_per_min * "
-                    f"({a} - {b})",
+                    axial_diffusion_formula(
+                        d, ids.compartment(part, upstream), length, n, a, b
+                    ),
                     f"axial diffusion {s.sid} {_DIFFUSING[part]}, zones {k} "
                     f"and {k + 1}",
                     kind="exchange",

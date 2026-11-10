@@ -154,6 +154,7 @@ from pkpdsim.zonation.transport import (
     M_PER_S,
     ErythrocyteDistribution,
     Solute,
+    axial_diffusion_formula,
     axial_velocity,
     blood_cell_coefficient,
     diffuses,
@@ -162,6 +163,7 @@ from pkpdsim.zonation.transport import (
     dispersion,
     erythrocytes_of,
     fenestral_permeability,
+    lateral_area_formula,
     molecular_radius,
     peclet,
     radius_ratio,
@@ -1061,9 +1063,15 @@ class ZonationBuilder:
                             ),
                             f"{a} <-> {b}",
                             formula=(
-                                f"{d.sid} * {ids.volume(layer, za)} * {n**2} "
-                                f"dimensionless / ({ids.LENGTH} * {ids.LENGTH}) * 60 "
-                                f"s_per_min * ({a} - {b}){factor}",
+                                axial_diffusion_formula(
+                                    str(d.sid),
+                                    ids.volume(layer, za),
+                                    ids.LENGTH,
+                                    n,
+                                    a,
+                                    b,
+                                )
+                                + factor,
                                 U.mmole_per_min,
                             ),
                             compartment=ids.volume(layer, za),
@@ -1454,9 +1462,7 @@ class ZonationBuilder:
         out: list[InitialAssignment] = []
         for k in range(1, self.settings.n_zones + 1):
             zone = ids.zone(k)
-            area = (
-                f"2 dimensionless * {self._lumen(zone)} / {ids.RADIUS} / 1000 l_per_m3"
-            )
+            area = lateral_area_formula(self._lumen(zone), ids.RADIUS)
             out.append(
                 initial_assignment(
                     ids.area("pd", zone),
