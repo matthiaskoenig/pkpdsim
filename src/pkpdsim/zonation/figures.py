@@ -42,7 +42,7 @@ from matplotlib.typing import ColorType, LineStyleType
 
 from pkpdsim.zonation import ids, observers
 from pkpdsim.zonation.geometry import Layer
-from pkpdsim.zonation.render import _ARC_POINTS, lobule_bands, lobule_isoline
+from pkpdsim.zonation.render import lobule_bands, lobule_isoline
 
 __all__ = [
     "MISSING",
@@ -912,7 +912,7 @@ def draw_lobule(
     thirds: bool = False,
     anatomy: bool = False,
     labels: bool = False,
-    points: int = _ARC_POINTS,
+    points: int | None = None,
 ) -> None:
     """Draw a value per zone on the idealized hexagonal lobule, into given axes.
 
@@ -957,7 +957,7 @@ def draw_lobule(
             light one.
         points: the sampling of the isolines of the bands, the directions over
             the arc of an Apollonius circle (`lobule_bands`); a caller which
-            draws many small panels samples more coarsely. The default is that
+            draws many small panels samples more coarsely. `None` is the default
             of `lobule_bands`.
 
     Raises:

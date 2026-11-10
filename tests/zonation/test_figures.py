@@ -22,6 +22,7 @@ from matplotlib.figure import Figure
 from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
 from matplotlib.patches import PathPatch
+from matplotlib.path import Path as MplPath
 from matplotlib.patheffects import withStroke
 from matplotlib.text import Text
 from pbpk.conftest import individual
@@ -29,6 +30,7 @@ from sbmlutils.factory import create_model
 
 from pkpdsim.zonation import ids, observers
 from pkpdsim.zonation.figures import (
+    _CAPSIZE,
     COLORBAR,
     MISSING,
     POSITION,
@@ -47,7 +49,7 @@ from pkpdsim.zonation.figures import (
 )
 from pkpdsim.zonation.geometry import Layer
 from pkpdsim.zonation.observers import add_observers, observer_objects
-from pkpdsim.zonation.render import lobule_isoline
+from pkpdsim.zonation.render import lobule_bands, lobule_isoline
 
 from .test_chain import TRACER, _Diffusing, _settings
 
@@ -148,7 +150,10 @@ def test_the_data_is_overlaid_where_given() -> None:
     fig = zone_profiles(_result(), _profiles(2), times=(0, 60), data=_data())
     first, second = data_axes(fig)
     # the two lines of the simulation, then the markers of the data
-    assert len(first.lines) == 3 + 2  # and the two caps of its error bars
+    # per column: the two simulated lines, the data markers and the two caps of
+    # the error bars (the lower and the upper one)
+    simulated, markers, caps = 2, 1, 2
+    assert len(first.lines) == simulated + markers + caps
     assert list(_x(first.lines[2])) == [0.25, 0.75]
     assert list(_y(first.lines[2])) == [1.0, 2.0]
     assert list(_x(second.lines[2])) == [0.5]
@@ -997,11 +1002,23 @@ def test_draw_lobule_colours_a_band_per_zone() -> None:
     assert [p.get_gid() for p in _polygons(ax)] == [
         ids.zone(k) for k in range(1, N + 1)
     ]
-    # every zone is one path of twelve wedges, each closed on its first vertex
-    for patch in _polygons(ax):
-        wedges = [np.asarray(w) for w in patch.get_path().to_polygons(closed_only=True)]
-        assert len(wedges) == 12
-        assert all(np.array_equal(w[0], w[-1]) for w in wedges)
+    # every zone is one path of twelve wedges: the arrays of `lobule_bands`,
+    # each one a MOVETO, LINETOs and one CLOSEPOLY back on its first vertex
+    bands = lobule_bands(N)
+    for patch, polygons in zip(_polygons(ax), bands, strict=True):
+        path = patch.get_path()
+        assert path.codes is not None
+        assert len(polygons) == 12
+        assert np.count_nonzero(path.codes == MplPath.CLOSEPOLY) == 12
+        expected_codes = np.concatenate(
+            [
+                [MplPath.MOVETO, *[MplPath.LINETO] * (len(w) - 1), MplPath.CLOSEPOLY]
+                for w in polygons
+            ]
+        )
+        assert np.array_equal(path.codes, expected_codes)
+        expected = np.concatenate([np.vstack([w, w[:1]]) for w in polygons])
+        assert np.array_equal(path.vertices, expected)
     for k in (1, 4, N):
         assert _zone_face(ax, k) == pytest.approx(_colour(mappable, values[k - 1]))
     # the band of a zone lies where the zone lies: 1 at a corner, N at the centre
@@ -1173,10 +1190,8 @@ def test_the_colorbar_of_several_axes_is_vector(tmp_path: Path) -> None:
     fig.savefig(tmp_path / "grid.svg")
     assert "<image" not in (tmp_path / "grid.svg").read_text()
     # the budget of this figure, two lobules of ten zones with one colorbar:
-    # it writes 236 kB (one compound patch per zone, 268 kB before), and a grid of a model has six panels of the kind. The
-    # sampling of the bands is what the picture weighs (`_ARC_POINTS`), so a
-    # return to the accuracy a measurement wants (`points=256`, 1.4 MB a
-    # panel) is a regression which no other test would catch.
+    # it writes 236 kB at the default sampling of the bands, which is what the
+    # picture weighs: `points=256` (1.4 MB a panel) would be a regression.
     assert (tmp_path / "grid.svg").stat().st_size < 260 * 1024
 
 
@@ -1210,4 +1225,5 @@ def test_the_error_bars_of_the_data_have_caps_of_three_points() -> None:
     for container in containers:
         caps = container.lines[1]
         assert len(caps) == 2
-        assert all(cap.get_markersize() == pytest.approx(6.0) for cap in caps)
+        # matplotlib draws a cap as a marker of twice the capsize
+        assert all(cap.get_markersize() == pytest.approx(2 * _CAPSIZE) for cap in caps)

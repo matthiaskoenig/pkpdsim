@@ -121,7 +121,7 @@ def _twelve(wedge: np.ndarray) -> list[np.ndarray]:
     return copies
 
 
-def lobule_bands(n: int, *, points: int = _ARC_POINTS) -> list[list[np.ndarray]]:
+def lobule_bands(n: int, *, points: int | None = None) -> list[list[np.ndarray]]:
     """Get the polygons of the zones of the idealized hexagonal lobule.
 
     The hexagon has the circumradius 1, the central vein (zone `n`) at the
@@ -132,8 +132,8 @@ def lobule_bands(n: int, *, points: int = _ARC_POINTS) -> list[list[np.ndarray]]
     Args:
         n: the number of zones.
         points: the directions sampled over one wedge, the resolution of the
-            polygons; the default is what a drawing needs (`_ARC_POINTS`), a
-            caller who measures the polygons themselves asks for more.
+            polygons; `None` is what a drawing needs (16), a caller who
+            measures the polygons themselves asks for more.
 
     Returns:
         For every zone from periportal, its twelve polygons, arrays of the
@@ -146,12 +146,14 @@ def lobule_bands(n: int, *, points: int = _ARC_POINTS) -> list[list[np.ndarray]]
     """
     if n < 1:
         raise ValueError(f"A lobule has at least one zone, not {n}.")
+    if points is None:
+        points = _ARC_POINTS
     if points < 2:
         raise ValueError(f"A wedge has at least two points, not {points}.")
     return [_twelve(_band(low, high, points)) for low, high in pairwise(_zone_edges(n))]
 
 
-def lobule_isoline(position: float, *, points: int = _ARC_POINTS) -> np.ndarray:
+def lobule_isoline(position: float, *, points: int | None = None) -> np.ndarray:
     """Get the closed polyline of the points of one lobular position.
 
     The isoline over the whole hexagon of `lobule_bands`: the twelve copies of
@@ -172,8 +174,8 @@ def lobule_isoline(position: float, *, points: int = _ARC_POINTS) -> np.ndarray:
         position: the lobular position, 0 periportal (the portal triads) and 1
             pericentral (the central vein).
         points: the directions sampled over one wedge; the kink where the
-            isoline leaves through an edge is always one of them. The default
-            is what a drawing needs (`_ARC_POINTS`), as for `lobule_bands`.
+            isoline leaves through an edge is always one of them. `None` is
+            what a drawing needs (16), as for `lobule_bands`.
 
     Returns:
         The points of the ring, an array of shape `(n, 2)` in the hexagon of
@@ -184,6 +186,8 @@ def lobule_isoline(position: float, *, points: int = _ARC_POINTS) -> np.ndarray:
         ValueError: for a position outside the lobule, or for less than two
             points per wedge.
     """
+    if points is None:
+        points = _ARC_POINTS
     if points < 2:
         raise ValueError(f"A wedge has at least two points, not {points}.")
     wedge = _arc(position, points)
