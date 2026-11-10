@@ -271,7 +271,7 @@ class ZonationBuilder:
                 (`pkpdsim.zonation.composition.compose`).
 
         Raises:
-            ValueError: for a profile of a process nothing uses.
+            TypeError: for a substance which is no solute.
         """
         for substance in substances:
             if not isinstance(substance, Solute):
@@ -283,6 +283,20 @@ class ZonationBuilder:
         self.substances = tuple(substances)
         self.cell_model = cell_model
         self.cell_processes = tuple(cell_processes)
+
+    def _check_profiles(self) -> None:
+        """Check the profiles of the settings against the processes of the model.
+
+        The check belongs to `build()`, which is where the profiles are
+        consumed, and not to the constructor: a builder which is made to read
+        one number of the settings (`observers.observer_objects`,
+        `effective_peclet`) does not know the processes of the cell model, and
+        a profile of such a process is the feature the engine exists for.
+
+        Raises:
+            ValueError: for a profile of a process nothing uses.
+        """
+        settings = self.settings
         unused = sorted(set(settings.profiles) & self._unused_bile_processes())
         if unused:
             raise ValueError(
@@ -2003,7 +2017,12 @@ class ZonationBuilder:
 
         Returns:
             The model.
+
+        Raises:
+            ValueError: for a profile of a process nothing uses
+                (`_check_profiles`).
         """
+        self._check_profiles()
         s = self.settings
         flow_parameters, flow_assignments, flow_rules = self._flow_parameters()
         filtrate_parameters, filtrate_rules = self._filtrate_objects()

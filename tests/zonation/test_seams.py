@@ -159,8 +159,15 @@ def test_a_cell_process_has_a_zonal_factor_which_normalizes_to_the_mean() -> Non
 
 
 def test_a_profile_of_a_process_nothing_has_is_refused() -> None:
+    """The build refuses it, not the constructor.
+
+    A builder which is made to read one number of the settings does not know
+    the processes of the cell model (`observers.observer_objects`,
+    `effective_peclet`), so the check is where the profiles are consumed.
+    """
+    builder = _builder(profiles={"OXPHOS": Weights((1, 2, 3, 6))})
     with pytest.raises(ValueError, match="OXPHOS"):
-        _builder(profiles={"OXPHOS": Weights((1, 2, 3, 6))})
+        builder.build()
 
 
 # composition

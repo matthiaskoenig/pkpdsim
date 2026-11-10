@@ -7,9 +7,11 @@ states as a model without them. They are not part of `ZonationBuilder.build()`;
 composed model after `compose`), so a caller who does not want them does not pay
 for them.
 
-Per substance `<s>` (layers are the ones the geometry produced: `rbc` only at a
-haematocrit above 0, `bile` only with a bile, the single `vas` of the well-stirred
-geometry instead of `rbc`, `plasma`, `endo` and `disse`; see `ZonationBuilder.layers`):
+Per substance `<s>` (layers are the ones whose species the model has: `rbc` only
+at a haematocrit above 0, `bile` only with a bile, the single `vas` of the
+well-stirred geometry instead of `rbc`, `plasma`, `endo` and `disse` (see
+`ZonationBuilder.layers`), and no `cell` with `cell_species=False`, whose cells
+are the species of a cell model):
 
 - `<s>_pp`, `<s>_pc` (mM): the periportal and the pericentral mean of the
   concentration in the blood side of the lumen (the plasma, `vas` in the
@@ -28,7 +30,10 @@ geometry instead of `rbc`, `plasma`, `endo` and `disse`; see `ZonationBuilder.la
   through the outflow since the start; the outflow ledger holds the filtrate of
   a net filtration as well (`ZonationBuilder.filtrate_efflux`, which leaves the
   space of Disse at the pericentral end and is negative for a net
-  reabsorption). `cum_consumed_<s>` (mmole): what the
+  reabsorption). The two and `balance_<s>` are of the ends of the chain and are
+  written only for the boundary of the engine (`FlowBoundary.OPEN`): with an
+  external boundary they belong to the caller, which holds both ends.
+  `cum_consumed_<s>` (mmole): what the
   reactions the caller declares consumed. `cum_dose_<s>` (mmole): what was put into
   the organ by hand, the initial amounts and the doses; it starts as the amount of
   the initial concentrations of the model and a dose or a changed initial amount
@@ -52,7 +57,7 @@ from pkpdsim.sbml.units import U
 from pkpdsim.zonation import ids
 from pkpdsim.zonation.builder import ZonationBuilder
 from pkpdsim.zonation.geometry import Layer
-from pkpdsim.zonation.settings import ZonationSettings
+from pkpdsim.zonation.settings import FlowBoundary, ZonationSettings
 from pkpdsim.zonation.transport import Solute
 from pkpdsim.zones import third_weights, weighted_mean
 
@@ -171,6 +176,10 @@ def balance_expression(substance: str, duct: bool) -> str:
     the first and last reaction use, so the balance holds there as well. It
     fails for a consumption or a dose which is not declared.
 
+    The residual is written for the boundary of the engine
+    (`FlowBoundary.OPEN`); a model whose ends a caller supplies has no inflow
+    and no outflow ledger of its own and therefore no residual of its own.
+
     A caller who sets species after loading the model calls `sync_dose` once
     before the simulation: the initial assignment of `cum_dose_<s>` is
     evaluated when the model is loaded and reset, not when a caller writes a
@@ -260,11 +269,30 @@ def observer_objects(
     Returns:
         The parameters, the assignment rules, the rate rules and the initial
         assignments of the observers of every substance.
+
+    Note:
+        The layers are the ones whose species the model has: a model with
+        `cell_species=False` keeps the species of its cells in its cell model,
+        under the ids of that model, so the engine has no amount and no mean
+        of the cell layer to write and writes none.
+
+        A model with an external boundary (`FlowBoundary.EXTERNAL`, a
+        perfusion circuit) has no inflow and no outflow of its own: the
+        ledgers `cum_in_<s>` and `cum_out_<s>` and the residual `balance_<s>`
+        belong to the caller, which holds the two ends of the chain, and are
+        not written. `cum_consumed_<s>`, `cum_dose_<s>`, the amounts, the
+        means and `c_outflow_<s>` (the concentration of the blood leaving the
+        last zone, which needs no boundary) are written as always.
     """
     consumption = consumption or {}
     builder = ZonationBuilder(settings, substances, None)
     n = settings.n_zones
-    layers = builder.layers()
+    layers = [
+        layer
+        for layer in builder.layers()
+        if layer is not Layer.CELL or settings.cell_species
+    ]
+    closed = settings.boundary is FlowBoundary.OPEN
     carriers = builder.carriers()
     blood = ids.VASCULAR if ids.VASCULAR in layers else Layer.PLASMA
     first, last = ids.zone(1), ids.zone(n)
@@ -308,13 +336,29 @@ def observer_objects(
         out.parameters.append(p)
         out.rules.append(r)
 
+        influx = efflux = None
         if flowing:
-            influx = " + ".join(
-                f"{builder.carrier_flow(layer, first)} * {ids.species(s, layer, ids.INFLOW)}"
+            # the flux of the blood out of the last zone, and the flow which
+            # carries it: `blood` is the layer of the blood and stays it
+            flux_out = " + ".join(
+                f"{builder.carrier_flow(layer, last)} * {ids.species(s, layer, last)}"
                 for layer in carriers
             )
-            blood = " + ".join(
-                f"{builder.carrier_flow(layer, last)} * {ids.species(s, layer, last)}"
+            flow_out = " + ".join(
+                builder.carrier_flow(layer, last) for layer in carriers
+            )
+            p, r = observer(
+                outflow_concentration(s),
+                f"({flux_out}) / ({flow_out})",
+                U.mM,
+                f"{substance.name} in the blood leaving the organ (not the pericentral mean)",
+                SBO.MOLAR_CONCENTRATION_OF_AN_ENTITY,
+            )
+            out.parameters.append(p)
+            out.rules.append(r)
+        if flowing and closed:
+            influx = " + ".join(
+                f"{builder.carrier_flow(layer, first)} * {ids.species(s, layer, ids.INFLOW)}"
                 for layer in carriers
             )
             # the filtrate which a net filtration takes out of the space of
@@ -323,23 +367,10 @@ def observer_objects(
             # which draws water in there); it is not part of `c_outflow`,
             # which is the concentration of the blood
             lymph = builder.filtrate_efflux(substance)
-            efflux = blood if lymph is None else f"{blood} + {lymph}"
-            flow_out = " + ".join(
-                builder.carrier_flow(layer, last) for layer in carriers
-            )
-            p, r = observer(
-                outflow_concentration(s),
-                f"({blood}) / ({flow_out})",
-                U.mM,
-                f"{substance.name} in the blood leaving the organ (not the pericentral mean)",
-                SBO.MOLAR_CONCENTRATION_OF_AN_ENTITY,
-            )
-            out.parameters.append(p)
-            out.rules.append(r)
-        else:
-            influx = efflux = None
-        _ledger(out, "in", substance, influx)
-        _ledger(out, "out", substance, efflux)
+            efflux = flux_out if lymph is None else f"{flux_out} + {lymph}"
+        if closed:
+            _ledger(out, "in", substance, influx)
+            _ledger(out, "out", substance, efflux)
         _ledger(out, "consumed", substance, consumption.get(s))
         _ledger(
             out,
@@ -352,15 +383,16 @@ def observer_objects(
                 for k in range(1, n + 1)
             ),
         )
-        p, r = observer(
-            balance(s),
-            balance_expression(s, settings.bile is not None),
-            U.mmole,
-            f"mass balance residual of {substance.name} (0 if conserved)",
-            SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
-        )
-        out.parameters.append(p)
-        out.rules.append(r)
+        if closed:
+            p, r = observer(
+                balance(s),
+                balance_expression(s, settings.bile is not None),
+                U.mmole,
+                f"mass balance residual of {substance.name} (0 if conserved)",
+                SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+            )
+            out.parameters.append(p)
+            out.rules.append(r)
     return out
 
 

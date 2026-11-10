@@ -19,6 +19,7 @@ from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Value
 from pkpdsim.zonation import ZonationBuilder, ids, observers
+from pkpdsim.zonation.builder import effective_peclet
 from pkpdsim.zonation.flow import ImposedFlow, PressureFlow
 from pkpdsim.zonation.geometry import Layer
 from pkpdsim.zonation.observers import (
@@ -26,7 +27,13 @@ from pkpdsim.zonation.observers import (
     observer_objects,
     profile_ids,
 )
-from pkpdsim.zonation.settings import BileTransport, Geometry, ZonationSettings
+from pkpdsim.zonation.profiles import Weights
+from pkpdsim.zonation.settings import (
+    BileTransport,
+    FlowBoundary,
+    Geometry,
+    ZonationSettings,
+)
 from pkpdsim.zones import third_weights
 
 from .conftest import liver_flow, mass_g
@@ -691,3 +698,71 @@ def test_the_boundary_ledgers_integrate_the_flows_of_their_zones(
         print(f"Q_plasma z1 {first!r} z{n} {last!r}")
         if flow.p_onc is not None:
             assert first != pytest.approx(last, rel=1e-3, abs=0)
+
+
+# --- the boundary and the species the model has ------------------------------
+
+
+def _external(n: int = 4) -> ZonationSettings:
+    """The settings of a perfused organ: the caller supplies both ends."""
+    return _settings(
+        n,
+        geometry=Geometry.WELL_STIRRED,
+        bile=None,
+        boundary=FlowBoundary.EXTERNAL,
+        cell_species=False,
+    )
+
+
+def test_an_external_boundary_leaves_the_ledgers_of_the_ends_to_the_caller(
+    tmp_path: Path,
+) -> None:
+    """The settings of a perfused liver, which roadrunner refused before.
+
+    `cum_in_<s>` named `drg_vas_in`, a parameter an external boundary does not
+    emit, and the amount of the cell layer named species which
+    `cell_species=False` leaves to the cell model, so the model did not load
+    at all. What the engine can observe of such a chain it observes: the
+    means, the amounts of the layers it has, the concentration of the blood
+    leaving the last zone, the consumption and the dose.
+    """
+    settings = _external()
+    r = _runner(tmp_path, settings)
+    found = set(r.model.getGlobalParameterIds())
+    assert observers.ledger("in", "drg") not in found
+    assert observers.ledger("out", "drg") not in found
+    assert observers.balance("drg") not in found
+    assert observers.layer_amount("drg", Layer.CELL) not in found
+    assert observers.ledger("consumed", "drg") in found
+    assert observers.ledger("dose", "drg") in found
+    assert observers.outflow_concentration("drg") in found
+    assert observers.amount("drg") in found
+    assert observers.mean("drg", ids.VASCULAR, True, ids.VASCULAR) in found
+
+
+def test_the_amount_of_a_chain_without_cell_species_is_the_layers_it_has(
+    tmp_path: Path,
+) -> None:
+    """`amount_<s>` sums the layers of the model and no species of the cell model."""
+    settings = _external()
+    r = _runner(tmp_path, settings)
+    for k in range(1, settings.n_zones + 1):
+        r[f"[{ids.species('drg', ids.VASCULAR, ids.zone(k))}]"] = 2.0
+    expected = sum(
+        2.0 * r[ids.volume(ids.VASCULAR, ids.zone(k))]
+        for k in range(1, settings.n_zones + 1)
+    )
+    assert r[observers.amount("drg")] == pytest.approx(expected, rel=1e-12)
+
+
+def test_the_observers_of_a_profile_of_a_cell_process_are_built() -> None:
+    """A profile of a process of the cell model is the feature the engine exists for.
+
+    `observer_objects` and `effective_peclet` build a builder of their own to
+    read the layers and the velocity of the settings, which does not know the
+    processes of the cell model; both raised `ValueError` for a chain whose
+    settings carry such a profile, which is every perfused liver.
+    """
+    settings = _settings(4, profiles={"UPTAKE": Weights((1, 2, 3, 6))})
+    assert observer_objects(settings, [DRG]).parameters
+    assert effective_peclet(settings, 1e-9) > 0.0
