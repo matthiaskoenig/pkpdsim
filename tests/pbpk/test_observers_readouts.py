@@ -180,8 +180,9 @@ def test_an_observer_reads_an_amount_of_an_organ(tmp_path: Path) -> None:
     d = dataclasses.replace(d, chemistry=[*d.chemistry, _pool("Apool_drg")])
     path = build(d, tmp_path).flat_path
     model = _model(path)
-    # the units of the organs are prefixed in the flat model (`MU__mmole`)
-    assert model.getParameter(top).getUnits().split("__")[-1] == "mmole"
+    # the flat model defines every unit once, so the parameter of an organ names
+    # the unit of the model (`mmole`, not the copy `MU__mmole` of the flattening)
+    assert model.getParameter(top).getUnits() == "mmole"
     s = _simulate(path, ["Apool_mg", top, "MU__Apool_drg"])
     assert s[-1, 2] > 0
     np.testing.assert_allclose(s[:, 1], s[:, 2], rtol=1e-12, atol=0.0)

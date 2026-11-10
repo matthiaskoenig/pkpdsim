@@ -481,7 +481,7 @@ def test_first_order_per_volume_scales_with_the_organ(tmp_path: Path) -> None:
     assert r[ids.flat(Organ.KIDNEY, "KITR_k")] == 0.5
     doc = libsbml.readSBMLFromFile(str(path))
     k = doc.getModel().getParameter(ids.flat(Organ.KIDNEY, "KITR_k"))
-    assert k.getUnits().rsplit("__", 1)[-1] == "per_min"  # flat: `KI__per_min`
+    assert k.getUnits() == "per_min"  # the merged units of the flat model
     assert _kidney_influx(path) == pytest.approx(
         0.5 * _volume(path, Organ.KIDNEY), rel=1e-9
     )
