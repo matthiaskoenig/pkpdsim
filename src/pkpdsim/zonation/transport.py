@@ -88,6 +88,8 @@ __all__ = [
     "fenestral_permeability",
     "molecular_radius",
     "peclet",
+    "radius_ratio",
+    "reflection",
     "renkin",
 ]
 
@@ -276,6 +278,61 @@ def renkin(lambda_: float) -> float:
     return max(0.0, (1.0 - lambda_) ** 2 * poly)
 
 
+def reflection(lambda_: float) -> float:
+    """Get the reflection coefficient of the fenestrated endothelium for a solute.
+
+    `1 - renkin(lambda)` for the ratio `lambda` of the radius of the solute to
+    that of a fenestra: 0 for a solute the pore does not hinder (it is carried
+    with the filtered water), 1 for one which no longer fits (the water leaves
+    it behind). It is the factor `1 - sigma` of the solvent drag of the
+    convective flux through the fenestrae
+    (`ZonationBuilder.filtrate`).
+
+    The sieving coefficient of the **convection** is taken to be the hindrance
+    of the **diffusion**, the one Renkin ratio the fenestral permeability
+    already uses, so that one number describes the barrier: a solute which
+    cannot diffuse through a fenestra is not dragged through it either, and a
+    solute the pore does not hinder is dragged with the water. The two are not
+    the same quantity (the classical convective hindrance of a cylindrical
+    pore, `(1-lambda)^2 * (2 - (1-lambda)^2)` of the Ferry treatment, exceeds
+    the diffusive one between the limits), so the drag of a partly sieved
+    solute is the conservative choice; a model which knows the sieving
+    coefficient sets the parameter `sigma_<s>` of the built model.
+
+    Args:
+        lambda_: the ratio of the radius of the solute to that of the pore.
+
+    Returns:
+        The coefficient in [0, 1].
+
+    Raises:
+        ValueError: for a negative ratio, which is no radius.
+    """
+    return 1.0 - renkin(lambda_)
+
+
+def radius_ratio(radius: Value, geo: SinusoidGeometry) -> float:
+    """Get the ratio of the radius of a solute to that of a fenestra, `lambda`.
+
+    Args:
+        radius: the radius of the molecule (a length, converted to m).
+        geo: the geometry with the radius of a fenestra.
+
+    Returns:
+        The ratio, the argument of `renkin` and of `reflection`.
+
+    Raises:
+        ValueError: for a radius which is no length.
+    """
+    try:
+        r = radius.value * LENGTH_UNITS[unit_text(radius.unit)]
+    except KeyError:
+        raise ValueError(
+            f"A radius needs a length, got {unit_text(radius.unit)}."
+        ) from None
+    return r / geo.r_fen
+
+
 def fenestral_permeability(
     d_aq: Value, radius: Value, geo: SinusoidGeometry, porosity: float
 ) -> Value:
@@ -296,13 +353,7 @@ def fenestral_permeability(
     Raises:
         ValueError: for a radius which is no length.
     """
-    try:
-        r = radius.value * LENGTH_UNITS[unit_text(radius.unit)]
-    except KeyError:
-        raise ValueError(
-            f"A radius needs a length, got {unit_text(radius.unit)}."
-        ) from None
-    sieve = renkin(r / geo.r_fen)
+    sieve = renkin(radius_ratio(radius, geo))
     return Value(porosity * _as_m2_per_s(d_aq) / geo.t_endo * sieve, M_PER_S)
 
 

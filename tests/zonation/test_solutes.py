@@ -71,8 +71,20 @@ def test_a_bare_solute_has_a_species_in_every_layer_of_every_zone() -> None:
 def test_a_bare_solute_rides_the_chain_and_has_no_diffusion() -> None:
     reactions = _reactions(_Bare())
     assert "FLOW_o2_plasma_z1_plasma_z2" in reactions
-    assert not [r for r in reactions if r.startswith(("D_", "FEN_", "END_", "PS_"))]
-    assert not [p for p in _parameters(_Bare()) if p.startswith(("D_o2", "P_"))]
+    assert not [r for r in reactions if r.startswith(("D_", "FEN_"))]
+    assert not [p for p in _parameters(_Bare()) if p.startswith(("D_o2", "P_fen_"))]
+
+
+def test_a_bare_solute_reaches_the_cells_through_the_membrane_paths() -> None:
+    """The molar mass gates the fenestral path and no other one.
+
+    The radius of the molecule, which the molar mass gives, is what the pore
+    needs; the transcellular and the basolateral permeabilities are model
+    input in m/s, so a perfusate quantity without a molar mass has them and
+    can be let into the cells from outside.
+    """
+    assert {"END_o2_z1_in", "END_o2_z1_out", "PS_o2_z1"} <= _reactions(_Bare())
+    assert {"P_endo_in_o2", "P_endo_out_o2", "P_hep_o2"} <= _parameters(_Bare())
 
 
 def test_a_given_diffusion_without_a_molar_mass_diffuses_but_has_no_pore_path() -> None:

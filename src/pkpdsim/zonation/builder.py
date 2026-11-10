@@ -46,7 +46,10 @@ compartment. The zones are a chain from periportal to pericentral:
   `porosity` multiplies it). The transcellular paths are model input of a
   transporter set and not of the molar mass: `P_endo_in_<s>`, `P_endo_out_<s>`
   and `P_hep_<s>` (m/s of the lateral area) are 0, the path is off, until a
-  model sets them. The lateral areas `A_pd_<zone>` (lumen), `A_pe_<zone>` (abluminal face of the
+  model sets them. The molar mass gates the fenestral path alone, because it is
+  the radius of the molecule that it gives: a solute without one (a perfusate
+  quantity, oxygen) has the transcellular and the basolateral path and no
+  fenestral one. The lateral areas `A_pd_<zone>` (lumen), `A_pe_<zone>` (abluminal face of the
   endothelial cell, at `r_sin + t_endo`) and `A_dh_<zone>` follow the
   mass: `n_sin * pi * 2 * r_sin * dx` is `2 V_lumen / r_sin` of the zone
   (`n_sin * pi * r_sin**2 * L_sin` is the volume of the whole lumen) and the
@@ -1120,25 +1123,28 @@ class ZonationBuilder:
                 ),
             ]
         for substance in self.substances:
-            if substance.mr is None:
-                continue
             sid = substance.sid
-            fen = fenestral_permeability(
-                diffusion_of(substance), self._radius(substance), geo, 1.0
-            )
-            params.append(
-                Parameter(
-                    ids.permeability("fen", sid),
-                    fen.value,
-                    unit=M_PER_S,
-                    name=(
-                        f"permeability of {substance.name} through an open "
-                        "fenestra (the porosity of the zone scales it)"
-                    ),
-                    constant=True,
-                    sboTerm=_P,
+            # the molar mass gives the radius of the molecule, which the
+            # fenestral path needs and no other path does: a solute without one
+            # (a perfusate quantity) keeps the transcellular and the
+            # basolateral path, whose permeabilities are model input in m/s
+            if substance.mr is not None:
+                fen = fenestral_permeability(
+                    diffusion_of(substance), self._radius(substance), geo, 1.0
                 )
-            )
+                params.append(
+                    Parameter(
+                        ids.permeability("fen", sid),
+                        fen.value,
+                        unit=M_PER_S,
+                        name=(
+                            f"permeability of {substance.name} through an open "
+                            "fenestra (the porosity of the zone scales it)"
+                        ),
+                        constant=True,
+                        sboTerm=_P,
+                    )
+                )
             for path, text in (
                 ("endo_in", "the luminal membrane of the endothelial cell"),
                 ("endo_out", "the abluminal membrane of the endothelial cell"),
@@ -1235,7 +1241,9 @@ class ZonationBuilder:
             (plasma to the space of Disse through the fenestrae, the derived
             paracellular path `P_fen_<s> * eps_fen_<zone> * A_pd_<zone>`; none
             for a solute whose radius reaches the radius of a fenestra, which
-            has no fenestral flux by construction), `END_<s>_<zone>_in`
+            has no fenestral flux by construction, and none for a solute
+            without a molar mass, which has no radius to derive the path
+            from), `END_<s>_<zone>_in`
             (plasma to endothelial cell) and `END_<s>_<zone>_out` (endothelial
             cell to Disse, over the abluminal area `A_pe_<zone>`), with `P_endo_in_<s>` and `P_endo_out_<s>`, and
             `PS_<s>_<zone>` (Disse to hepatocyte, `P_hep_<s>` over the area
@@ -1267,11 +1275,13 @@ class ZonationBuilder:
         geo = self._geo()
         out: list[Reaction] = []
         for substance in self.substances:
-            if substance.mr is None:
-                continue
-            sieve = fenestral_permeability(
-                diffusion_of(substance), self._radius(substance), geo, 1.0
-            ).value
+            sieve = (
+                fenestral_permeability(
+                    diffusion_of(substance), self._radius(substance), geo, 1.0
+                ).value
+                if substance.mr is not None
+                else 0.0
+            )
             for k in range(1, self.settings.n_zones + 1):
                 zone = ids.zone(k)
 

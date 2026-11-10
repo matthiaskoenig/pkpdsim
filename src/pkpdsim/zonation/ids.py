@@ -62,6 +62,7 @@ __all__ = [
     "area",
     "axial",
     "exchange",
+    "filtrate_flow",
     "flat",
     "flow",
     "fraction",
@@ -72,6 +73,7 @@ __all__ = [
     "porosity",
     "position",
     "profile",
+    "reflection",
     "sinusoid_flow",
     "site",
     "species",
@@ -289,6 +291,17 @@ def sinusoid_flow(zone: str) -> str:
     return f"Q_sin_{zone}"
 
 
+def filtrate_flow(zone: str) -> str:
+    """Get the filtrate flow the space of Disse carries out of a zone, `Q_fil_<zone>` (l/min).
+
+    The water which has left the lumen through the fenestrae up to the
+    pericentral face of the zone, `Q_plasma_li_z1 - Q_plasma_li_<zone>` of a
+    pressure-driven sinusoid: it flows along the space of Disse and is
+    reabsorbed where the lumen regains flow.
+    """
+    return f"Q_fil_{zone}"
+
+
 def flow(quantity: str, source: str, target: str) -> str:
     """Get the reaction of the flow of a quantity between two sites.
 
@@ -337,12 +350,23 @@ def permeability(path: str, quantity: str) -> str:
     return f"P_{path}_{quantity}"
 
 
+def reflection(quantity: str) -> str:
+    """Get the id of the reflection coefficient of the endothelium, `sigma_<q>`.
+
+    The fraction of a solute which the filtered water leaves behind in the
+    lumen; `1 - sigma` is dragged into the space of Disse with it
+    (`pkpdsim.zonation.transport.reflection`).
+    """
+    return f"sigma_{quantity}"
+
+
 def exchange(kind: str, quantity: str, zone: str, suffix: str = "") -> str:
     """Get the id of a radial exchange reaction, `<kind>_<q>_<zone>[_<suffix>]`.
 
     The kinds are `FEN` (plasma to Disse through the fenestrae), `END` (plasma to
-    endothelial cell to Disse; the suffix `in` or `out`) and `PS` (Disse to
-    hepatocyte).
+    endothelial cell to Disse; the suffix `in` or `out`), `PS` (Disse to
+    hepatocyte), `SD` (the solvent drag of the filtered water, plasma to Disse)
+    and `RBC` (plasma to erythrocytes).
     """
     base = f"{kind}_{quantity}_{zone}"
     return f"{base}_{suffix}" if suffix else base
