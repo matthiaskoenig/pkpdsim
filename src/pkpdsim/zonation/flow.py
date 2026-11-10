@@ -63,16 +63,20 @@ the first half of the tube and is reabsorbed in the second. This is the
 signature of `P0` and no defect.
 
 **The resistance factor is calibrated.** `nu = resistance_factor * viscosity`
-and the default factor is derived per species so that the periportal inflow at
-the default pressures is the reference flow of the settings
-(`ZonationSettings.reference_flow`, which the PBPK library fills with the
-total liver flow of its reference individual,
+and the default factor is derived per species so that the periportal inflow of
+the **reference** liver at the default pressures is the reference flow of the
+settings (`ZonationSettings.reference_flow`, which the PBPK library fills with
+the total liver flow of its reference individual,
 `pkpdsim.pbpk.physiology.reference_flow`), the flow an imposed flow
 takes by default: switching between the two modes does not change the flow
-the organ receives. The 10 of the spt model gives about five times that flow
-for the rat. The guarantee holds at the default pressures, `p_onc`, viscosity
-and the table geometry; the factor is calibrated at those and does not follow a
-change of them.
+the organ receives. Both modes follow the liver mass from there - the pressure
+flow because the number of sinusoids in parallel does
+(`sinusoid_count`), the imposed one because it scales the reference flow with
+`mass / reference_liver_mass` (`imposed_flow`) - so they agree at every liver
+mass and not only at the reference one. The 10 of the spt model gives about
+five times that flow for the rat. The guarantee holds at the default pressures,
+`p_onc`, viscosity and the table geometry; the factor is calibrated at those
+and does not follow a change of them.
 
 **The inflow is calibrated, the mean flow is lower.** The target is the
 periportal inflow, what the portal vein and the hepatic artery deliver. `Q_li`,
@@ -106,6 +110,8 @@ from pkpdsim.zonation.geometry import (
     Layer,
     SinusoidGeometry,
     fractions,
+    mass_kg,
+    porosities,
     reference_liver_mass,
     sinusoid_count,
 )
@@ -255,20 +261,28 @@ def _converted(q: Q, table: dict[str, float], what: str) -> float:
         ) from None
 
 
-def _mass_kg(mass: Q) -> float:
-    """The mass of the liver in kg."""
-    return _converted(mass, {"g": 1e-3, "kg": 1.0, "mg": 1e-6}, "liver mass")
-
-
-def imposed_flow(flow: ImposedFlow, reference: Value | None, mass_kg: float) -> float:
+def imposed_flow(
+    flow: ImposedFlow, reference: Value | None, mass: float, reference_mass: float
+) -> float:
     """Get an imposed flow of the liver in l/min.
+
+    A flow which takes the reference flow of the settings is scaled with the
+    liver mass, `reference * mass / reference_mass`: the reference flow is
+    the flow of the reference liver of the species, and a liver of another
+    mass receives its share of it, as a flow per mass does and as the flow of
+    a `PressureFlow` does (its sinusoid count follows the mass). The two
+    modes therefore give the same flow at every liver mass and not only at
+    the reference one.
 
     Args:
         flow: the imposed flow.
         reference: the reference flow of the organ
             (`ZonationSettings.reference_flow`), which a flow without a value
             and without a flow per mass takes; `None` for none.
-        mass_kg: the mass of the liver (kg).
+        mass: the mass of the liver (kg).
+        reference_mass: the mass of the reference liver of the species (kg,
+            `geometry.reference_liver_mass`), which the reference flow belongs
+            to.
 
     Returns:
         The flow (l/min), as given, not checked for its sign.
@@ -283,13 +297,14 @@ def imposed_flow(flow: ImposedFlow, reference: Value | None, mass_kg: float) -> 
             raise ValueError(
                 "A flow per mass needs a unit (ml/min/g, l/min/kg or ml/min/kg)."
             )
-        return mass_kg * _converted(
+        return mass * _converted(
             flow.per_mass, _PER_MASS_TO_L_PER_MIN_KG, "flow per mass"
         )
     if flow.value is None:
         if reference is None:
             raise ValueError(_NO_REFERENCE)
-        return _converted(reference, _FLOW_TO_L_PER_MIN, "reference flow")
+        q = _converted(reference, _FLOW_TO_L_PER_MIN, "reference flow")
+        return q * mass / reference_mass
     if number(flow.value) is None:
         raise ValueError(
             "The imposed flow needs a number, not a formula: a flow computed from "
@@ -375,7 +390,9 @@ def fenestra_counts(geo: SinusoidGeometry, n_zones: int) -> tuple[float, ...]:
 
     The porosity of the zone over the area of a fenestra, `eps / (pi r_fen**2)`:
     the porosity of the table, interpolated over the positions of the zones,
-    is the one number of the endothelium (see the module docstring).
+    is the one number of the endothelium (see the module docstring). The
+    gradient itself is `geometry.porosities`, the one the barrier reads, so
+    the hydraulics and the sieving cannot drift apart.
 
     Args:
         geo: the geometry.
@@ -385,10 +402,7 @@ def fenestra_counts(geo: SinusoidGeometry, n_zones: int) -> tuple[float, ...]:
         The counts from periportal to pericentral.
     """
     area = math.pi * geo.r_fen**2
-    return tuple(
-        (geo.porosity_pp + (geo.porosity_pc - geo.porosity_pp) * x) / area
-        for x in zone_positions(n_zones)
-    )
+    return tuple(eps / area for eps in porosities(n_zones, geo))
 
 
 def _mean_porosity(geo: SinusoidGeometry) -> float:
@@ -599,7 +613,12 @@ def flow_objects(
     """
     flow = settings.flow
     if isinstance(flow, ImposedFlow):
-        q = imposed_flow(flow, settings.reference_flow, _mass_kg(mass))
+        q = imposed_flow(
+            flow,
+            settings.reference_flow,
+            mass_kg(mass),
+            reference_liver_mass(settings.species).value,
+        )
         if q < 0.0:
             raise ValueError(
                 f"The imposed flow {q} l/min is negative: it would run the "

@@ -36,7 +36,11 @@ from pkpdsim.zonation.flow import (
     resolved_resistance_factor,
     zone_flows,
 )
-from pkpdsim.zonation.geometry import SinusoidGeometry, geometry
+from pkpdsim.zonation.geometry import (
+    SinusoidGeometry,
+    geometry,
+    reference_liver_mass,
+)
 from pkpdsim.zonation.profiles import Linear, zone_positions
 from pkpdsim.zonation.settings import ZonationSettings
 
@@ -414,23 +418,31 @@ def _inflow(r: roadrunner.RoadRunner) -> float:
 
 
 @pytest.mark.parametrize("species", [Species.RAT, Species.HUMAN])
+@pytest.mark.parametrize("factor", [1.0, 0.5, 3.0], ids=["reference", "half", "triple"])
 def test_both_flow_modes_agree_at_their_defaults(
-    species: Species, tmp_path: Path
+    species: Species, factor: float, tmp_path: Path
 ) -> None:
-    """The periportal inflow of a default pressure flow is the default imposed flow."""
+    """The periportal inflow of a default pressure flow is the default imposed flow.
+
+    At every liver mass and not only at the reference one: the sinusoids of
+    the pressure flow follow the mass of the liver, and the imposed flow
+    scales the reference flow of the species with it.
+    """
+    mass = Value(reference_liver_mass(species).value * factor, U.kg)
     outputs = {}
     for name, flow in (("pressure", PressureFlow()), ("imposed", ImposedFlow())):
         settings = ZonationSettings(
             n_zones=_N,
             flow=flow,
             species=species,
+            liver_mass=mass,
             reference_flow=reference_flow(species),
         )
         model = ZonationBuilder(settings, [TRACER], None).build()
         path = tmp_path / f"{name}.xml"
         create_model(model, filepath=path, sbml_level=3, sbml_version=2, validate=False)
         outputs[name] = roadrunner.RoadRunner(str(path))
-    expected = reference_flow(species).value
+    expected = reference_flow(species).value * factor
     assert outputs["imposed"][ids.FLOW] == _eq(expected, 1e-12)
     assert _inflow(outputs["pressure"]) == _eq(expected, 1e-9)
 

@@ -180,6 +180,6 @@ def test_a_liver_mass_in_another_mass_unit_is_converted() -> None:
 
 
 def test_a_liver_mass_without_a_mass_unit_raises() -> None:
-    """The unit is named in the error."""
-    with pytest.raises(ValueError, match="needs a mass"):
+    """The unit is named in the error, the one message of the engine."""
+    with pytest.raises(ValueError, match="has the unit litre, not one of"):
         _compartments(liver_mass=Value(1.0, U.litre))

@@ -79,7 +79,7 @@ from pkpdsim.database.tables import entry
 from pkpdsim.sbml.annotation import TAXA, initial_assignment
 from pkpdsim.sbml.parameters import value_parameter
 from pkpdsim.sbml.units import MODEL_UNITS, OrganUnits, U
-from pkpdsim.sbml.values import Value, number
+from pkpdsim.sbml.values import Value
 from pkpdsim.zonation import ids
 from pkpdsim.zonation.flow import (
     M3_PER_S,
@@ -101,6 +101,7 @@ from pkpdsim.zonation.geometry import (
     fractions,
     geometry,
     layer_volumes,
+    mass_kg,
     porosities,
     reference_liver_mass,
 )
@@ -150,7 +151,6 @@ CANALICULAR_DIFFUSION = "canalicular_diffusion"
 _CARRIERS = (Layer.RBC, Layer.PLASMA)
 _DIFFUSING = (Layer.PLASMA, Layer.DISSE)
 
-_MASS_TO_KG = {"g": 1e-3, "kg": 1.0, "mg": 1e-6}
 _VASCULAR = (Layer.RBC, Layer.PLASMA, Layer.ENDOTHELIUM, Layer.DISSE)
 
 
@@ -320,19 +320,14 @@ class ZonationBuilder:
         return out
 
     def _mass(self) -> Value:
-        """The liver mass, in kg."""
+        """The liver mass, in kg (`geometry.mass_kg` converts it).
+
+        Raises:
+            ValueError: for a mass whose unit is no mass.
+        """
         mass = self.settings.liver_mass
         if mass is not None:
-            unit = getattr(mass.unit, "sid", mass.unit)
-            value = number(mass)
-            assert value is not None
-            try:
-                factor = _MASS_TO_KG[str(unit)]
-            except KeyError:
-                raise ValueError(
-                    f"A liver mass needs a mass in {sorted(_MASS_TO_KG)}, got {unit}."
-                ) from None
-            return Value(value * factor, U.kg, mass.source, mass.notes)
+            return Value(mass_kg(mass), U.kg, mass.source, mass.notes)
         section = "male.organs.li"
         table = f"physiology_{self.settings.species}"
         e = entry(table, section, "mass")
@@ -437,7 +432,12 @@ class ZonationBuilder:
         if isinstance(flow, PressureFlow):
             flows = self._zone_flows()
             return sum(flows) / len(flows)
-        q = imposed_flow(flow, self.settings.reference_flow, self._mass().value)
+        q = imposed_flow(
+            flow,
+            self.settings.reference_flow,
+            self._mass().value,
+            reference_liver_mass(self.settings.species).value,
+        )
         if q < 0.0:
             raise ValueError(
                 f"The imposed flow {q} l/min is negative: it would run the "

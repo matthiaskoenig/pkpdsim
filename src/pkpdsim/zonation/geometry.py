@@ -16,7 +16,7 @@ from sbmlutils.factory.units import UnitDefinition
 
 from pkpdsim.database.tables import entry
 from pkpdsim.sbml.units import U
-from pkpdsim.sbml.values import Q, Value, number
+from pkpdsim.sbml.values import Q, Value, number, unit_text
 from pkpdsim.species import Species
 from pkpdsim.zonation.profiles import zone_positions
 
@@ -28,6 +28,7 @@ __all__ = [
     "fractions",
     "geometry",
     "layer_volumes",
+    "mass_kg",
     "porosities",
     "reference_liver_mass",
     "sinusoid_count",
@@ -45,7 +46,7 @@ _TABLE_UNITS: dict[str, UnitDefinition] = {
 """The unit definitions of the units of the zonation table."""
 
 _MASS_TO_KG: dict[str, float] = {"g": 1e-3, "kg": 1.0, "mg": 1e-6}
-"""The mass units a liver mass may have, in kg."""
+"""The mass units a liver mass may have, in kg (`mass_kg`)."""
 
 
 class Layer(StrEnum):
@@ -239,20 +240,44 @@ def geometry(species: Species) -> SinusoidGeometry:
     )
 
 
-def _parenchyma_litre(mass: Q, geo: SinusoidGeometry) -> float:
-    """The volume of the parenchyma (l) of a liver mass."""
+def mass_kg(mass: Q) -> float:
+    """Get the mass of an organ in kg, the one conversion of the engine.
+
+    The engine reads a liver mass in one place, so that a mass in an unexpected
+    unit is refused with one message wherever it enters (the volumes of the
+    layers, the number of sinusoids, the flow of the chain).
+
+    Args:
+        mass: the mass, a `Value` in g, kg or mg.
+
+    Returns:
+        The mass in kg.
+
+    Raises:
+        TypeError: for a mass without a unit or without a number.
+        ValueError: for a mass whose unit is no mass of `_MASS_TO_KG`.
+    """
     if not isinstance(mass, Value):
-        raise TypeError("The liver mass needs a unit: a Value in g, kg or mg.")
-    unit = getattr(mass.unit, "sid", mass.unit)
+        raise TypeError(
+            f"The liver mass needs a unit: a Value in {sorted(_MASS_TO_KG)}, "
+            f"not {mass!r}."
+        )
+    unit = unit_text(mass.unit)
     try:
-        to_kg = _MASS_TO_KG[str(unit)]
+        to_kg = _MASS_TO_KG[unit]
     except KeyError:
         raise ValueError(
-            f"The liver mass has the unit {unit}, not g, kg or mg."
+            f"The liver mass has the unit {unit}, not one of {sorted(_MASS_TO_KG)}."
         ) from None
     m = number(mass)
-    assert m is not None
-    return geo.f_par * m * to_kg / geo.density
+    if m is None:
+        raise TypeError(f"The liver mass needs a number, not a formula: {mass!r}.")
+    return m * to_kg
+
+
+def _parenchyma_litre(mass: Q, geo: SinusoidGeometry) -> float:
+    """The volume of the parenchyma (l) of a liver mass."""
+    return geo.f_par * mass_kg(mass) / geo.density
 
 
 def layer_volumes(
