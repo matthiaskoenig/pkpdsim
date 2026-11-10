@@ -67,6 +67,8 @@ __all__ = [
     "flow",
     "fraction",
     "is_zone",
+    "kbc",
+    "kbc_exchange",
     "layer_flow",
     "meta_id",
     "permeability",
@@ -348,6 +350,24 @@ def permeability(path: str, quantity: str) -> str:
     and `hep` (the basolateral membrane of the hepatocyte).
     """
     return f"P_{path}_{quantity}"
+
+
+def kbc(quantity: str) -> str:
+    """Get the id of the erythrocyte to plasma coefficient, `Kbc_<q>`.
+
+    The id of the PBPK library (`pkpdsim.pbpk.ids.kbc`): the concentration of
+    the erythrocytes over the one of the plasma at equilibrium.
+    """
+    return f"Kbc_{quantity}"
+
+
+def kbc_exchange(quantity: str) -> str:
+    """Get the id of the exchange rate of the erythrocytes, `kex_bc_<q>` (1/min).
+
+    The id of the PBPK library (`pkpdsim.pbpk.ids.kbc_exchange`): the rate of
+    `kex_bc_<q> * V_rbc_<zone> * (c_plasma - c_rbc / Kbc_<q>)`.
+    """
+    return f"kex_bc_{quantity}"
 
 
 def reflection(quantity: str) -> str:

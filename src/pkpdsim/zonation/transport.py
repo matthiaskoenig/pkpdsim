@@ -55,6 +55,11 @@ generally assumed.
 
 The sieving of the fenestrae is the Renkin 1954 (J Gen Physiol 38:225)
 partition and hindrance of a spherical solute in a cylindrical pore.
+
+The distribution into the erythrocytes is no correlation but the vocabulary of
+the PBPK library, read structurally (`ErythrocyteDistribution`,
+`erythrocytes_of`, `blood_cell_coefficient`): the two modes are the library's
+and so are the parameters of the built model, `Kbc_<s>` and `kex_bc_<s>`.
 """
 
 import math
@@ -77,14 +82,18 @@ __all__ = [
     "L_PER_M3",
     "M2_PER_S",
     "M_PER_S",
+    "ErythrocyteDistribution",
+    "Partitioned",
     "Solute",
     "aqueous_diffusion",
     "axial_velocity",
+    "blood_cell_coefficient",
     "cytosolic_diffusion",
     "diffuses",
     "diffusion_of",
     "diffusion_parameter",
     "dispersion",
+    "erythrocytes_of",
     "fenestral_permeability",
     "molecular_radius",
     "peclet",
@@ -368,6 +377,64 @@ def _as_m2_per_s(d: Value) -> float:
 
 
 @runtime_checkable
+class ErythrocyteDistribution(Protocol):
+    """How a solute distributes into the erythrocytes, the two modes of the libraries.
+
+    The protocol of `pkpdsim.pbpk.substance.Erythrocytes`, which satisfies it:
+    the engine reads it structurally because the PBPK library imports the
+    engine and not the other way round, and the two describe erythrocytes with
+    one vocabulary (the ids `Kbc_<s>` and `kex_bc_<s>` of the built model are
+    the library's as well).
+
+    Attributes:
+        mode: `equilibrium` (the erythrocytes follow the plasma
+            instantaneously, given by `bp` or `kbc`) or `kinetic` (the
+            exchange has the rate `k_exchange`).
+        bp: the blood to plasma ratio (equilibrium), `BP = 1 - Hct + Hct*Kbc`
+            at the haematocrit it was measured at.
+        kbc: the erythrocyte to plasma coefficient (either mode).
+        k_exchange: the exchange rate between the plasma and the erythrocytes
+            (kinetic, 1/min).
+    """
+
+    @property
+    def mode(self) -> str:
+        """The mode, `equilibrium` or `kinetic`."""
+        ...
+
+    @property
+    def bp(self) -> Q | None:
+        """The blood to plasma ratio."""
+        ...
+
+    @property
+    def kbc(self) -> Q | None:
+        """The erythrocyte to plasma coefficient."""
+        ...
+
+    @property
+    def k_exchange(self) -> Q | None:
+        """The exchange rate (1/min)."""
+        ...
+
+
+@runtime_checkable
+class Partitioned(Protocol):
+    """A solute which states how it distributes into the erythrocytes.
+
+    A `pkpdsim.pbpk.substance.Substance` satisfies it; a perfusate quantity
+    of a machine perfusion, which has no erythrocytes to distribute into,
+    does not have the attribute at all, which is why this is a protocol of
+    its own and not a member of `Solute` (`erythrocytes_of` reads either).
+    """
+
+    @property
+    def erythrocytes(self) -> ErythrocyteDistribution | None:
+        """The distribution into the erythrocytes, `None` for none."""
+        ...
+
+
+@runtime_checkable
 class Solute(Protocol):
     """What rides the chain of zones: an id and a name, nothing more is needed.
 
@@ -405,6 +472,74 @@ class Solute(Protocol):
     def diffusion(self) -> Value | None:
         """The aqueous diffusion coefficient."""
         ...
+
+
+def erythrocytes_of(substance: Solute) -> ErythrocyteDistribution | None:
+    """Get the erythrocyte distribution of a solute, `None` for a solute without one.
+
+    Args:
+        substance: the solute, which states its erythrocytes or does not have
+            the attribute.
+
+    Returns:
+        The distribution, `None` for a solute which does not distribute into
+        the erythrocytes (and for one which does not know the attribute): its
+        erythrocyte species exchanges with nothing and carries what a caller
+        puts into it.
+    """
+    if isinstance(substance, Partitioned):
+        return substance.erythrocytes
+    return None
+
+
+def blood_cell_coefficient(ery: ErythrocyteDistribution, haematocrit: float) -> float:
+    """Get the erythrocyte to plasma coefficient of a distribution, `Kbc`.
+
+    `kbc` where the distribution gives it, else inverted from the blood to
+    plasma ratio at the haematocrit, `Kbc = (BP - 1 + Hct)/Hct`, which is the
+    relation `BP = 1 - Hct + Hct*Kbc` of `pkpdsim.pbpk.kp.blood_to_plasma`
+    read the other way: the engine needs the concentration of the
+    erythrocytes, the ratio of the whole blood is what a study measures.
+
+    Args:
+        ery: the distribution.
+        haematocrit: the haematocrit of the lumen, above 0 (a `bp` cannot be
+            inverted without erythrocytes).
+
+    Returns:
+        The coefficient.
+
+    Raises:
+        ValueError: for a distribution which gives neither `kbc` nor `bp`, for
+            a `bp` at a haematocrit of 0, for a `bp` below `1 - Hct` (which
+            would need a negative amount in the erythrocytes) and for a value
+            which is a formula and has no number.
+    """
+    kbc = number(ery.kbc)
+    if kbc is not None:
+        if kbc <= 0.0:
+            raise ValueError(f"The coefficient kbc must be positive, got {kbc}.")
+        return kbc
+    bp = number(ery.bp)
+    if bp is None:
+        raise ValueError(
+            "The erythrocytes give neither kbc nor bp as a number: the engine "
+            "has no coefficient of the erythrocytes to the plasma."
+        )
+    if haematocrit <= 0.0:
+        raise ValueError(
+            f"The blood to plasma ratio {bp} cannot be inverted at a "
+            "haematocrit of 0: without erythrocytes the blood is the plasma."
+        )
+    kbc = (bp - 1.0 + haematocrit) / haematocrit
+    if kbc <= 0.0:
+        raise ValueError(
+            f"The blood to plasma ratio {bp} lies at or below 1 - Hct = "
+            f"{1.0 - haematocrit:g}, which needs an erythrocyte concentration "
+            "of 0 or less: give kbc instead, or the ratio at the haematocrit "
+            "of the model."
+        )
+    return kbc
 
 
 def diffuses(substance: Solute) -> bool:

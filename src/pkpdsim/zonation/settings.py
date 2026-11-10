@@ -56,8 +56,15 @@ class ZonationSettings:
         flow: how the flow through the sinusoids is given.
         bile: the transport in the bile canaliculus; `None` omits the bile
             compartment in both geometries.
-        haematocrit: the haematocrit of the lumen; `None` takes the one of the
-            species, 0 leaves out the erythrocyte layer.
+        haematocrit: the haematocrit of the lumen entering the chain; `None`
+            takes the one of the species, 0 leaves out the erythrocyte layer.
+            The erythrocytes of a substance exchange with its plasma when the
+            substance states how it distributes into them
+            (`pkpdsim.pbpk.substance.Substance.erythrocytes`, read as
+            `pkpdsim.zonation.transport.ErythrocyteDistribution`); a substance
+            which states none keeps an erythrocyte species which exchanges
+            with nothing and carries what a caller puts into it, the behaviour
+            of every substance before the exchange existed.
         profiles: the zonal profile of a process by the name of the process.
         species: the species of the geometry and of the reference liver.
         liver_mass: the liver mass (kg, g or mg); `None` takes the reference

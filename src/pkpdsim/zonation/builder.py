@@ -64,15 +64,29 @@ compartment. The zones are a chain from periportal to pericentral:
   is reabsorbed where the lumen regains flow. The water is conserved term by
   term, so a freely sieved solute keeps the concentration of the inflow through
   the whole chain and a solute no fenestra lets through is enriched by
-  `Q(z1)/Q(z<k>)`, which is the physics of the two. The transmural flux is that
-  of the plasma conduit, `Q_plasma_li_<z<k-1>> - Q_plasma_li_<z<k>>`: the
-  erythrocytes do not pass a fenestra. The haematocrit of the lumen is a
-  constant of the build, so the erythrocyte conduit of a pressure flow loses
-  its share of the flow where the plasma filters, with nowhere for it to go,
-  and a substance in the erythrocytes is enriched by `Q(z1)/Q(z<k>)` there; a
-  model whose solute distributes into the erythrocytes and which needs the
-  interior concentrations of a pressure-driven chain should run it at a
-  haematocrit of 0 until the conduit follows the plasma it loses.
+  `Q(z1)/Q(z<k>)`, which is the physics of the two. The transmural flux is the
+  leak of the lumen, `Q_li_<z<k-1>> - Q_li_<z<k>>`: an erythrocyte does not
+  pass a fenestra, so the whole leak of the tube is the plasma's. The
+  erythrocytes therefore keep their flow, the share `Hct` of the blood which
+  enters the chain, in every zone (`Q_rbc_li_<zone>`), and the plasma carries
+  the rest of the local flow of the tube (`Q_plasma_li_<zone> = Q_li_<zone> -
+  Hct * Q_li_z1`); the three add up to the inflow in every zone. The static
+  haematocrit, the ratio of the two volumes, stays the one of the inflow while
+  the flow haematocrit rises towards the pericentral end: the engine does not
+  zone the volumes of the two conduits.
+
+- the exchange of the plasma with the erythrocytes (`erythrocyte_exchange`,
+  sinusoid geometry at a haematocrit above 0): `RBC_<s>_<zone>`,
+  `kex_bc_<s> * V_rbc_<zone> * (c_plasma - c_rbc / Kbc_<s>)` of every
+  substance which states its distribution into the erythrocytes, the rate law
+  and the parameters of the PBPK library. A substance in equilibrium gets a
+  rate which is fast against the transit of a zone (`EQUILIBRATION`) and the
+  inflow of its erythrocytes follows that of its plasma; a kinetic one gets
+  its own rate and keeps its own boundary. The chain then carries the blood
+  concentration of the library, `Q * BP * c_plasma` with
+  `BP = 1 - Hct + Hct*Kbc`, as the sum of its two conduits. A substance which
+  states no distribution keeps an erythrocyte species which exchanges with
+  nothing and carries what a caller puts into it.
 
 A flow of 0 and a diffusion of 0 emit no reaction, so the chain is closed or
 has no diffusion by construction (a solute larger than a fenestra has no fenestral
@@ -100,7 +114,7 @@ from pkpdsim.database.tables import entry
 from pkpdsim.sbml.annotation import TAXA, initial_assignment
 from pkpdsim.sbml.parameters import value_parameter
 from pkpdsim.sbml.units import MODEL_UNITS, OrganUnits, U
-from pkpdsim.sbml.values import Value
+from pkpdsim.sbml.values import Value, check_unit, number
 from pkpdsim.zonation import ids
 from pkpdsim.zonation.flow import (
     M3_PER_S,
@@ -138,12 +152,15 @@ from pkpdsim.zonation.transport import (
     L_PER_M3,
     M2_PER_S,
     M_PER_S,
+    ErythrocyteDistribution,
     Solute,
     axial_velocity,
+    blood_cell_coefficient,
     diffuses,
     diffusion_of,
     diffusion_parameter,
     dispersion,
+    erythrocytes_of,
     fenestral_permeability,
     molecular_radius,
     peclet,
@@ -170,6 +187,22 @@ CANALICULAR_FLOW = "canalicular_flow"
 
 CANALICULAR_DIFFUSION = "canalicular_diffusion"
 """The process of the diffusion along the canaliculus (diffusive bile)."""
+
+EQUILIBRATION = 100.0
+"""How much faster than the transit of a zone the erythrocytes of a substance
+in equilibrium exchange with the plasma.
+
+The mode `equilibrium` of an erythrocyte distribution states that the
+erythrocytes follow the plasma instantaneously. The engine has an erythrocyte
+species per zone, because the haematocrit splits the lumen into two conduits,
+so it cannot collapse the two into one and realizes the equilibrium as an
+exchange which is fast against the residence time of the blood in a zone: the
+relaxation of the difference `c_plasma - c_rbc/Kbc` has the rate
+`kex_bc * (V_rbc/V_plasma + 1/Kbc)`, and `kex_bc` is chosen so that this rate
+is `EQUILIBRATION` times the reciprocal of the shortest residence time of a
+zone. A factor of 100 leaves the erythrocytes of a zone within about 1 % of
+their equilibrium; a model which wants the departure itself states the mode
+`kinetic` and its rate."""
 
 _CARRIERS = (Layer.RBC, Layer.PLASMA)
 _DIFFUSING = (Layer.PLASMA, Layer.DISSE)
@@ -474,10 +507,66 @@ class ZonationBuilder:
         return zone_flows(self.settings, self._geo(), self._mass())
 
     def _haematocrit(self) -> float:
-        """The haematocrit of the lumen, 0 without an erythrocyte layer."""
+        """The haematocrit of the lumen entering the chain, 0 without an erythrocyte layer.
+
+        The volume fractions of the two conduits give it. It is the
+        haematocrit of the blood which enters the first zone: the plasma of a
+        pressure-driven sinusoid filters out along the lobule and the
+        erythrocytes do not, so the flow haematocrit rises towards the
+        pericentral end (`_plasma_flows`) while the static one, the ratio of
+        the two volumes, is this number in every zone.
+        """
         fr = self._full_fractions()
         rbc = fr.get(Layer.RBC, 0.0)
         return rbc / (rbc + fr[Layer.PLASMA])
+
+    def _blood_flows(self) -> tuple[float, ...]:
+        """The blood flow of the lumen (l/min) at every zone.
+
+        The flow of the position of the zone for a pressure flow, the one
+        imposed flow in every zone otherwise.
+        """
+        if isinstance(self.settings.flow, PressureFlow):
+            return self._zone_flows()
+        return (self._flow(),) * self.settings.n_zones
+
+    def _erythrocyte_flow(self) -> float:
+        """The flow of the erythrocytes (l/min), the same in every zone.
+
+        An erythrocyte does not pass a fenestra, so the erythrocyte conduit
+        neither loses nor gains water along the sinusoid: its flow is the
+        share `Hct` of the blood which enters the chain, in every zone. The
+        plasma carries the whole leak of the leaky tube, which is what makes
+        the chain conservative; the share `Hct` of the local flow, which the
+        engine carried before, let the erythrocytes lose water to nowhere and
+        enriched a solute in them by `Q(z1)/Q(z<k>)`.
+        """
+        return self._haematocrit() * self._blood_flows()[0]
+
+    def _plasma_flows(self) -> tuple[float, ...]:
+        """The flow of the plasma (l/min) at every zone.
+
+        The lumen of a zone carries the flow of the leaky tube at its
+        position, of which the erythrocytes carry a constant share, so the
+        plasma carries the rest: `Q_li_<zone> - Hct * Q_li_z1`. The three
+        add up to the inflow in every zone, with the filtrate of the space of
+        Disse (`_filtrate_flows`), so no water is lost.
+
+        Raises:
+            ValueError: for a flow which leaves the plasma conduit nothing:
+                the tube would filter more plasma than enters it.
+        """
+        rbc = self._erythrocyte_flow()
+        flows = tuple(q - rbc for q in self._blood_flows())
+        if min(flows) <= 0.0 < self._blood_flows()[0]:
+            raise ValueError(
+                f"The flow of the lumen falls to {min(self._blood_flows()):.3g} "
+                f"l/min, at or below the flow of the erythrocytes {rbc:.3g} "
+                f"l/min (a haematocrit of {self._haematocrit():g}): the "
+                "sinusoid would filter more plasma than enters it. Lower the "
+                "haematocrit or the pressure drop across the endothelium."
+            )
+        return flows
 
     def velocity(self) -> float:
         """The velocity (m/s) of the blood in the sinusoid, 0 without a flow."""
@@ -604,7 +693,8 @@ class ZonationBuilder:
         """The flow of the liver, its split between the carriers, the boundary.
 
         A pressure flow adds the leaky tube and the flow of every zone
-        (`flow_objects`), and the carriers split the flow of each zone. The
+        (`flow_objects`), and the carriers split the flow of each zone
+        (`_carrier_flows`). The
         flow chain (the flow of a zone, of a carrier) is assignment rules, so a
         change of the flow of the liver reaches all of it at any time.
         """
@@ -613,7 +703,6 @@ class ZonationBuilder:
         params = [o for o in objects if isinstance(o, Parameter)]
         assignments = [o for o in objects if isinstance(o, InitialAssignment)]
         rules = [o for o in objects if isinstance(o, AssignmentRule)]
-        pressure = isinstance(self.settings.flow, PressureFlow)
         if self.settings.geometry is Geometry.SINUSOID:
             params.append(
                 value_parameter(
@@ -624,29 +713,17 @@ class ZonationBuilder:
                     _P,
                 )
             )
-            share = {
-                Layer.PLASMA: f"(1 dimensionless - {ids.HAEMATOCRIT})",
-                Layer.RBC: ids.HAEMATOCRIT,
-            }
-            flows = (
-                [(ids.zone(k), f) for k, f in enumerate(self._zone_flows(), 1)]
-                if pressure
-                else [(None, q)]
-            )
             for layer in self.carriers():
-                h = self._haematocrit()
-                factor = h if layer is Layer.RBC else 1.0 - h
-                for zone, flow in flows:
+                for zone, flow, formula in self._carrier_flows(Layer(layer)):
                     pid = (
                         ids.layer_flow(layer)
                         if zone is None
                         else ids.zone_flow(layer, zone)
                     )
-                    source = ids.FLOW if zone is None else ids.zone_flow(None, zone)
                     params.append(
                         Parameter(
                             pid,
-                            flow * factor,
+                            flow,
                             unit=U.l_per_min,
                             name=f"flow of the {_NAMES[layer]} through the liver",
                             constant=False,
@@ -656,7 +733,7 @@ class ZonationBuilder:
                     rules.append(
                         assignment_rule(
                             pid,
-                            f"{source} * {share[Layer(layer)]}",
+                            formula,
                             U.l_per_min,
                             f"flow of the {_NAMES[layer]} through the liver",
                         )
@@ -664,17 +741,58 @@ class ZonationBuilder:
         if q > 0.0 and self.settings.boundary is FlowBoundary.OPEN:
             for substance in self.substances:
                 for layer in self.carriers():
+                    ruled = self._ruled_inflow(substance, layer)
                     params.append(
                         Parameter(
                             ids.species(substance.sid, layer, ids.INFLOW),
                             0.0,
                             unit=U.mM,
                             name=f"{substance.name} in the {_NAMES[layer]} entering the liver",
-                            constant=True,
+                            constant=not ruled,
                             sboTerm=_P,
                         )
                     )
         return params, assignments, rules
+
+    def _carrier_flows(self, layer: Layer) -> list[tuple[str | None, float, str]]:
+        """The flow of a carrier layer: the zone, the value and the formula.
+
+        One entry without a zone for an imposed flow, which is the same in
+        every zone, and one per zone for a pressure flow. The erythrocytes
+        carry the share `Hct` of the blood entering the chain, which no zone
+        changes (`_erythrocyte_flow`), and the plasma the rest of the local
+        flow of the tube (`_plasma_flows`); the two shares of one flow are
+        the same thing where the flow is the same in every zone.
+
+        Args:
+            layer: the carrier, the plasma or the erythrocytes.
+
+        Returns:
+            The entries, each the zone (`None` for all of them), the value
+            (l/min) and the formula of its assignment rule.
+        """
+        if not isinstance(self.settings.flow, PressureFlow):
+            q = self._flow()
+            h = self._haematocrit()
+            if layer is Layer.RBC:
+                return [(None, h * q, f"{ids.FLOW} * {ids.HAEMATOCRIT}")]
+            return [
+                (
+                    None,
+                    (1.0 - h) * q,
+                    f"{ids.FLOW} * (1 dimensionless - {ids.HAEMATOCRIT})",
+                )
+            ]
+        rbc = f"{ids.zone_flow(None, ids.zone(1))} * {ids.HAEMATOCRIT}"
+        flows = self._plasma_flows() if layer is Layer.PLASMA else None
+        out: list[tuple[str | None, float, str]] = []
+        for k in range(1, self.settings.n_zones + 1):
+            zone = ids.zone(k)
+            if flows is None:
+                out.append((zone, self._erythrocyte_flow(), rbc))
+            else:
+                out.append((zone, flows[k - 1], f"{ids.zone_flow(None, zone)} - {rbc}"))
+        return out
 
     def _diffusion_parameters(self) -> list[Parameter]:
         """The sinusoid length, the diffusions and the profiles of the diffusion.
@@ -1107,13 +1225,12 @@ class ZonationBuilder:
         zone, `Q_plasma(z1) - Q_plasma(zk)`: the lumen of the first zone
         receives the inflow at its own flow and so neither filters nor
         reabsorbs, which makes the first entry 0, and every further zone
-        filters the flow its lumen loses. The share of the lumen which is
-        filtered is the plasma's: the erythrocytes do not pass a fenestra, so
-        the transmural flux is that of the plasma conduit, which keeps the
-        plasma chain conservative (see the module docstring).
+        filters the flow its lumen loses. What filters is plasma: an
+        erythrocyte does not pass a fenestra, so the whole leak of the tube
+        is the plasma conduit's (`_plasma_flows`) and the filtrate is
+        `Q_li_z1 - Q_li_<zone>`, the leak of the lumen.
         """
-        h = self._haematocrit()
-        flows = [(1.0 - h) * q for q in self._zone_flows()]
+        flows = self._plasma_flows()
         return tuple(flows[0] - q for q in flows)
 
     def _filtrate_objects(self) -> tuple[list[Parameter], list[AssignmentRule]]:
@@ -1481,6 +1598,250 @@ class ZonationBuilder:
                 )
         return out
 
+    def _has_erythrocytes(self) -> bool:
+        """Whether the zones have an erythrocyte layer which exchanges with the plasma.
+
+        The sinusoid geometry at a haematocrit above 0. The well-stirred
+        geometry holds the erythrocytes and the plasma in one compartment, so
+        its erythrocytes are in equilibrium with its plasma by construction
+        and there is nothing to exchange.
+        """
+        return (
+            self.settings.geometry is Geometry.SINUSOID
+            and Layer.RBC in self._fractions()
+        )
+
+    def _erythrocytes(self, substance: Solute) -> ErythrocyteDistribution | None:
+        """The erythrocyte distribution of a substance, `None` for none.
+
+        `None` for a substance which states none and for every substance
+        where the zones have no erythrocyte layer to exchange with.
+        """
+        if not self._has_erythrocytes():
+            return None
+        return erythrocytes_of(substance)
+
+    def _kbc(self, ery: ErythrocyteDistribution) -> float:
+        """The erythrocyte to plasma coefficient of a distribution at the haematocrit."""
+        return blood_cell_coefficient(ery, self._haematocrit())
+
+    def _transit(self) -> float:
+        """The shortest residence time of the blood in a zone (min), 0 without a flow.
+
+        The volume of the lumen of a zone over the largest flow any zone
+        carries: the time in which the erythrocytes of the fastest zone have
+        to reach their equilibrium.
+        """
+        q = max(self._blood_flows())
+        if q <= 0.0:
+            return 0.0
+        return self._lumen_litre(1) / q
+
+    def _exchange_rate(
+        self, sid: str, ery: ErythrocyteDistribution, kbc: float
+    ) -> float:
+        """The exchange rate of the erythrocytes of a distribution (1/min).
+
+        `k_exchange` of the kinetic mode; `EQUILIBRATION` relaxations per
+        residence time of a zone for the equilibrium mode, which the engine
+        realizes as a fast exchange because its erythrocytes are a species of
+        their own.
+
+        Args:
+            sid: the id of the substance, which an error names.
+            ery: the distribution.
+            kbc: its coefficient, which the derived rate reads.
+
+        Returns:
+            The rate (1/min).
+
+        Raises:
+            ValueError: for a kinetic mode whose rate is no number or is given
+                in another unit than 1/min, and for the equilibrium mode of a
+                chain without a flow, which gives the engine no time scale to
+                be fast against.
+        """
+        if ery.mode != "equilibrium":
+            k = number(ery.k_exchange)
+            if k is None or k <= 0.0:
+                raise ValueError(
+                    f"The kinetic erythrocytes of '{sid}' need a positive "
+                    f"exchange rate k_exchange (1/min), got {ery.k_exchange!r}."
+                )
+            problems = check_unit(sid, "k_exchange", ery.k_exchange, U.per_min)
+            if problems:
+                raise ValueError(problems[0])
+            return k
+        transit = self._transit()
+        if transit <= 0.0:
+            raise ValueError(
+                "Erythrocytes in equilibrium need a flow: the engine makes "
+                "the exchange fast against the residence time of a zone, and "
+                "a chain without a flow has none. Give the mode 'kinetic' "
+                "with its rate instead."
+            )
+        h = self._haematocrit()
+        return EQUILIBRATION / transit / (h / (1.0 - h) + 1.0 / kbc)
+
+    def _erythrocyte_parameters(self) -> list[Parameter]:
+        """The coefficient and the exchange rate of every substance with erythrocytes."""
+        out: list[Parameter] = []
+        for substance in self.substances:
+            ery = self._erythrocytes(substance)
+            if ery is None:
+                continue
+            kbc = self._kbc(ery)
+            equilibrium = ery.mode == "equilibrium"
+            if number(ery.kbc) is not None:
+                source = " (kbc of the substance)."
+            else:
+                source = (
+                    f", inverted from the blood to plasma ratio {number(ery.bp):g} "
+                    f"at the haematocrit {self._haematocrit():g} of the lumen "
+                    "(BP = 1 - Hct + Hct*Kbc)."
+                )
+            boundary = (
+                " The blood entering a chain whose erythrocytes are in "
+                "equilibrium carries them in equilibrium with its plasma, so "
+                f"the inflow {ids.species(substance.sid, Layer.RBC, ids.INFLOW)} "
+                "is this coefficient times the one of the plasma and no "
+                "independent input."
+                if equilibrium
+                else ""
+            )
+            out.append(
+                Parameter(
+                    ids.kbc(substance.sid),
+                    kbc,
+                    unit=U.dimensionless,
+                    name=f"erythrocyte to plasma coefficient of {substance.name}",
+                    constant=True,
+                    sboTerm=_P,
+                    notes=(
+                        "The concentration of the erythrocytes over the one of "
+                        f"the plasma at equilibrium{source}{boundary}"
+                    ),
+                )
+            )
+            rate = self._exchange_rate(substance.sid, ery, kbc)
+            if equilibrium:
+                how = (
+                    f"Derived: {EQUILIBRATION:g} relaxations of "
+                    "c_plasma - c_rbc/Kbc per residence time "
+                    f"{self._transit():.3g} min of the fastest zone, which the "
+                    "mode 'equilibrium' asks for (the engine has an erythrocyte "
+                    "species of its own and cannot collapse it into the plasma)."
+                )
+            else:
+                how = "Given by the substance (k_exchange)."
+            out.append(
+                Parameter(
+                    ids.kbc_exchange(substance.sid),
+                    rate,
+                    unit=U.per_min,
+                    name=(
+                        f"exchange of {substance.name} between the plasma and "
+                        "the erythrocytes"
+                    ),
+                    constant=True,
+                    sboTerm=_P,
+                    notes=f"The rate of {ery.mode} erythrocytes. {how}",
+                )
+            )
+        return out
+
+    def _ruled_inflow(self, substance: Solute, layer: Layer | str) -> bool:
+        """Whether an assignment rule sets what a carrier brings into the first zone.
+
+        The erythrocytes of a substance in equilibrium, whose inflow follows
+        that of its plasma (`_erythrocyte_rules`) and is therefore no constant
+        of the model.
+        """
+        if layer is not Layer.RBC:
+            return False
+        ery = self._erythrocytes(substance)
+        return ery is not None and ery.mode == "equilibrium"
+
+    def _erythrocyte_rules(self) -> list[AssignmentRule]:
+        """The inflow of the erythrocytes of a substance in equilibrium.
+
+        `<s>_rbc_in = Kbc_<s> * <s>_plasma_in`: the mode `equilibrium` says
+        that the erythrocytes hold no state of their own, so the blood which
+        enters the chain carries them in equilibrium with its plasma and the
+        boundary is no independent input. Kinetic erythrocytes keep the free
+        parameter, whose value is the history of the blood before the liver.
+        Nothing without the inflow parameters (an external boundary, no flow).
+        """
+        if self.settings.boundary is not FlowBoundary.OPEN or not self.has_flow():
+            return []
+        out: list[AssignmentRule] = []
+        for substance in self.substances:
+            if not self._ruled_inflow(substance, Layer.RBC):
+                continue
+            pid = ids.species(substance.sid, Layer.RBC, ids.INFLOW)
+            out.append(
+                assignment_rule(
+                    pid,
+                    f"{ids.kbc(substance.sid)} * "
+                    f"{ids.species(substance.sid, Layer.PLASMA, ids.INFLOW)}",
+                    U.mM,
+                    f"{substance.name} in the erythrocytes entering the liver",
+                )
+            )
+        return out
+
+    def erythrocyte_exchange(self) -> list[Reaction]:
+        """Get the exchange of the plasma with the erythrocytes of every zone.
+
+        `RBC_<s>_<zone>`: `kex_bc_<s> * V_rbc_<zone> * (c_plasma - c_rbc /
+        Kbc_<s>)`, the rate law of the kinetic blood cells of the PBPK library
+        (`pkpdsim.pbpk.organ`), so the two libraries describe the
+        erythrocytes with one vocabulary. The erythrocytes approach
+        `Kbc_<s> * c_plasma` with the rate `kex_bc_<s> / Kbc_<s>`.
+
+        A substance in equilibrium gets the same reaction with a rate which
+        is fast against the transit of a zone (`EQUILIBRATION`), because the
+        erythrocytes of the engine are a species of their own: the chain then
+        carries the blood concentration `Q * BP * c_plasma` of the library,
+        `BP = 1 - Hct + Hct*Kbc`, as the sum of its two conduits.
+
+        Returns:
+            The reactions, one per substance with an erythrocyte distribution
+            and zone; none for a substance without one (its erythrocyte
+            species exchanges with nothing and keeps what a caller puts into
+            it), none at a haematocrit of 0 (there is no erythrocyte layer)
+            and none for the well-stirred geometry (one compartment holds
+            both).
+        """
+        out: list[Reaction] = []
+        for substance in self.substances:
+            ery = self._erythrocytes(substance)
+            if ery is None:
+                continue
+            for k in range(1, self.settings.n_zones + 1):
+                zone = ids.zone(k)
+                plasma = ids.species(substance.sid, Layer.PLASMA, zone)
+                rbc = ids.species(substance.sid, Layer.RBC, zone)
+                out.append(
+                    Reaction(
+                        ids.exchange("RBC", substance.sid, zone),
+                        f"{plasma} <-> {rbc}",
+                        formula=(
+                            f"{ids.kbc_exchange(substance.sid)} * "
+                            f"{ids.volume(Layer.RBC, zone)} * "
+                            f"({plasma} - {rbc} / {ids.kbc(substance.sid)})",
+                            U.mmole_per_min,
+                        ),
+                        compartment=ids.volume(Layer.PLASMA, zone),
+                        name=(
+                            f"exchange of {substance.name} between the plasma "
+                            f"and the erythrocytes in zone {k}"
+                        ),
+                        sboTerm=SBO.TRANSPORT_REACTION,
+                    )
+                )
+        return out
+
     def _upwind(self, flux: str, source: str, target: str) -> str:
         """The concentration a flux carries: the source's where it is positive.
 
@@ -1672,6 +2033,7 @@ class ZonationBuilder:
                     *self._diffusion_parameters(),
                     *self._bile_parameters(),
                     *self._radial_parameters(),
+                    *self._erythrocyte_parameters(),
                     *filtrate_parameters,
                     *self._cell_profile_parameters(),
                 ]
@@ -1681,11 +2043,17 @@ class ZonationBuilder:
                 *flow_assignments,
                 *self._radial_assignments(),
             ],
-            rules=[*flow_rules, *filtrate_rules, *self._bile_rules()],
+            rules=[
+                *flow_rules,
+                *self._erythrocyte_rules(),
+                *filtrate_rules,
+                *self._bile_rules(),
+            ],
             reactions=[
                 *self.convection(),
                 *self.axial_diffusion(),
                 *self.radial_exchange(),
+                *self.erythrocyte_exchange(),
                 *self.filtrate(),
                 *self.bile(),
             ],

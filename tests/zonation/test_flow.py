@@ -295,10 +295,20 @@ def test_the_default_oncotic_pressure_is_the_mean_of_the_pressures(
     With `P0 = (p_pp + p_pc) / 2` what leaks out of the first half returns in
     the second half, so the first and the last zone carry the same flow. A
     lower oncotic pressure filters out and the pericentral zone carries less.
+
+    The tube without an oncotic pressure filters three quarters of its inflow
+    away, which no blood with erythrocytes can do (they would have to filter
+    through the fenestrae), so that chain is built at a haematocrit of 0 -
+    which is what a perfusate without protein has.
     """
     flows = _q_sin(_simulated(PressureFlow(), tmp_path))
     assert flows[0] == _eq(flows[-1], rel=1e-9)
-    low = _q_sin(_simulated(PressureFlow(p_onc=Value(0.0, "Pa")), tmp_path))
+    low = _q_sin(
+        _build(
+            _settings(PressureFlow(p_onc=Value(0.0, "Pa")), haematocrit=0.0),
+            tmp_path / "acellular",
+        )
+    )
     assert low[-1] < 0.9 * low[0]
 
 
@@ -334,13 +344,25 @@ def test_the_convection_reads_the_flow_of_its_zone(tmp_path: Path) -> None:
     )
 
 
-def test_the_zone_flows_split_into_the_shares_of_the_carriers(tmp_path: Path) -> None:
-    """Plasma and erythrocytes carry `1 - Hct` and `Hct` of the flow of the zone."""
+def test_the_zone_flows_split_into_the_carriers_of_the_leaky_tube(
+    tmp_path: Path,
+) -> None:
+    """The erythrocytes keep the flow of the inflow, the plasma carries the leak.
+
+    An erythrocyte does not pass a fenestra, so the whole leak of the tube is
+    the plasma's: the erythrocytes carry `Hct * Q(z1)` in every zone and the
+    plasma the rest of the local flow. The shares `1 - Hct` and `Hct` of the
+    local flow, which the engine wrote before, made the erythrocyte conduit
+    lose water where the plasma filtered.
+    """
     r = _simulated(PressureFlow(), tmp_path)
-    q = r[ids.zone_flow(None, "z5")]
     h = r[ids.HAEMATOCRIT]
-    assert r[ids.zone_flow("plasma", "z5")] == _eq(q * (1.0 - h))
-    assert r[ids.zone_flow("rbc", "z5")] == _eq(q * h)
+    first = r[ids.zone_flow(None, "z1")]
+    assert r[ids.zone_flow(None, "z5")] < first  # the tube leaks
+    for zone in ("z1", "z5", "z10"):
+        q = r[ids.zone_flow(None, zone)]
+        assert r[ids.zone_flow("rbc", zone)] == _eq(h * first)
+        assert r[ids.zone_flow("plasma", zone)] == _eq(q - h * first)
 
 
 def test_the_flow_of_the_liver_is_the_mean_of_the_zones(tmp_path: Path) -> None:
@@ -619,13 +641,10 @@ def test_a_change_of_the_pressure_reaches_the_flow_of_every_zone(
         },
     )
     assert [r[s] for s in sins] == _eq(expected, rel=1e-9)
+    rbc = r[ids.HAEMATOCRIT] * r[ids.zone_flow(None, zones[0])]
     for z in zones:
-        assert r[ids.zone_flow("plasma", z)] == _eq(
-            (1.0 - r[ids.HAEMATOCRIT]) * r[ids.zone_flow(None, z)]
-        )
-        assert r[ids.zone_flow("rbc", z)] == _eq(
-            r[ids.HAEMATOCRIT] * r[ids.zone_flow(None, z)]
-        )
+        assert r[ids.zone_flow("plasma", z)] == _eq(r[ids.zone_flow(None, z)] - rbc)
+        assert r[ids.zone_flow("rbc", z)] == _eq(rbc)
     zone_flows_ = [r[ids.zone_flow(None, z)] for z in zones]
     assert r[ids.FLOW] == _eq(sum(zone_flows_) / _N)
 
