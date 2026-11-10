@@ -633,7 +633,8 @@ def test_a_protein_turnover_overrides_the_organ(tmp_path: Path) -> None:
     own = model.getParameter(ids.flat(Organ.LIVER, ids.kdeg("CYP2C19")))
     organ = model.getParameter(ids.flat(Organ.LIVER, ids.kdeg("CYP3A4")))
     assert own.getValue() == pytest.approx(KDEG_2C19 / 60.0, rel=1e-12)
-    assert own.getUnits() == organ.getUnits() == ids.flat(Organ.LIVER, "per_min")
+    # the units of the flat model are merged, so the organ keeps no copy of them
+    assert own.getUnits() == organ.getUnits() == "per_min"
     assert f"{KDEG_2C19} 1/h" in own.getNotesString()
     assert organ.getValue() == pytest.approx(turnover(Organ.LIVER).value, rel=1e-12)
 
