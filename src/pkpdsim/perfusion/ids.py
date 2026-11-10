@@ -16,8 +16,9 @@ the outflow tubing `out` (after the organ); the periportal and pericentral
 means of the zones are the sites `pp` and `pc` (`pp_cell` for the cells), so
 every quantity of a zone has its means under the same pattern (`glc_pp`,
 `atp_pc_cell`, `pO2_pc`). The volume of a site is `V_<site>`
-(`volume`), of the vascular space of a zone `Vvas_<zone>` and of its cells
-`Vcell_<zone>`.
+(`volume`); the compartments of a zone are named by the engine which builds it,
+the vascular space of a zone `V_vas_<zone>` and its cells `V_cell_<zone>`
+(`pkpdsim.zonation.ids`).
 
 The reactions and rules of the core of a zone carry the zone as suffix,
 `<name>_<zone>` (`OXPHOS_z3`, `v_nec_z3`). The constants of the core are
