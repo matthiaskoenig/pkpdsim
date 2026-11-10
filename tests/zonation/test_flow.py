@@ -109,7 +109,7 @@ def _without_leak(geo: SinusoidGeometry) -> SinusoidGeometry:
 
 def _poiseuille(geo: SinusoidGeometry, dp: float, nu: float) -> float:
     """The flow (m**3/s) of a tube of radius `r_sin` and length `L_sin`: `dp * pi * r**4 / (8 nu L)`."""
-    return dp * math.pi * geo.r_sin**4 / (8.0 * nu * geo.L_sin)
+    return dp * math.pi * geo.r_sin.value**4 / (8.0 * nu * geo.L_sin.value)
 
 
 def _spt_q(position: float) -> float:
@@ -376,7 +376,7 @@ def test_the_flow_of_the_liver_is_in_litre_per_minute(tmp_path: Path) -> None:
     geo = geometry(ZonationSettings().species)
     r = _simulated(PressureFlow(), tmp_path)
     lumen = (r[ids.volume("plasma", "z1")] + r[ids.volume("rbc", "z1")]) * _N * 1e-3
-    n_sin = lumen / (math.pi * geo.r_sin**2 * geo.L_sin)
+    n_sin = lumen / (math.pi * geo.r_sin.value**2 * geo.L_sin.value)
     assert r[ids.zone_flow(None, "z1")] == _eq(
         r[ids.sinusoid_flow("z1")] * n_sin * 1e3 * 60.0, rel=1e-9
     )
@@ -405,11 +405,14 @@ def test_the_table_count_of_fenestrae_agrees_with_the_measured_porosity() -> Non
     2002); the 1e13 of the table must lie within 35 % of that range.
     """
     geo = geometry(ZonationSettings().species)
-    derived = [p / (math.pi * geo.r_fen**2) for p in (geo.porosity_pp, geo.porosity_pc)]
-    assert derived[0] == pytest.approx(6.67e12, rel=1e-2)
-    assert derived[1] == pytest.approx(8.90e12, rel=1e-2)
-    assert min(derived) / 1.35 <= geo.n_fen <= max(derived) * 1.35
-    assert geo.n_fen == pytest.approx(sum(derived) / 2.0, rel=0.35)
+    counts = [
+        p.value / (math.pi * geo.r_fen.value**2)
+        for p in (geo.porosity_pp, geo.porosity_pc)
+    ]
+    assert counts[0] == pytest.approx(6.67e12, rel=1e-2)
+    assert counts[1] == pytest.approx(8.90e12, rel=1e-2)
+    assert min(counts) / 1.35 <= geo.n_fen.value <= max(counts) * 1.35
+    assert geo.n_fen.value == pytest.approx(sum(counts) / 2.0, rel=0.35)
 
 
 def test_a_formula_flow_is_refused() -> None:
@@ -540,8 +543,8 @@ def test_the_calibrated_factor_does_not_follow_the_pressures(tmp_path: Path) -> 
 def test_the_calibrated_factor_follows_the_geometry() -> None:
     """The factor is not a fit constant: the geometry moves it (flow ~ r**4 / L)."""
     base = geometry(Species.RAT)
-    longer = dataclasses.replace(base, L_sin=2.0 * base.L_sin)
-    wider = dataclasses.replace(base, r_sin=1.2 * base.r_sin)
+    longer = dataclasses.replace(base, L_sin=2.0 * base.L_sin.value)
+    wider = dataclasses.replace(base, r_sin=1.2 * base.r_sin.value)
     rat = reference_flow(Species.RAT)
     assert calibrated_resistance_factor(Species.RAT, base, rat) == _eq(52.17, 1e-3)
     assert calibrated_resistance_factor(Species.RAT, longer, rat) == _eq(18.80, 1e-3)

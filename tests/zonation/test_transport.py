@@ -99,7 +99,7 @@ def test_fenestral_permeability_follows_the_formula() -> None:
     d = aqueous_diffusion(_mr(180.16))
     r = Value(0.365e-9, U.meter)
     p = fenestral_permeability(d, r, geo, 0.07)
-    expected = 0.07 * d.value / geo.t_endo * renkin(r.value / geo.r_fen)
+    expected = 0.07 * d.value / geo.t_endo.value * renkin(r.value / geo.r_fen.value)
     assert p.value == pytest.approx(expected)
 
 

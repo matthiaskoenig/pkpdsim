@@ -611,8 +611,10 @@ def _reference_velocity(ctx: OrganContext, geo: "SinusoidGeometry") -> float:
     blood flow are the male ones too, whatever the sex of the build.
     """
     f_vas = reference_fractions(Organ.LIVER, ctx.species)[Sex.MALE][0]
-    lumen = f_vas * reference_liver_mass(ctx.species).value / geo.density
-    return axial_velocity(geo.L_sin, lumen, reference_liver_flow(ctx.species, Sex.MALE))
+    lumen = f_vas * reference_liver_mass(ctx.species).value / geo.density.value
+    return axial_velocity(
+        geo.L_sin.value, lumen, reference_liver_flow(ctx.species, Sex.MALE)
+    )
 
 
 def test_the_notes_of_the_sinusoid_give_the_peclet_number_of_the_reference_individual() -> (
@@ -637,11 +639,11 @@ def test_the_notes_of_the_sinusoid_give_the_peclet_number_of_the_reference_indiv
     geo = geometry(ctx.species)
     v = _reference_velocity(ctx, geo)
     notes = str(md.notes)
-    assert f"{dispersion(v, geo.L_sin, n):.3g}" in notes
+    assert f"{dispersion(v, geo.L_sin.value, n):.3g}" in notes
     assert f"{v * 1e6:.3g}" in notes
-    assert f"{peclet(v, geo.L_sin, n, 0.0):.3g}" in notes
+    assert f"{peclet(v, geo.L_sin.value, n, 0.0):.3g}" in notes
     coefficient = diffusion_parameter(_permeable_drug())
-    pe = peclet(v, geo.L_sin, n, float(diffusion_of(_permeable_drug()).value))
+    pe = peclet(v, geo.L_sin.value, n, float(diffusion_of(_permeable_drug()).value))
     assert pe != pytest.approx(2 * n, rel=1e-2)
     parameters = {str(q.sid): str(q.notes) for q in md.parameters}
     assert f"{pe:.3g}" in parameters[str(coefficient.sid)]
@@ -792,7 +794,7 @@ def test_the_fenestral_conductance_is_a_named_parameter_of_the_zone(
         )
     gradient = [r[_liver(zids.porosity(zone))] for zone in _zones(n)]
     assert gradient == pytest.approx(
-        list(porosities(n, geometry(ctx.species))), rel=1e-12
+        [eps.value for eps in porosities(n, geometry(ctx.species))], rel=1e-12
     )
     assert sorted(gradient) == gradient
     assert gradient[0] < gradient[-1]

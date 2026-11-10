@@ -329,12 +329,14 @@ def test_the_tube_mesh_is_the_tube_of_the_geometry() -> None:
     assert cells.shape == (N, 24)
     assert cells.max() == len(points) - 1
     assert points[:, 0].min() == pytest.approx(0.0)
-    assert points[:, 0].max() == pytest.approx(geo.L_sin)
-    assert np.hypot(points[:, 1], points[:, 2]) == pytest.approx(geo.r_sin)
+    assert points[:, 0].max() == pytest.approx(geo.L_sin.value)
+    assert np.hypot(points[:, 1], points[:, 2]) == pytest.approx(geo.r_sin.value)
     # the segments follow each other from the periportal end
     x = points[cells][:, :, 0]
-    assert x[:, :12].max(axis=1) == pytest.approx(np.arange(N) * geo.L_sin / N)
-    assert x[:, 12:].max(axis=1) == pytest.approx(np.arange(1, N + 1) * geo.L_sin / N)
+    assert x[:, :12].max(axis=1) == pytest.approx(np.arange(N) * geo.L_sin.value / N)
+    assert x[:, 12:].max(axis=1) == pytest.approx(
+        np.arange(1, N + 1) * geo.L_sin.value / N
+    )
 
 
 def test_the_tube_mesh_refuses_no_zone() -> None:

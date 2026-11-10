@@ -234,9 +234,13 @@ def tube_mesh(
     if sides < 3:
         raise ValueError(f"A ring has at least three sides, not {sides}.")
     angle = np.linspace(0.0, 2.0 * np.pi, sides, endpoint=False)
-    x = np.linspace(0.0, geo.L_sin, n_zones + 1)
+    x = np.linspace(0.0, geo.L_sin.value, n_zones + 1)
     points = np.array(
-        [(xi, geo.r_sin * np.cos(a), geo.r_sin * np.sin(a)) for xi in x for a in angle]
+        [
+            (xi, geo.r_sin.value * np.cos(a), geo.r_sin.value * np.sin(a))
+            for xi in x
+            for a in angle
+        ]
     )
     ring = np.arange(sides)
     cells = np.array(

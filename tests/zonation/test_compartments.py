@@ -166,7 +166,10 @@ def test_the_total_volume_is_the_parenchyma() -> None:
     """The layers of all zones fill the parenchyma, whatever the number of zones."""
     geo = geometry(Species.RAT)
     expected = (
-        sum(fractions(Species.RAT).values()) * geo.f_par * _table_mass() / geo.density
+        sum(f.value for f in fractions(Species.RAT).values())
+        * geo.f_par.value
+        * _table_mass()
+        / geo.density.value
     )
     for n in (1, 3, 10):
         assert _total(n_zones=n) == pytest.approx(expected)

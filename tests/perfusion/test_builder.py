@@ -641,3 +641,30 @@ def test_the_notes_of_a_package_without_the_terms_of_use_stay_whole(
     cell = zone_cell_model(definition)
     assert cell is not None and cell.notes is not None
     assert "Something else entirely." in cell.notes
+
+
+def test_the_liver_keeps_the_provenance_of_its_density_and_fractions(
+    tmp_path: Path,
+) -> None:
+    """`rho_li`, `f_vas` and `f_cell` of a perfused liver name their source.
+
+    The organ of the definition holds these three numbers as `Value`s of the
+    physiology table with their citation (the vascular fraction of Brown 1997
+    Table 30, the cell fraction derived from it), the engine carries them
+    through (`SinusoidGeometry.density`, `ZonationSettings.fractions`) and
+    `M_li` shows what the notes of the three looked like before the liver
+    moved onto the engine: a reader of the flat model or of the ODE markdown
+    has to be able to see that the vascular fraction is a measurement, which
+    is the stated purpose of `value_parameter`.
+    """
+    model = _model(build(liver_definition(), tmp_path / "provenance"))
+    notes = {
+        pid: model.getParameter(pid).getNotesString()
+        for pid in ("M_li", "rho_li", "f_vas", "f_cell")
+    }
+    for pid, text in notes.items():
+        assert "Source:" in text, pid
+        assert "doi:" in text or "Choice of a library of pkpdsim" in text, pid
+    assert "Brown" in notes["f_vas"], "the vascular fraction is Brown 1997 Table 30"
+    assert "Table 30" in notes["f_vas"]
+    assert "derived" in notes["f_cell"]

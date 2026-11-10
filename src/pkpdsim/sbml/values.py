@@ -13,7 +13,7 @@ import dataclasses
 import functools
 import re
 import typing
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -21,6 +21,7 @@ from sbmlutils.factory import Uncertainty
 from sbmlutils.factory.units import UnitDefinition, UnitType
 
 __all__ = [
+    "CHOICE",
     "DIFFUSION_UNITS",
     "SID",
     "Formula",
@@ -32,8 +33,10 @@ __all__ = [
     "check_literals",
     "check_positive",
     "check_unit",
+    "derived",
     "equal_by_value",
     "fitted",
+    "model_choice",
     "number",
     "unit_text",
 ]
@@ -134,6 +137,68 @@ class ModelParameter:
     unit: UnitDefinition
     name: str | None = None
     notes: str | None = None
+
+
+CHOICE = "ModelChoice"
+"""The source of a number the library chooses where no source gives one.
+
+A key of `database/sources.toml`, which `cite()` resolves: a number which no
+publication backs says so instead of leaving its provenance empty or borrowing
+the key of a neighbouring row.
+"""
+
+
+def model_choice(value: float, unit: UnitType, notes: str) -> Value:
+    """Get the value of a number the library or a caller chooses.
+
+    The number with the source `CHOICE`: a value a caller hands over, or one
+    the code picks, which has to say that it is a choice and not look sourced.
+
+    Args:
+        value: the number.
+        unit: its unit.
+        notes: why the number is what it is, and who chose it.
+
+    Returns:
+        The value with the source `ModelChoice`.
+    """
+    return Value(value, unit, CHOICE, notes)
+
+
+def derived(value: float, unit: UnitType, parts: Iterable[Value], notes: str) -> Value:
+    """Get the value of a number derived from other values, with their provenance.
+
+    An aggregate of sourced values (a fraction split by a haematocrit, a sum
+    of flow fractions) is no row of a table and carries the provenance of the
+    rows it rests on: their one source where they agree on it, as a derived
+    row of the tables does, and `CHOICE` where they differ, since no single
+    source backs the aggregate then. The notes always begin "derived: " and
+    name the derivation, and where the sources differ they name every one of
+    them.
+
+    Args:
+        value: the number.
+        unit: its unit.
+        parts: the values it is derived from, in the order they are read.
+        notes: the derivation, and the notes of the parts worth carrying.
+
+    Returns:
+        The derived value.
+    """
+    keys = tuple(dict.fromkeys(p.source for p in parts if p.source is not None))
+    text = f"derived: {notes}"
+    if len(keys) == 1:
+        return Value(value, unit, keys[0], text)
+    if not keys:
+        return Value(
+            value, unit, CHOICE, f"{text}. The values it rests on name no source"
+        )
+    return Value(
+        value,
+        unit,
+        CHOICE,
+        f"{text}. The values it rests on are sourced {', '.join(keys)}",
+    )
 
 
 def fitted(

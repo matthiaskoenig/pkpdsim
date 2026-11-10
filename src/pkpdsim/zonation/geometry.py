@@ -1,22 +1,40 @@
 """The geometry of the sinusoid, the volume fractions of the layers and the haematocrit.
 
-The fractions are those of the liver volume (stereology, Blouin1977), the
+The fractions are those of the liver parenchyma (stereology, Blouin1977), the
 geometry is that of one sinusoid. The numbers are in
 `pkpdsim/database/tables/zonation.toml`, a section per species. The volume of
 a layer is its fraction of the volume of the parenchyma, `f_par * mass /
 density`, split evenly over the zones.
+
+**Every number keeps its provenance.** A number of the table is a `Value`
+with the source and the notes of its row, which travels into the notes of the
+parameter the builder writes from it (`pkpdsim.sbml.parameters.value_parameter`,
+the convention of the whole library), so a released model says where its
+stereology, its sinusoid geometry and its fenestral porosity come from and a
+reader can tell a measurement from a choice. A number a caller hands over
+instead of the table (`SinusoidGeometry`, `ZonationSettings.fractions`) is
+wrapped as the model choice it is (`model_choice`) and never looks sourced,
+and a number computed from several rows (the plasma and the erythrocytes of
+the lumen) carries the sources of the rows it rests on (`derived`).
 """
 
 import math
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from enum import StrEnum
 
 from sbmlutils.factory.units import UnitDefinition
 
 from pkpdsim.database.tables import entry
 from pkpdsim.sbml.units import U
-from pkpdsim.sbml.values import Q, Value, number, unit_text
+from pkpdsim.sbml.values import (
+    Q,
+    Value,
+    derived,
+    model_choice,
+    number,
+    unit_text,
+)
 from pkpdsim.species import Species
 from pkpdsim.zonation.profiles import zone_positions
 
@@ -25,9 +43,12 @@ __all__ = [
     "SinusoidGeometry",
     "axial_area",
     "bile_flow",
+    "field_unit",
     "fractions",
     "geometry",
     "layer_volumes",
+    "lumen_fraction",
+    "lumen_haematocrit",
     "mass_kg",
     "porosities",
     "reference_liver_mass",
@@ -64,9 +85,44 @@ class Layer(StrEnum):
     BILE = "bile"
 
 
+_GEOMETRY_UNITS: Mapping[str, UnitDefinition] = {
+    "r_sin": U.meter,
+    "L_sin": U.meter,
+    "t_endo": U.meter,
+    "t_disse": U.meter,
+    "r_fen": U.meter,
+    "n_fen": _TABLE_UNITS["1/m**2"],
+    "porosity_pp": U.dimensionless,
+    "porosity_pc": U.dimensionless,
+    "f_par": U.dimensionless,
+    "haematocrit": U.dimensionless,
+    "density": U.kg_per_l,
+}
+"""The unit of every field of `SinusoidGeometry`, the unit of its row of the table."""
+
+
+def field_unit(name: str) -> UnitDefinition:
+    """Get the unit of a field of `SinusoidGeometry` by its name.
+
+    Raises:
+        KeyError: for a name which is no field of the geometry.
+    """
+    try:
+        return _GEOMETRY_UNITS[name]
+    except KeyError:
+        raise KeyError(f"'{name}' is no field of the sinusoid geometry.") from None
+
+
 @dataclass(frozen=True)
 class SinusoidGeometry:
-    """The geometry of the sinusoid of a species.
+    """The geometry of the sinusoid of a species, every number with its provenance.
+
+    A field is the `Value` of its row of `tables/zonation.toml` (`geometry`),
+    with the source and the notes of the row, which reach the notes of the
+    parameter the builder writes from it. A caller which replaces a field
+    (`dataclasses.replace`) may give a plain number, which is wrapped as the
+    model choice it is (`model_choice`, the source `ModelChoice` and a note
+    saying the caller supplied it) and never looks sourced.
 
     Attributes:
         r_sin: the sinusoid radius (m).
@@ -82,17 +138,33 @@ class SinusoidGeometry:
         density: the density of the liver (kg/l).
     """
 
-    r_sin: float
-    L_sin: float
-    t_endo: float
-    t_disse: float
-    r_fen: float
-    n_fen: float
-    porosity_pp: float
-    porosity_pc: float
-    f_par: float
-    haematocrit: float
-    density: float
+    r_sin: Value
+    L_sin: Value
+    t_endo: Value
+    t_disse: Value
+    r_fen: Value
+    n_fen: Value
+    porosity_pp: Value
+    porosity_pc: Value
+    f_par: Value
+    haematocrit: Value
+    density: Value
+
+    def __post_init__(self) -> None:
+        """Wrap a plain number a caller gave as the model choice it is."""
+        for f in fields(self):
+            given = getattr(self, f.name)
+            if not isinstance(given, Value):
+                object.__setattr__(
+                    self,
+                    f.name,
+                    model_choice(
+                        float(given),
+                        field_unit(f.name),
+                        f"{f.name} of the sinusoid geometry, supplied by the "
+                        "caller of the engine and no value of a table",
+                    ),
+                )
 
 
 def table_value(section: str, key: str) -> Value:
@@ -135,19 +207,46 @@ def _section(species: Species) -> str:
             )
 
 
-def _number(section: str, key: str) -> float:
-    """The number of an entry of the table."""
-    return table_value(section, key).value
+def lumen_haematocrit(species: Species, haematocrit: float | None = None) -> Value:
+    """Get the haematocrit which splits the lumen into plasma and erythrocytes.
+
+    Args:
+        species: the species.
+        haematocrit: the haematocrit a caller gives, which is the model choice
+            it is; `None` takes the row of the table with its source.
+
+    Returns:
+        The haematocrit.
+
+    Raises:
+        ValueError: for a haematocrit outside [0, 1] or a species without a liver.
+    """
+    hct = (
+        table_value(_section(species), "haematocrit")
+        if haematocrit is None
+        else model_choice(
+            haematocrit,
+            U.dimensionless,
+            "the haematocrit of the sinusoidal lumen, supplied by the caller "
+            "of the engine and no value of a table",
+        )
+    )
+    if not 0.0 <= hct.value <= 1.0:
+        raise ValueError(f"The haematocrit {hct.value} is outside [0, 1].")
+    return hct
 
 
 def fractions(
     species: Species, haematocrit: float | None = None
-) -> Mapping[Layer, float]:
-    """Get the volume fractions of the layers of a species.
+) -> Mapping[Layer, Value]:
+    """Get the volume fractions of the layers of a species, with their provenance.
 
     The lumen is split into plasma and erythrocytes by the haematocrit, which
     keeps the lumen; without erythrocytes (haematocrit 0) there is no `RBC`
-    layer. Kupffer and stellate cells are no layer and left out.
+    layer. The two shares of the lumen rest on two rows (the lumen and the
+    haematocrit), so they are derived values naming both (`derived`); the
+    other layers are the rows of the table unchanged. Kupffer and stellate
+    cells are no layer and left out.
 
     Args:
         species: the species.
@@ -155,24 +254,37 @@ def fractions(
             `None`.
 
     Returns:
-        The fraction of the liver volume of every layer.
+        The fraction of the parenchyma of every layer.
 
     Raises:
         ValueError: for a haematocrit outside [0, 1] or a species without a liver.
     """
     section = _section(species)
-    hct = _number(section, "haematocrit") if haematocrit is None else haematocrit
-    if not 0.0 <= hct <= 1.0:
-        raise ValueError(f"The haematocrit {hct} is outside [0, 1].")
-    lumen = _number(section, "lumen")
-    fr: dict[Layer, float] = {}
-    if hct > 0.0:
-        fr[Layer.RBC] = hct * lumen
-    fr[Layer.PLASMA] = (1.0 - hct) * lumen
-    fr[Layer.ENDOTHELIUM] = _number(section, "endothelium")
-    fr[Layer.DISSE] = _number(section, "disse")
-    fr[Layer.CELL] = _number(section, "hepatocyte")
-    fr[Layer.BILE] = _number(section, "bile")
+    hct = lumen_haematocrit(species, haematocrit)
+    lumen = table_value(section, "lumen")
+    parts = (lumen, hct)
+    fr: dict[Layer, Value] = {}
+    if hct.value > 0.0:
+        fr[Layer.RBC] = derived(
+            hct.value * lumen.value,
+            U.dimensionless,
+            parts,
+            f"the erythrocytes of the sinusoidal lumen, the haematocrit "
+            f"{hct.value:g} of the lumen. Lumen: {lumen.notes}. Haematocrit: "
+            f"{hct.notes}",
+        )
+    fr[Layer.PLASMA] = derived(
+        (1.0 - hct.value) * lumen.value,
+        U.dimensionless,
+        parts,
+        f"the plasma of the sinusoidal lumen, the lumen less its erythrocytes "
+        f"(haematocrit {hct.value:g}). Lumen: {lumen.notes}. Haematocrit: "
+        f"{hct.notes}",
+    )
+    fr[Layer.ENDOTHELIUM] = table_value(section, "endothelium")
+    fr[Layer.DISSE] = table_value(section, "disse")
+    fr[Layer.CELL] = table_value(section, "hepatocyte")
+    fr[Layer.BILE] = table_value(section, "bile")
     return fr
 
 
@@ -218,25 +330,15 @@ def bile_flow(species: Species) -> Value:
 
 
 def geometry(species: Species) -> SinusoidGeometry:
-    """Get the sinusoid geometry of a species from the table."""
+    """Get the sinusoid geometry of a species from the table.
+
+    Every field is the `Value` of its row, with the source and the notes of
+    the row (`table_value`): the provenance travels into the parameters the
+    builder and the flow write from the geometry.
+    """
     section = _section(species)
     return SinusoidGeometry(
-        **{
-            key: _number(section, key)
-            for key in (
-                "r_sin",
-                "L_sin",
-                "t_endo",
-                "t_disse",
-                "r_fen",
-                "n_fen",
-                "porosity_pp",
-                "porosity_pc",
-                "f_par",
-                "haematocrit",
-                "density",
-            )
-        }
+        **{key: table_value(section, key) for key in _GEOMETRY_UNITS}
     )
 
 
@@ -277,11 +379,11 @@ def mass_kg(mass: Q) -> float:
 
 def _parenchyma_litre(mass: Q, geo: SinusoidGeometry) -> float:
     """The volume of the parenchyma (l) of a liver mass."""
-    return geo.f_par * mass_kg(mass) / geo.density
+    return geo.f_par.value * mass_kg(mass) / geo.density.value
 
 
 def layer_volumes(
-    mass: Q, n_zones: int, geo: SinusoidGeometry, fr: Mapping[Layer, float]
+    mass: Q, n_zones: int, geo: SinusoidGeometry, fr: Mapping[Layer, Value]
 ) -> Mapping[tuple[Layer, int], Value]:
     """Get the volume of every layer of every zone.
 
@@ -301,13 +403,13 @@ def layer_volumes(
         raise ValueError("A liver has at least one zone.")
     v_par = _parenchyma_litre(mass, geo)
     return {
-        (layer, z): Value(f * v_par / n_zones, U.litre)
+        (layer, z): Value(f.value * v_par / n_zones, U.litre)
         for layer, f in fr.items()
         for z in range(1, n_zones + 1)
     }
 
 
-def porosities(n_zones: int, geo: SinusoidGeometry) -> tuple[float, ...]:
+def porosities(n_zones: int, geo: SinusoidGeometry) -> tuple[Value, ...]:
     """Get the fenestral porosity of every zone, the gradient of the table.
 
     Args:
@@ -317,26 +419,41 @@ def porosities(n_zones: int, geo: SinusoidGeometry) -> tuple[float, ...]:
     Returns:
         The porosity of every zone, periportal first: the linear gradient
         from `porosity_pp` to `porosity_pc` over the lobular positions of the
-        centres of the zones (`zone_positions`).
+        centres of the zones (`zone_positions`), each a value derived from the
+        two ends with their provenance.
 
     Raises:
         ValueError: for less than one zone.
     """
+    pp, pc = geo.porosity_pp, geo.porosity_pc
     return tuple(
-        geo.porosity_pp + (geo.porosity_pc - geo.porosity_pp) * x
+        derived(
+            pp.value + (pc.value - pp.value) * x,
+            U.dimensionless,
+            (pp, pc),
+            f"the fenestral porosity of the endothelium at the lobular "
+            f"position {x:g} of the centre of the zone, the linear gradient "
+            f"from {pp.value:g} periportal to {pc.value:g} pericentral. "
+            f"Periportal: {pp.notes}. Pericentral: {pc.notes}",
+        )
         for x in zone_positions(n_zones)
     )
 
 
-def sinusoid_count(mass: Q, geo: SinusoidGeometry, fr: Mapping[Layer, float]) -> float:
+def sinusoid_count(mass: Q, geo: SinusoidGeometry, fr: Mapping[Layer, Value]) -> float:
     """Get the number of sinusoids which carry the lumen of a liver mass."""
-    f_lumen = fr[Layer.PLASMA] + fr.get(Layer.RBC, 0.0)
-    v_lumen_m3 = f_lumen * _parenchyma_litre(mass, geo) * 1e-3
-    return v_lumen_m3 / (math.pi * geo.r_sin**2 * geo.L_sin)
+    v_lumen_m3 = lumen_fraction(fr) * _parenchyma_litre(mass, geo) * 1e-3
+    return v_lumen_m3 / (math.pi * geo.r_sin.value**2 * geo.L_sin.value)
+
+
+def lumen_fraction(fr: Mapping[Layer, Value]) -> float:
+    """The volume fraction of the lumen, the plasma and the erythrocytes of it."""
+    rbc = fr.get(Layer.RBC)
+    return fr[Layer.PLASMA].value + (0.0 if rbc is None else rbc.value)
 
 
 def axial_area(
-    layer: Layer, mass: Q, geo: SinusoidGeometry, fr: Mapping[Layer, float]
+    layer: Layer, mass: Q, geo: SinusoidGeometry, fr: Mapping[Layer, Value]
 ) -> Value:
     """Get the axial cross-section of a layer of the whole liver (m**2).
 
@@ -351,5 +468,5 @@ def axial_area(
             f"The layer {layer} has no volume at this haematocrit, so it has no "
             f"axial area (layers with a volume: {sorted(str(x) for x in fr)})."
         )
-    v_m3 = fr[layer] * _parenchyma_litre(mass, geo) * 1e-3
-    return Value(v_m3 / geo.L_sin, U.m2)
+    v_m3 = fr[layer].value * _parenchyma_litre(mass, geo) * 1e-3
+    return Value(v_m3 / geo.L_sin.value, U.m2)

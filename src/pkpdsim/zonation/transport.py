@@ -399,7 +399,7 @@ def radius_ratio(radius: Value, geo: SinusoidGeometry) -> float:
         raise ValueError(
             f"A radius needs a length, got {unit_text(radius.unit)}."
         ) from None
-    return r / geo.r_fen
+    return r / geo.r_fen.value
 
 
 def fenestral_permeability(
@@ -423,7 +423,7 @@ def fenestral_permeability(
         ValueError: for a radius which is no length.
     """
     sieve = renkin(radius_ratio(radius, geo))
-    return Value(porosity * _as_m2_per_s(d_aq) / geo.t_endo * sieve, M_PER_S)
+    return Value(porosity * _as_m2_per_s(d_aq) / geo.t_endo.value * sieve, M_PER_S)
 
 
 def _as_m2_per_s(d: Value) -> float:

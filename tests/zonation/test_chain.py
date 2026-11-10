@@ -373,7 +373,7 @@ def test_the_diffusion_conductance_is_the_axial_area_over_the_zone_length(
     geo = geometry(_settings().species)
     fr = dict(fractions(_settings().species))
     area = axial_area(Layer.PLASMA, _MASS, geo, fr).value
-    expected = 1e-9 * area / (geo.L_sin / 10) * 1e3 * 60.0
+    expected = 1e-9 * area / (geo.L_sin.value / 10) * 1e3 * 60.0
     # the rate of the first interface at a unit gradient
     r["[tr_plasma_z2]"] = 0.0
     rate = r["D_tr_plasma_z1_plasma_z2"]

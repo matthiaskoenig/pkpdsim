@@ -84,7 +84,7 @@ from pkpdsim.pbpk.sex_differences import (
     sex_factor,
 )
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Value
+from pkpdsim.pbpk.values import CHOICE, Value
 from pkpdsim.sex import Sex
 from pkpdsim.species import Species
 
@@ -1744,9 +1744,28 @@ def reference_liver_flow(species: Species, sex: Sex = Sex.MALE) -> float:
         The flow, at the reference body weight and without impairment.
     """
     refs = _references(sex, load(physiology_table(species)), species)
-    organs = [Organ.LIVER, *(o for o in Organ if o in PORTAL_ORGANS)]
-    fraction = sum(refs[ids.flow_fraction(o)].value for o in organs)
+    fraction = sum(refs[ids.flow_fraction(o)].value for o in _liver_flow_organs())
     return fraction * refs[ids.ref(ids.CO)].value
+
+
+def _liver_flow_organs() -> list[Organ]:
+    """The organs whose flow fractions make the total liver flow."""
+    return [Organ.LIVER, *(o for o in Organ if o in PORTAL_ORGANS)]
+
+
+def _liver_flow_sources(species: Species, sex: Sex = Sex.MALE) -> tuple[str, ...]:
+    """The source keys the total liver flow of the reference individual rests on.
+
+    The keys of the flow fractions of the liver and of the portal organs and
+    of the cardiac output, in the order the rows are read and without a
+    repetition: one key for the human (ICRP89) and the pig (Lin2020), two for
+    the rat and the mouse (Brown1997 for the liver and the cardiac output,
+    PKSimDB for the single portal organs, which Brown 1997 does not give).
+    """
+    refs = _references(sex, load(physiology_table(species)), species)
+    rows = [refs[ids.flow_fraction(o)] for o in _liver_flow_organs()]
+    rows.append(refs[ids.ref(ids.CO)])
+    return tuple(dict.fromkeys(key for row in rows for key in row.sources))
 
 
 def reference_flow(species: Species) -> Value:
@@ -1761,18 +1780,35 @@ def reference_flow(species: Species) -> Value:
     library fractions, so the zonated liver carries the flow of the PBPK
     liver it stands in for.
 
+    The value is an aggregate of rows of `physiology_<species>.toml`, so its
+    source is the source of those rows (`_liver_flow_sources`): their one key
+    where they agree on it, with the derivation in the notes as a derived row
+    of the tables has it, and `ModelChoice` where they differ, with every key
+    the aggregate rests on in the notes. The source of a `Value` is a key of
+    `database/sources.toml`, which `cite()` resolves, so a model which writes
+    this flow as a parameter carries the citation of the physiology the flow
+    comes from (`tests/pbpk/test_physiology.py` resolves it for every
+    species).
+
     Args:
         species: the species.
 
     Returns:
         The flow in l/min.
     """
-    return Value(
-        reference_liver_flow(species),
-        U.l_per_min,
-        "pkpdsim.pbpk.physiology",
-        f"the total liver blood flow of the reference male {species} of the PBPK library",
+    keys = _liver_flow_sources(species)
+    derivation = (
+        f"derived: the flow fractions of the liver and of the portal organs of "
+        f"physiology_{species}.toml, renormalised over the organs in parallel "
+        "as the library does, times the cardiac output; the total liver blood "
+        f"flow of the reference male {species} of the PBPK library"
     )
+    if len(keys) == 1:
+        source, notes = keys[0], derivation
+    else:
+        source = CHOICE
+        notes = f"{derivation}. The rows it rests on are sourced {', '.join(keys)}"
+    return Value(reference_liver_flow(species), U.l_per_min, source, notes)
 
 
 @dataclass(frozen=True)

@@ -114,7 +114,7 @@ from pkpdsim.database.tables import entry
 from pkpdsim.sbml.annotation import TAXA, initial_assignment
 from pkpdsim.sbml.parameters import value_parameter
 from pkpdsim.sbml.units import MODEL_UNITS, OrganUnits, U
-from pkpdsim.sbml.values import Value, check_unit, number
+from pkpdsim.sbml.values import Value, check_unit, derived, number
 from pkpdsim.zonation import ids
 from pkpdsim.zonation.flow import (
     M3_PER_S,
@@ -136,6 +136,7 @@ from pkpdsim.zonation.geometry import (
     fractions,
     geometry,
     layer_volumes,
+    lumen_fraction,
     mass_kg,
     porosities,
     reference_liver_mass,
@@ -375,17 +376,22 @@ class ZonationBuilder:
         given = self.settings.geometry_constants
         return given if given is not None else geometry(self.settings.species)
 
-    def _full_fractions(self) -> dict[Layer, float]:
-        """The volume fractions of the layers of the sinusoid.
+    def _full_fractions(self) -> dict[Layer, Value]:
+        """The volume fractions of the layers of the sinusoid, with their provenance.
+
+        The values of the table (`geometry.fractions`), or the fractions the
+        caller states (`ZonationSettings.fractions`, a perfused organ its
+        own), a plain number of which is the model choice it is
+        (`ZonationSettings.layer_fractions`).
 
         `bile=None` drops the bile volume and does not renormalise the other
         fractions: the organ loses that fraction of its volume (0.4 % in the
         rat) instead of redistributing it. This is deliberate, and the same
         in both geometries.
         """
-        given = self.settings.fractions
+        given = self.settings.layer_fractions()
         fr = (
-            dict(given)
+            given
             if given is not None
             else fractions(self.settings.species, self.settings.haematocrit)
         )
@@ -395,13 +401,29 @@ class ZonationBuilder:
             if layer is not Layer.BILE or self.settings.bile is not None
         }
 
-    def _fractions(self) -> dict[Layer | str, float]:
-        """The volume fractions of the layers of a zone, by the geometry."""
+    def _fractions(self) -> dict[Layer | str, Value]:
+        """The volume fractions of the layers of a zone, by the geometry.
+
+        The vascular space of the well-stirred geometry is the sum of the
+        layers of the lumen, a derived value which carries the provenance of
+        the layers it sums.
+        """
         fr = self._full_fractions()
         if self.settings.geometry is Geometry.SINUSOID:
             return {**fr}
-        out: dict[Layer | str, float] = {
-            ids.VASCULAR: sum(fr.get(layer, 0.0) for layer in _VASCULAR)
+        lumen = [fr[layer] for layer in _VASCULAR if layer in fr]
+        out: dict[Layer | str, Value] = {
+            ids.VASCULAR: derived(
+                sum(f.value for f in lumen),
+                U.dimensionless,
+                lumen,
+                "the vascular space of the well-stirred geometry, the sum of "
+                "the layers of the sinusoidal lumen "
+                f"({', '.join(str(layer) for layer in _VASCULAR if layer in fr)}). "
+                + ". ".join(
+                    f"{layer}: {fr[layer].notes}" for layer in _VASCULAR if layer in fr
+                ),
+            )
         }
         for layer, f in fr.items():
             if layer not in _VASCULAR:
@@ -539,6 +561,27 @@ class ZonationBuilder:
         """The flow of the liver (l/min) at every zone of a pressure flow."""
         return zone_flows(self.settings, self._geo(), self._mass())
 
+    def _haematocrit_value(self) -> Value:
+        """The haematocrit of the lumen with the provenance of the two fractions."""
+        fr = self._full_fractions()
+        plasma, rbc = fr[Layer.PLASMA], fr.get(Layer.RBC)
+        if rbc is None:
+            return derived(
+                0.0,
+                U.dimensionless,
+                (plasma,),
+                "the haematocrit of the sinusoidal lumen, 0: the lumen of "
+                "this build has no erythrocyte layer",
+            )
+        return derived(
+            self._haematocrit(),
+            U.dimensionless,
+            (rbc, plasma),
+            "the haematocrit of the sinusoidal lumen, the erythrocyte "
+            "fraction over the fraction of the lumen. Erythrocytes: "
+            f"{rbc.notes}. Plasma: {plasma.notes}",
+        )
+
     def _haematocrit(self) -> float:
         """The haematocrit of the lumen entering the chain, 0 without an erythrocyte layer.
 
@@ -550,8 +593,8 @@ class ZonationBuilder:
         the two volumes, is this number in every zone.
         """
         fr = self._full_fractions()
-        rbc = fr.get(Layer.RBC, 0.0)
-        return rbc / (rbc + fr[Layer.PLASMA])
+        rbc = fr[Layer.RBC].value if Layer.RBC in fr else 0.0
+        return rbc / (rbc + fr[Layer.PLASMA].value)
 
     def _blood_flows(self) -> tuple[float, ...]:
         """The blood flow of the lumen (l/min) at every zone.
@@ -619,13 +662,19 @@ class ZonationBuilder:
             return 0.0
         fr = self._full_fractions()
         geo = self._geo()
-        lumen = fr[Layer.PLASMA] + fr.get(Layer.RBC, 0.0)
-        litre = lumen * geo.f_par * self._mass().value / geo.density
-        return axial_velocity(geo.L_sin, litre, q)
+        litre = (
+            lumen_fraction(fr)
+            * geo.f_par.value
+            * self._mass().value
+            / geo.density.value
+        )
+        return axial_velocity(geo.L_sin.value, litre, q)
 
     def dispersion(self) -> float:
         """The numerical dispersion (m**2/s) of the upwind chain, `v * dx / 2`."""
-        return dispersion(self.velocity(), self._geo().L_sin, self.settings.n_zones)
+        return dispersion(
+            self.velocity(), self._geo().L_sin.value, self.settings.n_zones
+        )
 
     def peclet(self, d_eff: float) -> float:
         """The Peclet number the chain realizes with a physical diffusion `d_eff`.
@@ -635,7 +684,9 @@ class ZonationBuilder:
         `effective_peclet` and the zonated liver of the PBPK library report;
         0 without a flow.
         """
-        return peclet(self.velocity(), self._geo().L_sin, self.settings.n_zones, d_eff)
+        return peclet(
+            self.velocity(), self._geo().L_sin.value, self.settings.n_zones, d_eff
+        )
 
     def _diffusion(self, substance: Solute) -> Parameter | None:
         """Get the axial diffusion of a substance, `None` for none.
@@ -740,7 +791,7 @@ class ZonationBuilder:
             params.append(
                 value_parameter(
                     ids.HAEMATOCRIT,
-                    self._haematocrit(),
+                    self._haematocrit_value(),
                     U.dimensionless,
                     "haematocrit of the sinusoidal lumen",
                     _P,
@@ -844,7 +895,7 @@ class ZonationBuilder:
         params = [
             value_parameter(
                 ids.LENGTH,
-                Value(self._geo().L_sin, U.meter),
+                self._geo().L_sin,
                 U.meter,
                 "length of the sinusoid",
                 _P,
@@ -1225,7 +1276,7 @@ class ZonationBuilder:
             )
         )
 
-    def _porosities(self) -> tuple[float, ...]:
+    def _porosities(self) -> tuple[Value, ...]:
         """The fenestral porosity of every zone: the gradient of the table."""
         return porosities(self.settings.n_zones, self._geo())
 
@@ -1353,38 +1404,38 @@ class ZonationBuilder:
         params = [
             value_parameter(
                 ids.RADIUS,
-                Value(geo.r_sin, U.meter),
+                geo.r_sin,
                 U.meter,
                 "radius of the sinusoid",
                 _P,
             ),
             value_parameter(
                 ids.T_ENDO,
-                Value(geo.t_endo, U.meter),
+                geo.t_endo,
                 U.meter,
                 "thickness of the endothelium",
                 _P,
             ),
             value_parameter(
                 ids.T_DISSE,
-                Value(geo.t_disse, U.meter),
+                geo.t_disse,
                 U.meter,
                 "thickness of the space of Disse",
                 _P,
             ),
         ]
-        outer = (geo.r_sin + geo.t_endo + geo.t_disse) / geo.r_sin
+        r_sin, t_endo = geo.r_sin.value, geo.t_endo.value
+        outer = (r_sin + t_endo + geo.t_disse.value) / r_sin
         for k, eps in enumerate(self._porosities(), start=1):
             zone = ids.zone(k)
-            area = 2.0 * self._lumen_litre(k) * 1e-3 / geo.r_sin
+            area = 2.0 * self._lumen_litre(k) * 1e-3 / r_sin
             params += [
-                Parameter(
+                value_parameter(
                     ids.porosity(zone),
                     eps,
-                    unit=U.dimensionless,
-                    name=f"fenestral porosity of the endothelium in zone {k}",
-                    constant=True,
-                    sboTerm=_P,
+                    U.dimensionless,
+                    f"fenestral porosity of the endothelium in zone {k}",
+                    _P,
                 ),
                 Parameter(
                     ids.area("pd", zone),
@@ -1396,7 +1447,7 @@ class ZonationBuilder:
                 ),
                 Parameter(
                     ids.area("pe", zone),
-                    area * (geo.r_sin + geo.t_endo) / geo.r_sin,
+                    area * (r_sin + t_endo) / r_sin,
                     unit=U.m2,
                     name=f"lateral area of the abluminal membrane of the endothelial cell in zone {k}",
                     constant=False,

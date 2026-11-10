@@ -80,6 +80,7 @@ from sbmlutils.validation import ValidationOptions, validate_doc
 from pkpdsim.pbpk.annotation import TAXA, initial_assignment
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.units import MODEL_UNITS, U
+from pkpdsim.pbpk.values import model_choice
 from pkpdsim.perfusion import circuit, core, ids, observers
 from pkpdsim.perfusion.cell_model import ARRHENIUS, cell_model
 from pkpdsim.perfusion.cell_model import constants as cell_constants
@@ -451,11 +452,19 @@ def _liver(definition: PerfusionDefinition, organ: LiverOrgan) -> _Organ:
         species=definition.species,
         liver_mass=organ.mass,
         geometry_constants=dataclasses.replace(
-            geometry(definition.species), f_par=1.0, density=organ.density.value
+            geometry(definition.species),
+            f_par=model_choice(
+                1.0,
+                U.dimensionless,
+                "the whole liver is parenchyma in the circuit: the organ "
+                "states the fractions of its vascular space and of its cells "
+                "of the whole organ, so the geometry discounts nothing",
+            ),
+            density=organ.density,
         ),
         fractions={
-            Layer.PLASMA: organ.vascular_fraction.value,
-            Layer.CELL: organ.cell_fraction.value,
+            Layer.PLASMA: organ.vascular_fraction,
+            Layer.CELL: organ.cell_fraction,
         },
         boundary=FlowBoundary.EXTERNAL,
         cell_species=False,

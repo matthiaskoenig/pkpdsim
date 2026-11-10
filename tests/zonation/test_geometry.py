@@ -17,7 +17,7 @@ from .conftest import mass_g
 
 
 def test_rat_fractions_match_blouin() -> None:
-    fr = fractions(Species.RAT)
+    fr = {layer: f.value for layer, f in fractions(Species.RAT).items()}
     assert fr[Layer.PLASMA] + fr[Layer.RBC] == pytest.approx(0.106)
     assert fr[Layer.DISSE] == pytest.approx(0.049)
     assert fr[Layer.CELL] == pytest.approx(0.780)
@@ -29,7 +29,7 @@ def test_rat_fractions_match_blouin() -> None:
 
 def test_haematocrit_splits_the_lumen_and_conserves_it() -> None:
     for hct in (0.0, 0.45):
-        fr = fractions(Species.RAT, haematocrit=hct)
+        fr = {layer: f.value for layer, f in fractions(Species.RAT, hct).items()}
         assert fr.get(Layer.RBC, 0.0) == pytest.approx(hct * 0.106)
         assert fr[Layer.PLASMA] + fr.get(Layer.RBC, 0.0) == pytest.approx(0.106)
 
@@ -50,9 +50,22 @@ def test_layer_order_is_lumen_to_bile() -> None:
 
 
 def test_human_carries_declared_fallback() -> None:
-    assert fractions(Species.HUMAN, haematocrit=0.45) == fractions(
-        Species.RAT, haematocrit=0.45
-    )
+    """The human fractions are the rat ones, and every value says so.
+
+    The design requires the human entries to fall back to the rat fractions
+    "with that stated in the table and in the model notes", so the note of
+    every human fraction carries the `fallback: rat` of its row - the derived
+    shares of the lumen (the plasma and the erythrocytes) in the notes of the
+    row they rest on - and reaches the notes of the parameter the builder
+    writes from it (`tests/zonation/test_compartments.py`).
+    """
+    human = fractions(Species.HUMAN, haematocrit=0.45)
+    rat = fractions(Species.RAT, haematocrit=0.45)
+    assert {layer: f.value for layer, f in human.items()} == {
+        layer: f.value for layer, f in rat.items()
+    }
+    for layer, f in human.items():
+        assert "fallback: rat" in (f.notes or ""), layer
 
 
 def test_volumes_scale_with_mass_and_split_over_zones() -> None:
@@ -76,7 +89,7 @@ def test_axial_area_is_volume_over_length() -> None:
     a = axial_area(Layer.PLASMA, mass_g(10.0), geo, fr)
     assert a.value > 0
     v_plasma = 0.55 * 0.106 * 10.0 / 1070.0  # l, the plasma at haematocrit 0.45
-    assert a.value == pytest.approx(v_plasma * 1e-3 / geo.L_sin)
+    assert a.value == pytest.approx(v_plasma * 1e-3 / geo.L_sin.value)
 
 
 def test_sinusoid_count_fills_the_lumen() -> None:
@@ -87,8 +100,8 @@ def test_sinusoid_count_fills_the_lumen() -> None:
 
 def test_human_haematocrit_and_density_are_icrp89_not_fallbacks() -> None:
     geo = geometry(Species.HUMAN)
-    assert geo.haematocrit == pytest.approx(0.43)
-    assert geo.density == pytest.approx(1.0)
+    assert geo.haematocrit.value == pytest.approx(0.43)
+    assert geo.density.value == pytest.approx(1.0)
     for key in ("haematocrit", "density"):
         e = table_value("liver_human", key)
         assert e.source == "ICRP89"

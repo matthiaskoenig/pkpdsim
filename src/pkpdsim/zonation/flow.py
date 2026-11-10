@@ -103,13 +103,21 @@ from sbmlutils.metadata import SBO
 from pkpdsim.sbml.annotation import initial_assignment
 from pkpdsim.sbml.parameters import value_parameter
 from pkpdsim.sbml.units import U
-from pkpdsim.sbml.values import Q, Value, number, unit_text
+from pkpdsim.sbml.values import (
+    Q,
+    Value,
+    derived,
+    model_choice,
+    number,
+    unit_text,
+)
 from pkpdsim.species import Species
 from pkpdsim.zonation import ids
 from pkpdsim.zonation.geometry import (
     Layer,
     SinusoidGeometry,
     fractions,
+    lumen_fraction,
     mass_kg,
     porosities,
     reference_liver_mass,
@@ -401,13 +409,13 @@ def fenestra_counts(geo: SinusoidGeometry, n_zones: int) -> tuple[float, ...]:
     Returns:
         The counts from periportal to pericentral.
     """
-    area = math.pi * geo.r_fen**2
-    return tuple(eps / area for eps in porosities(n_zones, geo))
+    area = math.pi * geo.r_fen.value**2
+    return tuple(eps.value / area for eps in porosities(n_zones, geo))
 
 
 def _mean_porosity(geo: SinusoidGeometry) -> float:
     """The porosity of the leaky tube, the mean of the periportal and pericentral porosity."""
-    return 0.5 * (geo.porosity_pp + geo.porosity_pc)
+    return 0.5 * (geo.porosity_pp.value + geo.porosity_pc.value)
 
 
 def calibrated_resistance_factor(
@@ -494,11 +502,11 @@ def leaky_tube(
         flow.viscosity, _VISCOSITY_TO_PA_S, "viscosity"
     )
     return LeakyTube(
-        r_sin=geo.r_sin,
-        length=geo.L_sin,
-        t_endo=geo.t_endo,
-        r_fen=geo.r_fen,
-        n_fen=_mean_porosity(geo) / (math.pi * geo.r_fen**2),
+        r_sin=geo.r_sin.value,
+        length=geo.L_sin.value,
+        t_endo=geo.t_endo.value,
+        r_fen=geo.r_fen.value,
+        n_fen=_mean_porosity(geo) / (math.pi * geo.r_fen.value**2),
         viscosity=nu,
         p_pp=p_pp,
         p_pc=p_pc,
@@ -540,16 +548,25 @@ def zone_flows(
     return out
 
 
-def _constant(pid: str, value: float, unit: UnitDefinition, name: str) -> Parameter:
-    """A constant parameter of a SI number."""
-    return value_parameter(pid, Value(value, unit), unit, name, _P)
+def _constant(pid: str, q: Q, unit: UnitDefinition, name: str) -> Parameter:
+    """A constant parameter of a SI number, with the provenance of a `Value`.
+
+    A number of the geometry is the `Value` of its row of the table, whose
+    source and notes reach the notes of the parameter; a plain number carries
+    its unit alone, as the pressures and the viscosity of the leaky tube do.
+    """
+    return value_parameter(pid, q, unit, name, _P)
 
 
-def _derived(
-    pid: str, value: float, unit: UnitDefinition | object, name: str
-) -> Parameter:
-    """A constant parameter whose value an initial assignment sets again."""
-    return Parameter(pid, value, unit=unit, name=name, constant=True, sboTerm=_P)  # ty: ignore[invalid-argument-type]
+def _derived(pid: str, q: Q, unit: UnitDefinition | object, name: str) -> Parameter:
+    """A constant parameter whose value an initial assignment sets again.
+
+    It carries the provenance of a `Value` as a constant does: the assignment
+    recomputes the number, not where it comes from.
+    """
+    if isinstance(q, Value):
+        return value_parameter(pid, q, unit, name, _P)  # ty: ignore[invalid-argument-type]
+    return Parameter(pid, q, unit=unit, name=name, constant=True, sboTerm=_P)  # ty: ignore[invalid-argument-type]
 
 
 def _ruled(
@@ -613,11 +630,9 @@ def flow_objects(
     """
     flow = settings.flow
     if isinstance(flow, ImposedFlow):
+        reference_mass = reference_liver_mass(settings.species)
         q = imposed_flow(
-            flow,
-            settings.reference_flow,
-            mass_kg(mass),
-            reference_liver_mass(settings.species).value,
+            flow, settings.reference_flow, mass_kg(mass), reference_mass.value
         )
         if q < 0.0:
             raise ValueError(
@@ -627,10 +642,50 @@ def flow_objects(
             )
         return [
             value_parameter(
-                ids.FLOW, q, U.l_per_min, "blood flow through the liver", _P
+                ids.FLOW,
+                _imposed_flow_value(q, flow, settings.reference_flow, reference_mass),
+                U.l_per_min,
+                "blood flow through the liver",
+                _P,
             )
         ]
     return _pressure_objects(settings, flow, geo, mass)
+
+
+def _imposed_flow_value(
+    q: float, flow: ImposedFlow, reference: Value | None, reference_mass: Value
+) -> Value:
+    """The imposed flow of the liver with its provenance.
+
+    A flow which takes the reference flow of the settings rests on that flow
+    and on the mass of the reference liver, both sourced, so it is a derived
+    value naming them; a flow or a flow per mass the caller states is the
+    model choice of the caller.
+    """
+    if flow.per_mass is not None:
+        return model_choice(
+            q,
+            U.l_per_min,
+            "the flow per g of the liver which the caller of the engine "
+            "imposed, times the mass of the liver",
+        )
+    if flow.value is not None:
+        return model_choice(
+            q,
+            U.l_per_min,
+            "the blood flow of the liver which the caller of the engine imposed",
+        )
+    assert reference is not None  # imposed_flow raises without it
+    return derived(
+        q,
+        U.l_per_min,
+        (reference, reference_mass),
+        "the reference flow of the whole organ scaled with the mass of the "
+        "liver, `reference * mass / reference_mass`, so that the imposed and "
+        "the pressure-driven mode agree at every liver mass. Reference flow: "
+        f"{reference.notes}. Reference liver mass ({reference_mass.value:g} "
+        f"kg): {reference_mass.notes}",
+    )
 
 
 def _pressure_objects(
@@ -647,7 +702,13 @@ def _pressure_objects(
     flows = zone_flows(settings, geo, mass)
     n = settings.n_zones
     fr = fractions(settings.species, settings.haematocrit)
-    f_lumen = fr[Layer.PLASMA] + fr.get(Layer.RBC, 0.0)
+    f_lumen = derived(
+        lumen_fraction(fr),
+        U.dimensionless,
+        [fr[Layer.PLASMA], *([fr[Layer.RBC]] if Layer.RBC in fr else [])],
+        "the volume fraction of the lumen of the sinusoids in the liver, the "
+        "plasma and the erythrocytes of it",
+    )
     n_sin = sinusoid_count(mass, geo, fr)
     w_cap, w_pore = tube.resistance_lumen(), tube.resistance_pores()
     flat = tube.n_fen == 0.0
@@ -694,13 +755,31 @@ def _pressure_objects(
         ),
         _constant(
             ids.POROSITY_MEAN,
-            _mean_porosity(geo),
+            derived(
+                _mean_porosity(geo),
+                U.dimensionless,
+                (geo.porosity_pp, geo.porosity_pc),
+                "the fenestral porosity the leaky tube is evaluated at, the "
+                "mean of the periportal and the pericentral porosity of the "
+                f"sinusoid. Periportal: {geo.porosity_pp.notes}. Pericentral: "
+                f"{geo.porosity_pc.notes}",
+            ),
             U.dimensionless,
             "fenestral porosity the leaky tube is evaluated at (mean of the sinusoid)",
         ),
         _derived(
             ids.FENESTRA_COUNT,
-            tube.n_fen,
+            derived(
+                tube.n_fen,
+                PER_M2,
+                (geo.porosity_pp, geo.porosity_pc, geo.r_fen),
+                "the number of fenestrae per endothelial area, the mean "
+                "porosity of the sinusoid over the area of a fenestra "
+                f"(`eps / (pi r_fen**2)`); the count {geo.n_fen.value:g} /m**2 "
+                "of the table is a cross-check and no input of the hydraulics "
+                f"(see the module docstring). Fenestra radius: {geo.r_fen.notes}. "
+                f"Count of the table: {geo.n_fen.notes}",
+            ),
             PER_M2,
             "number of fenestrae per endothelial area (porosity over the area of a fenestra)",
         ),

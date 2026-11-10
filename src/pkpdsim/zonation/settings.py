@@ -4,7 +4,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from pkpdsim.sbml.values import Value
+from pkpdsim.sbml.units import U
+from pkpdsim.sbml.values import Value, model_choice
 from pkpdsim.species import Species
 from pkpdsim.zonation.flow import ImposedFlow, PressureFlow
 from pkpdsim.zonation.geometry import Layer, SinusoidGeometry
@@ -86,7 +87,10 @@ class ZonationSettings:
             (`f_par` of `geometry_constants`). `None` takes the table. The
             well-stirred geometry takes the vascular fraction as the sum of
             the lumen layers (`Layer.PLASMA`) and the cells as
-            `Layer.CELL`.
+            `Layer.CELL`. A fraction is a `Value` with its provenance, which
+            reaches the notes of the parameter the builder writes
+            (`f_vas`, `f_cell`); a plain number is wrapped as the model
+            choice it is (`layer_fractions`) and never looks sourced.
         boundary: who supplies the ends of the chain.
         cell_species: every solute has a species in the cell layer; `False`
             when the cell model holds the species of the cell (well-stirred
@@ -103,9 +107,32 @@ class ZonationSettings:
     liver_mass: Value | None = None
     reference_flow: Value | None = None
     geometry_constants: SinusoidGeometry | None = None
-    fractions: Mapping[Layer, float] | None = None
+    fractions: Mapping[Layer, Value | float] | None = None
     boundary: FlowBoundary = FlowBoundary.OPEN
     cell_species: bool = True
+
+    def layer_fractions(self) -> dict[Layer, Value] | None:
+        """Get the fractions the caller states, every one with its provenance.
+
+        Returns:
+            The fraction of every layer the caller states as a `Value`, a
+            plain number as the model choice of the caller it is; `None`
+            where the caller states none and the table of the species
+            applies.
+        """
+        if self.fractions is None:
+            return None
+        return {
+            layer: f
+            if isinstance(f, Value)
+            else model_choice(
+                f,
+                U.dimensionless,
+                f"the volume fraction of the {layer} in the organ, supplied "
+                "by the caller of the engine and no value of a table",
+            )
+            for layer, f in self.fractions.items()
+        }
 
     def __post_init__(self) -> None:
         """Check the number of zones and the haematocrit.

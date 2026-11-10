@@ -194,7 +194,8 @@ def test_the_default_gradient_is_the_table_one(tmp_path: Path) -> None:
     r = _barrier(tmp_path, n=n)
     geo = geometry(Species.RAT)
     for k in range(1, n + 1):
-        eps = geo.porosity_pp + (geo.porosity_pc - geo.porosity_pp) * (k - 0.5) / n
+        pp, pc = geo.porosity_pp.value, geo.porosity_pc.value
+        eps = pp + (pc - pp) * (k - 0.5) / n
         assert r[f"eps_fen_{ids.zone(k)}"] == pytest.approx(eps)
 
 
@@ -322,7 +323,7 @@ def test_a_solute_at_the_radius_of_the_fenestra_has_no_fenestral_path(
     tmp_path: Path,
 ) -> None:
     """A radius equal to `r_fen` closes the sieve exactly: no reaction, finite run."""
-    builder = _builder(radius=geometry(Species.RAT).r_fen)
+    builder = _builder(radius=geometry(Species.RAT).r_fen.value)
     assert not [r for r in builder.radial_exchange() if str(r.sid).startswith("FEN_")]
     r = _barrier(tmp_path, endothelial_ps=1e-6, builder=builder)
     assert np.all(np.isfinite(r.simulate(0, 10, 11)))
@@ -349,7 +350,9 @@ def test_without_erythrocytes_the_area_is_that_of_the_plasma(tmp_path: Path) -> 
     """A haematocrit of 0 has no erythrocyte compartment and still exchanges."""
     r = _barrier(tmp_path, haematocrit=0.0)
     geo = geometry(Species.RAT)
-    assert r["A_pd_z1"] == pytest.approx(2.0 * r["V_plasma_z1"] * 1e-3 / geo.r_sin)
+    assert r["A_pd_z1"] == pytest.approx(
+        2.0 * r["V_plasma_z1"] * 1e-3 / geo.r_sin.value
+    )
     assert r["FEN_tr_z1"] > 0.0
 
 
@@ -357,7 +360,9 @@ def test_a_single_zone_has_the_exchange(tmp_path: Path) -> None:
     """One zone of the sinusoid has the barrier at the mid porosity."""
     r = _barrier(tmp_path, n=1)
     geo = geometry(Species.RAT)
-    assert r["eps_fen_z1"] == pytest.approx((geo.porosity_pp + geo.porosity_pc) / 2)
+    assert r["eps_fen_z1"] == pytest.approx(
+        (geo.porosity_pp.value + geo.porosity_pc.value) / 2
+    )
     assert r["FEN_tr_z1"] > 0.0
 
 

@@ -396,8 +396,8 @@ class ZonatedBuilder(StandardBuilder):
             f"{reference_liver_mass(self.ctx.species).value:.3g} kg and its blood "
             f"flow {self._reference_flow():.3g} l/min) the blood moves at "
             f"{v * 1e6:.3g} um/s, the chain of {n} zones disperses with "
-            f"{dispersion(v, geo.L_sin, n):.3g} m**2/s and its Peclet number is "
-            f"{peclet(v, geo.L_sin, n, 0.0):.3g} = 2n for a substance whose "
+            f"{dispersion(v, geo.L_sin.value, n):.3g} m**2/s and its Peclet number is "
+            f"{peclet(v, geo.L_sin.value, n, 0.0):.3g} = 2n for a substance whose "
             "axial diffusion is negligible against the dispersion "
             "(`pkpdsim.zonation.transport.peclet`, the `effective_peclet` of the "
             "engine)"
@@ -441,8 +441,8 @@ class ZonatedBuilder(StandardBuilder):
         """
         geo = self._geometry()
         f_vas = reference_fractions(self.organ, self.ctx.species)[_REFERENCE_SEX][0]
-        lumen = f_vas * reference_liver_mass(self.ctx.species).value / geo.density
-        return axial_velocity(geo.L_sin, lumen, self._reference_flow())
+        lumen = f_vas * reference_liver_mass(self.ctx.species).value / geo.density.value
+        return axial_velocity(geo.L_sin.value, lumen, self._reference_flow())
 
     def _units(self) -> type[Units]:
         """The unit definitions of the model of the liver.
@@ -750,7 +750,7 @@ class ZonatedBuilder(StandardBuilder):
         if p.value <= 0.0:
             raise ValueError(
                 f"{s.sid}: the molecular radius {radius.value:.3g} m reaches the "
-                f"radius of a fenestra ({geo.r_fen:.3g} m), so no fenestra lets "
+                f"radius of a fenestra ({geo.r_fen.value:.3g} m), so no fenestra lets "
                 "the substance through and the sinusoid geometry of the zonated "
                 "liver would cut it off from the tissue. It needs a transcellular "
                 "path through the endothelium, which the liver does not have "
@@ -766,7 +766,7 @@ class ZonatedBuilder(StandardBuilder):
             f"Permeability of {s.sid} through an open fenestra: its diffusion "
             "coefficient in water over the thickness of the endothelium times "
             "the hindrance of its molecular radius "
-            f"({radius.value:.3g} m) in a fenestra ({geo.r_fen:.3g} m, "
+            f"({radius.value:.3g} m) in a fenestra ({geo.r_fen.value:.3g} m, "
             f"Renkin 1954); {_TABLE}.",
             kind="pore_permeability",
         )
@@ -837,13 +837,13 @@ class ZonatedBuilder(StandardBuilder):
         n = len(self.zones)
         geo = self._geometry()
         v = self._reference_velocity()
-        numerical = dispersion(v, geo.L_sin, n)
+        numerical = dispersion(v, geo.L_sin.value, n)
         d = float(diffusion_of(s).value)
         above = "above" if d > numerical else "below"
         return (
             f"At the reference male of the species the chain of {n} zones "
-            f"realizes the Peclet number {peclet(v, geo.L_sin, n, d):.3g} with "
-            f"this coefficient, against {peclet(v, geo.L_sin, n, 0.0):.3g} = 2n "
+            f"realizes the Peclet number {peclet(v, geo.L_sin.value, n, d):.3g} with "
+            f"this coefficient, against {peclet(v, geo.L_sin.value, n, 0.0):.3g} = 2n "
             f"for a substance which does not diffuse: the coefficient lies "
             f"{above} the numerical dispersion {numerical:.3g} m**2/s "
             "(`v*L_sin/(2n)`) of the upwind chain, which the zone count and not "
