@@ -92,7 +92,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from sbmlutils.factory import InitialAssignment, Parameter
+from sbmlutils.factory import AssignmentRule, InitialAssignment, Parameter
 from sbmlutils.factory.units import UnitDefinition
 from sbmlutils.metadata import SBO
 
@@ -538,9 +538,44 @@ def _derived(
     return Parameter(pid, value, unit=unit, name=name, constant=True, sboTerm=_P)  # ty: ignore[invalid-argument-type]
 
 
+def _ruled(
+    pid: str, value: float, unit: UnitDefinition | object, name: str
+) -> Parameter:
+    """A parameter of the flow chain, which an assignment rule computes at any time."""
+    return Parameter(pid, value, unit=unit, name=name, constant=False, sboTerm=_P)  # ty: ignore[invalid-argument-type]
+
+
+def assignment_rule(
+    pid: str, formula: str, unit: UnitDefinition | object, name: str
+) -> AssignmentRule:
+    """Get the assignment rule of a quantity of the flow chain.
+
+    The flow chain is computed by rules and not by initial assignments: a
+    simulator applies a change after the initialization, so a change of the
+    organ flow (or of a pressure, of the reference of the bile flow) reaches
+    every flow which derives from it only through a rule.
+
+    Args:
+        pid: the id of the target.
+        formula: the formula.
+        unit: the unit of the formula.
+        name: the name of the target.
+
+    Returns:
+        The assignment rule.
+    """
+    return AssignmentRule(
+        pid,
+        formula,
+        unit,  # ty: ignore[invalid-argument-type]
+        name=name,
+        sboTerm=SBO.MATHEMATICAL_EXPRESSION,
+    )
+
+
 def flow_objects(
     settings: "ZonationSettings", geo: SinusoidGeometry, mass: Q
-) -> list[Parameter | InitialAssignment]:
+) -> list[Parameter | InitialAssignment | AssignmentRule]:
     """Get the parameters and initial assignments of the flow of the liver.
 
     An imposed flow is the parameter `Q_li` (l/min). A pressure flow is the
@@ -557,7 +592,7 @@ def flow_objects(
         mass: the liver mass.
 
     Returns:
-        The parameters and initial assignments.
+        The parameters, initial assignments and assignment rules.
 
     Raises:
         ValueError: for a negative flow, or a flow which is a formula.
@@ -584,8 +619,8 @@ def _pressure_objects(
     flow: PressureFlow,
     geo: SinusoidGeometry,
     mass: Q,
-) -> list[Parameter | InitialAssignment]:
-    """The leaky tube as parameters and initial assignments."""
+) -> list[Parameter | InitialAssignment | AssignmentRule]:
+    """The leaky tube: parameters and initial assignments, the flows as rules."""
     tube = leaky_tube(flow, geo, settings.species, settings.reference_flow)
     factor = resolved_resistance_factor(
         flow, geo, settings.species, settings.reference_flow
@@ -703,7 +738,10 @@ def _pressure_objects(
             "specific hydraulic resistance of the lumen of the sinusoid",
         ),
     ]
-    out: list[Parameter | InitialAssignment] = [*params, *assignments]
+    out: list[Parameter | InitialAssignment | AssignmentRule] = [
+        *params,
+        *assignments,
+    ]
     if not flat:
         out += [
             _derived(
@@ -741,7 +779,7 @@ def _pressure_objects(
 
 def _zone_objects(
     zone: str, x: float, q_sin: float, q_li: float, flat: bool
-) -> list[Parameter | InitialAssignment]:
+) -> list[Parameter | AssignmentRule]:
     """The flow of one sinusoid and of the liver at the position of a zone."""
     if flat:
         formula = (
@@ -759,10 +797,10 @@ def _zone_objects(
     sin_id, li_id = ids.sinusoid_flow(zone), ids.zone_flow(None, zone)
     where = f"at the position {x:.3g} of zone {zone[1:]}"
     return [
-        _derived(sin_id, q_sin, M3_PER_S, f"flow of one sinusoid {where}"),
-        initial_assignment(sin_id, formula, M3_PER_S, f"flow of one sinusoid {where}"),
-        _derived(li_id, q_li, U.l_per_min, f"blood flow through the liver {where}"),
-        initial_assignment(
+        _ruled(sin_id, q_sin, M3_PER_S, f"flow of one sinusoid {where}"),
+        assignment_rule(sin_id, formula, M3_PER_S, f"flow of one sinusoid {where}"),
+        _ruled(li_id, q_li, U.l_per_min, f"blood flow through the liver {where}"),
+        assignment_rule(
             li_id,
             f"{sin_id} * {ids.N_SINUSOIDS} * 1000 l_per_m3 * 60 s_per_min",
             U.l_per_min,
@@ -771,17 +809,17 @@ def _zone_objects(
     ]
 
 
-def _mean_flow(n: int, flows: Sequence[float]) -> list[Parameter | InitialAssignment]:
+def _mean_flow(n: int, flows: Sequence[float]) -> list[Parameter | AssignmentRule]:
     """The flow of the liver, the mean of the flows of its zones."""
     terms = " + ".join(ids.zone_flow(None, ids.zone(k)) for k in range(1, n + 1))
     return [
-        _derived(
+        _ruled(
             ids.FLOW,
             sum(flows) / n,
             U.l_per_min,
             "blood flow through the liver (mean of the zones)",
         ),
-        initial_assignment(
+        assignment_rule(
             ids.FLOW,
             f"({terms}) / {n} dimensionless",
             U.l_per_min,

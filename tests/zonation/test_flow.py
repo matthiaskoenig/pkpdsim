@@ -16,6 +16,7 @@ import math
 from collections.abc import Sequence
 from pathlib import Path
 
+import libsbml
 import pytest
 import roadrunner
 from pbpk.conftest import individual
@@ -532,3 +533,154 @@ def test_the_mean_flow_is_below_the_reference_flow(
     )
     r = _build(settings, tmp_path)
     assert r[ids.FLOW] / reference_flow(settings.species).value == _eq(ratio, 1e-4)
+
+
+def _loaded(settings: ZonationSettings, tmp_path: Path) -> roadrunner.RoadRunner:
+    """The roadrunner model of the settings, as written."""
+    return _build(settings, tmp_path)
+
+
+def _changed_after_initialization(
+    r: roadrunner.RoadRunner, **changes: float
+) -> roadrunner.RoadRunner:
+    """Change parameters of the initialized model and simulate one step, as a run does."""
+    for sid, value in changes.items():
+        r[sid] = value
+    r.simulate(0.0, 1.0, 2)
+    return r
+
+
+def _flow_chain(r: roadrunner.RoadRunner, zones: Sequence[str]) -> dict[str, float]:
+    """Every flow which derives from the flow of the liver, by id."""
+    out = {ids.layer_flow("plasma"): 0.0, ids.layer_flow("rbc"): 0.0}
+    for zone in zones:
+        for layer in ("plasma", "rbc"):
+            out[ids.zone_flow(layer, zone)] = 0.0
+    return {sid: r[sid] for sid in out}
+
+
+@pytest.mark.parametrize("factor", [2.0, 0.5])
+def test_a_change_of_the_organ_flow_reaches_every_flow(
+    tmp_path: Path, factor: float
+) -> None:
+    """A run which changes `Q_li` alone simulates that flow, not the reference."""
+    settings = _settings(ImposedFlow(), species=ZonationSettings().species)
+    r = _loaded(settings, tmp_path)
+    before = _flow_chain(r, [])
+    q = r[ids.FLOW]
+    _changed_after_initialization(r, **{ids.FLOW: factor * q})
+    after = _flow_chain(r, [])
+    assert before[ids.layer_flow("plasma")] > 0.0
+    for sid, value in before.items():
+        assert after[sid] == _eq(factor * value), sid
+
+
+@pytest.mark.parametrize("factor", [2.0, 0.5])
+def test_a_change_of_the_pressure_reaches_the_flow_of_every_zone(
+    tmp_path: Path, factor: float
+) -> None:
+    """The flow of a zone and of its carriers follows a change after the initialization."""
+    zones = [ids.zone(k) for k in range(1, _N + 1)]
+    r = _loaded(_settings(PressureFlow()), tmp_path)
+    p_portal = r[ids.PRESSURE_PORTAL]
+    p_central = r[ids.PRESSURE_CENTRAL]
+    p_onc = r[ids.PRESSURE_ONCOTIC]
+    sins = [ids.sinusoid_flow(z) for z in zones]
+    expected = []
+    # the flow is linear in the pressures relative to the oncotic pressure
+    r2 = _loaded(
+        _settings(
+            PressureFlow(
+                p_pp=Value(factor * p_portal, "Pa"),
+                p_pc=Value(factor * p_central, "Pa"),
+                p_onc=Value(p_onc, "Pa"),
+            )
+        ),
+        tmp_path / "built",
+    )
+    expected = [r2[s] for s in sins]
+    _changed_after_initialization(
+        r,
+        **{
+            ids.PRESSURE_PORTAL: factor * p_portal,
+            ids.PRESSURE_CENTRAL: factor * p_central,
+        },
+    )
+    assert [r[s] for s in sins] == _eq(expected, rel=1e-9)
+    for z in zones:
+        assert r[ids.zone_flow("plasma", z)] == _eq(
+            (1.0 - r[ids.HAEMATOCRIT]) * r[ids.zone_flow(None, z)]
+        )
+        assert r[ids.zone_flow("rbc", z)] == _eq(
+            r[ids.HAEMATOCRIT] * r[ids.zone_flow(None, z)]
+        )
+    zone_flows_ = [r[ids.zone_flow(None, z)] for z in zones]
+    assert r[ids.FLOW] == _eq(sum(zone_flows_) / _N)
+
+
+@pytest.mark.parametrize("factor", [2.0, 0.5])
+def test_a_change_of_the_bile_reference_reaches_the_bile_flow(
+    tmp_path: Path, factor: float
+) -> None:
+    """The bile flow follows its reference and the mass after the initialization."""
+    from pkpdsim.zonation.settings import BileTransport
+
+    settings = _settings(ImposedFlow(), bile=BileTransport.ADVECTIVE)
+    r = _loaded(settings, tmp_path)
+    q = r[ids.BILE_FLOW]
+    assert q > 0.0
+    _changed_after_initialization(
+        r, **{ids.BILE_FLOW_REFERENCE: factor * r[ids.BILE_FLOW_REFERENCE]}
+    )
+    assert r[ids.BILE_FLOW] == _eq(factor * q)
+
+
+def _sbml_model(settings: ZonationSettings, directory: Path) -> libsbml.Model:
+    directory.mkdir(parents=True, exist_ok=True)
+    model = ZonationBuilder(settings, [TRACER], None).build()
+    path = directory / "flow.xml"
+    create_model(model, filepath=path, sbml_level=3, sbml_version=2, validate=False)
+    return libsbml.readSBMLFromFile(str(path)).getModel()
+
+
+def test_the_flow_chain_is_assignment_rules(tmp_path: Path) -> None:
+    """The flows of the chain are rules, and not constants a change would pass by."""
+    from pkpdsim.zonation.settings import BileTransport
+
+    model = _sbml_model(
+        _settings(PressureFlow(), bile=BileTransport.ADVECTIVE), tmp_path
+    )
+    ruled = {r.getVariable() for r in model.getListOfRules()}
+    zones = [ids.zone(k) for k in range(1, _N + 1)]
+    chain = {ids.FLOW, ids.BILE_FLOW, ids.layer_flow("plasma")} - {
+        ids.layer_flow("plasma")
+    }
+    chain |= {ids.sinusoid_flow(z) for z in zones}
+    chain |= {
+        ids.zone_flow(layer, z) for z in zones for layer in (None, "plasma", "rbc")
+    }
+    assert chain <= ruled
+    for sid in chain:
+        assert not model.getParameter(sid).getConstant(), sid
+    imposed = _sbml_model(_settings(ImposedFlow()), tmp_path / "imposed")
+    imposed_ruled = {r.getVariable() for r in imposed.getListOfRules()}
+    assert {ids.layer_flow("plasma"), ids.layer_flow("rbc")} <= imposed_ruled
+    assert ids.FLOW not in imposed_ruled, "the imposed flow is the knob"
+
+
+def test_the_structural_quantities_stay_initial_assignments(tmp_path: Path) -> None:
+    """The geometry derives from the build: a run does not recompute it."""
+    model = _sbml_model(_settings(PressureFlow()), tmp_path)
+    ruled = {r.getVariable() for r in model.getListOfRules()}
+    initial = {a.getSymbol() for a in model.getListOfInitialAssignments()}
+    structural = {
+        ids.N_SINUSOIDS,
+        ids.VISCOSITY_LIVER,
+        ids.RESISTANCE_LUMEN,
+        ids.RESISTANCE_PORES,
+        ids.DECAY_LENGTH,
+        ids.FENESTRA_COUNT,
+        ids.PRESSURE_ONCOTIC,
+    }
+    assert structural <= initial
+    assert not structural & ruled

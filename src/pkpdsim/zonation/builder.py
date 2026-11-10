@@ -65,6 +65,7 @@ import warnings
 from collections.abc import Sequence
 
 from sbmlutils.factory import (
+    AssignmentRule,
     Compartment,
     InitialAssignment,
     Model,
@@ -88,6 +89,7 @@ from pkpdsim.zonation.flow import (
     PA_S_PER_M4,
     PER_M2,
     PressureFlow,
+    assignment_rule,
     flow_objects,
     imposed_flow,
     zone_flows,
@@ -561,16 +563,21 @@ class ZonationBuilder:
                     )
         return out
 
-    def _flow_parameters(self) -> tuple[list[Parameter], list[InitialAssignment]]:
+    def _flow_parameters(
+        self,
+    ) -> tuple[list[Parameter], list[InitialAssignment], list[AssignmentRule]]:
         """The flow of the liver, its split between the carriers, the boundary.
 
         A pressure flow adds the leaky tube and the flow of every zone
-        (`flow_objects`), and the carriers split the flow of each zone.
+        (`flow_objects`), and the carriers split the flow of each zone. The
+        flow chain (the flow of a zone, of a carrier) is assignment rules, so a
+        change of the flow of the liver reaches all of it at any time.
         """
         q = self._flow()
         objects = flow_objects(self.settings, self._geo(), self._mass())
         params = [o for o in objects if isinstance(o, Parameter)]
         assignments = [o for o in objects if isinstance(o, InitialAssignment)]
+        rules = [o for o in objects if isinstance(o, AssignmentRule)]
         pressure = isinstance(self.settings.flow, PressureFlow)
         if self.settings.geometry is Geometry.SINUSOID:
             params.append(
@@ -607,12 +614,12 @@ class ZonationBuilder:
                             flow * factor,
                             unit=U.l_per_min,
                             name=f"flow of the {_NAMES[layer]} through the liver",
-                            constant=True,
+                            constant=False,
                             sboTerm=_P,
                         )
                     )
-                    assignments.append(
-                        initial_assignment(
+                    rules.append(
+                        assignment_rule(
                             pid,
                             f"{source} * {share[Layer(layer)]}",
                             U.l_per_min,
@@ -632,7 +639,7 @@ class ZonationBuilder:
                             sboTerm=_P,
                         )
                     )
-        return params, assignments
+        return params, assignments, rules
 
     def _diffusion_parameters(self) -> list[Parameter]:
         """The sinusoid length, the diffusions and the profiles of the diffusion.
@@ -697,7 +704,7 @@ class ZonationBuilder:
                 flow.value * self._mass().value / reference_mass.value,
                 unit=U.l_per_min,
                 name="bile flow through the liver",
-                constant=True,
+                constant=False,
                 sboTerm=_P,
             ),
         ]
@@ -706,12 +713,12 @@ class ZonationBuilder:
             params += self._profile_parameters(CANALICULAR_FLOW, profile)
         return params
 
-    def _bile_assignments(self) -> list[InitialAssignment]:
-        """The bile flow follows the liver mass: the reference flow per reference mass."""
+    def _bile_rules(self) -> list[AssignmentRule]:
+        """The bile flow follows its reference and the liver mass, at any time."""
         if self.settings.bile is not BileTransport.ADVECTIVE:
             return []
         return [
-            initial_assignment(
+            assignment_rule(
                 ids.BILE_FLOW,
                 f"{ids.BILE_FLOW_REFERENCE} * {ids.MASS} / {ids.MASS_REFERENCE}",
                 U.l_per_min,
@@ -1358,7 +1365,7 @@ class ZonationBuilder:
             The model.
         """
         s = self.settings
-        flow_parameters, flow_assignments = self._flow_parameters()
+        flow_parameters, flow_assignments, flow_rules = self._flow_parameters()
         self._warn_dispersion()
         dispersion = self.dispersion()
         velocity = self.velocity()
@@ -1392,8 +1399,8 @@ class ZonationBuilder:
                 *self._assignments(),
                 *flow_assignments,
                 *self._radial_assignments(),
-                *self._bile_assignments(),
             ],
+            rules=[*flow_rules, *self._bile_rules()],
             reactions=[
                 *self.convection(),
                 *self.axial_diffusion(),
