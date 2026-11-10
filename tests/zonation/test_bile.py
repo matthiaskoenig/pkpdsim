@@ -137,26 +137,35 @@ def test_the_amount_is_conserved_while_it_runs(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("mass", [1000.0, 2000.0, 7.229])
-def test_the_transit_time_is_the_bile_volume_over_the_flow(
+def test_the_transit_time_is_the_harmonic_sum_of_the_tanks(
     tmp_path: Path, mass: float
 ) -> None:
-    """The mean transit from z10 to the duct is the bile volume over `Q_bile`, at any mass.
+    """The mean transit from z10 to the duct is `H_10` times the volume over the flow.
 
     10 tanks of a tenth of the bile volume each in series: per kg of liver
     3.810 ml (0.4 % of the 0.9524 l at 1.05 kg/l) over 2.1607 ml/min (0.01562
-    ml/min of 7.229 g of rat liver, times 1000 g / 7.229 g) is 1.763 min. Both
-    the volume and the flow are proportional to the mass, so the time is the
-    same for 1000 g, 2000 g and the 7.229 g of the reference liver. The mean
-    time is the area above the curve of the duct amount.
+    ml/min of 7.229 g of rat liver, times 1000 g / 7.229 g) is 1.763 min of
+    volume over flow. The canaliculus is filled by the zones it drains, so the
+    one leaving zone `k` carries `(n - k + 1) / n * Q_bile` and tank `k` empties
+    in `V / ((n - k + 1) * Q_bile)`: the chain takes the harmonic sum of the
+    tanks, `H_10 = 2.9290` times `V / Q_bile`, 5.1640 min. Before the chain
+    accumulated the secretion every canaliculus carried the whole `Q_bile` and
+    this test pinned the 1.763 min of the volume over the flow, the pericentral
+    canaliculus exporting bile that nothing had entered. Both the volume and the
+    flow are proportional to the mass, so the time is the same for 1000 g,
+    2000 g and the 7.229 g of the reference liver. The mean time is the area
+    above the curve of the duct amount.
     """
     r = _bile_chain(tmp_path, n=10, released_in_zone=10, mass=mass)
     released = _released(r, 10)
     # the equality: the bile volume over the flow, read from the model
     volume = sum(r[ids.volume(Layer.BILE, ids.zone(k))] for k in range(1, 11))
+    harmonic = sum(1.0 / k for k in range(1, 11))
     assert volume / r["Q_bile"] == pytest.approx(1.763, rel=2e-3)
-    out = r.simulate(0, 40, 40001, selections=["time", DUCT])
+    assert harmonic * volume / r["Q_bile"] == pytest.approx(5.1640, rel=2e-3)
+    out = r.simulate(0, 60, 60001, selections=["time", DUCT])
     mean = np.trapezoid(1.0 - out[:, 1] / released, out[:, 0])
-    assert mean == pytest.approx(1.763, rel=2e-3)
+    assert mean == pytest.approx(5.1640, rel=2e-3)
 
 
 def test_the_bile_flow_follows_the_liver_mass(tmp_path: Path) -> None:
@@ -262,7 +271,16 @@ def test_both_geometries_have_the_chain(tmp_path: Path, geometry: Geometry) -> N
 
 
 def test_a_profile_of_the_canalicular_flow_scales_the_zones(tmp_path: Path) -> None:
-    """The canalicular flow can be zonated: a slower zone holds the tracer longer."""
+    """A zonated secretion collects into the chain: a zone which secretes less drains slower.
+
+    The profile is the secretion of a zone, and the canaliculus leaving a zone
+    carries what the zones from it to the pericentral end secrete: the weights
+    `(1, 1, 1, 0.2)` of 4 zones give the collected shares of `Q_bile`
+    0.0625 (z4), 0.375, 0.6875 and 1.0 (z1, the whole flow into the duct). The
+    flat chain collects 0.25, 0.5, 0.75 and 1.0. The shares of the pericentral
+    zone are the profile levels themselves over the zone count, so the ratio of
+    the two outflows of z4 is the 0.25 it was before the chain accumulated.
+    """
     flat = _bile_chain(tmp_path, n=4, released_in_zone=4)
     slow = _bile_chain(
         tmp_path,
@@ -273,6 +291,14 @@ def test_a_profile_of_the_canalicular_flow_scales_the_zones(tmp_path: Path) -> N
     # the levels are normalized to the mean 0.8: 1.25, 1.25, 1.25, 0.25
     assert slow["p_canalicular_flow_z4"] == pytest.approx(0.25)
     assert slow["p_canalicular_flow_z3"] == pytest.approx(1.25)
+    # the collected shares, the cumulative sum of the weights from the pericentral end
+    for zone, share in zip((4, 3, 2, 1), (0.0625, 0.375, 0.6875, 1.0), strict=True):
+        assert slow[ids.canalicular_flow(ids.zone(zone))] == pytest.approx(
+            share * slow["Q_bile"], rel=1e-9
+        )
+        assert flat[ids.canalicular_flow(ids.zone(zone))] == pytest.approx(
+            (4 - zone + 1) / 4 * flat["Q_bile"], rel=1e-9
+        )
     # at the start only z4 holds the tracer: its flow is the quarter of the flat one
     assert flat["FLOW_tr_bile_z4_bile_z3"] > 0.0
     assert slow["FLOW_tr_bile_z4_bile_z3"] == pytest.approx(

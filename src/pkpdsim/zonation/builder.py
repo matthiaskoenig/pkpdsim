@@ -361,8 +361,9 @@ class ZonationBuilder:
             theirs (`cell_processes`). The barrier adds the `porosity` (a factor on the gradient
             of the table, `p_porosity_<zone>`), the `endothelial_permeability`
             and the `basolateral_permeability`. The bile adds the
-            `canalicular_flow` (the factor `p_canalicular_flow_<zone>` of the
-            zone the bile leaves scales the flow of an interface) and the
+            `canalicular_flow` (the weight `p_canalicular_flow_<zone>` of the
+            bile a zone secretes, which the flow of an interface collects over
+            the zones behind it, `_collected_shares`) and the
             `canalicular_diffusion` (the mean of the two zones, as for the
             axial diffusion; the duct interface takes the factor of `z1`); a
             profile of the one the bile of the settings does not have is
@@ -974,13 +975,57 @@ class ZonationBuilder:
         profile = s.profiles.get(CANALICULAR_FLOW)
         if profile is not None:
             params += self._profile_parameters(CANALICULAR_FLOW, profile)
+        n = s.n_zones
+        q = flow.value * self._mass().value / reference_mass.value
+        params += [
+            Parameter(
+                ids.canalicular_flow(ids.zone(k)),
+                share * q,
+                unit=U.l_per_min,
+                name=(
+                    f"bile flow the canaliculus carries out of zone {k} of {n} "
+                    f"(the secretion of the zones {k} to {n})"
+                ),
+                constant=False,
+                sboTerm=_P,
+            )
+            for k, share in enumerate(self._collected_shares(), start=1)
+        ]
         return params
 
+    def _collected_shares(self) -> tuple[float, ...]:
+        """The share of the bile flow of the liver the canaliculus of every zone carries.
+
+        The canaliculus runs from the pericentral end to the portal tract and
+        collects the secretion of every zone it passes, so the interface which
+        leaves zone `k` carries the secretion of the zones `k` to `n`: the
+        share `(n - k + 1) / n` of the flow of the liver without a profile,
+        and the collected weights of a `canalicular_flow` profile over their
+        sum with one. The share of the first zone, which enters the duct, is 1
+        (the whole liver has secreted into it), exactly: the sums are formed
+        in the order of the formulas of `_bile_rules`.
+        """
+        n = self.settings.n_zones
+        profile = self.settings.profiles.get(CANALICULAR_FLOW)
+        if profile is None:
+            return tuple((n - k + 1) / n for k in range(1, n + 1))
+        weights = profile.values(n)
+        total = sum(weights)
+        return tuple(sum(weights[k - 1 :]) / total for k in range(1, n + 1))
+
     def _bile_rules(self) -> list[AssignmentRule]:
-        """The bile flow follows its reference and the liver mass, at any time."""
+        """The bile flow of the liver and the collected flow of every zone, at any time.
+
+        `Q_bile` follows its reference and the liver mass, and the flow of the
+        canaliculus of a zone is the share of it the zones from there to the
+        pericentral end secrete (`_collected_shares`), so a change of the
+        reference or of the mass reaches every interface of the chain.
+        """
         if self.settings.bile is not BileTransport.ADVECTIVE:
             return []
-        return [
+        n = self.settings.n_zones
+        has_profile = CANALICULAR_FLOW in self.settings.profiles
+        out = [
             assignment_rule(
                 ids.BILE_FLOW,
                 f"{ids.BILE_FLOW_REFERENCE} * {ids.MASS} / {ids.MASS_REFERENCE}",
@@ -988,6 +1033,24 @@ class ZonationBuilder:
                 "bile flow through the liver",
             )
         ]
+        for k in range(1, n + 1):
+            if has_profile:
+                terms = " + ".join(
+                    ids.profile(CANALICULAR_FLOW, ids.zone(j)) for j in range(k, n + 1)
+                )
+                total = sum(self.settings.profiles[CANALICULAR_FLOW].values(n))
+                collected = f"({terms}) / {total!r} dimensionless"
+            else:
+                collected = f"{n - k + 1} dimensionless / {n} dimensionless"
+            out.append(
+                assignment_rule(
+                    ids.canalicular_flow(ids.zone(k)),
+                    f"{collected} * {ids.BILE_FLOW}",
+                    U.l_per_min,
+                    f"bile flow the canaliculus carries out of zone {k} of {n}",
+                )
+            )
+        return out
 
     def _duct_compartments(self) -> list[Compartment]:
         """The compartment of the duct, which holds amounts and has no volume of its own."""
@@ -1171,10 +1234,20 @@ class ZonationBuilder:
         and what leaves the canaliculus of `z1` is collected in the duct
         (`<s>_bile_duct`, an amount), which gives nothing back.
 
-        - `ADVECTIVE`: `FLOW_<s>_bile_z<k+1>_bile_z<k>` is `Q_bile * c` of the
-          upstream (pericentral) zone, and `FLOW_<s>_bile_z1_bile_duct` takes
-          the first zone out; a profile `canalicular_flow` scales every one
-          by the factor of the zone it leaves.
+        - `ADVECTIVE`: `FLOW_<s>_bile_z<k+1>_bile_z<k>` is `Q_bile_z<k+1> * c`
+          of the upstream (pericentral) zone, and `FLOW_<s>_bile_z1_bile_duct`
+          takes the first zone out at `Q_bile_z1`, the bile flow of the whole
+          liver. **The canaliculus collects the secretion of the zones it has
+          passed**: `Q_bile_<zone>` is the share `(n - k + 1) / n` of `Q_bile`
+          (`_collected_shares`), so the pericentral canaliculus carries one
+          zone's secretion and the one at the portal tract the liver's, and the
+          water of the chain is continuous. The transit from the pericentral
+          zone to the duct is therefore `H_n * V_bile / Q_bile` with the
+          harmonic number `H_n` (2.9290 times `V_bile / Q_bile` at ten zones)
+          and not `V_bile / Q_bile`, which is what a uniform flow gave. A
+          profile `canalicular_flow` is the zonal weight of the **secretion**,
+          and the flow of an interface is the collected weight of the zones
+          behind it.
         - `DIFFUSIVE`: `D_<s>_bile_z<k+1>_bile_z<k>` is reversible, `D * A / dx *
           (c_k+1 - c_k)`, with `A / dx = n**2 * V_k / L_sin**2` (the layer
           volume of a zone is its cross-section times its length, `V_k = A *
@@ -1210,11 +1283,6 @@ class ZonationBuilder:
         """The advection of a substance in the canaliculus from one site to the next."""
         a = ids.species(substance.sid, Layer.BILE, source)
         b = ids.species(substance.sid, Layer.BILE, target)
-        factor = (
-            f" * {ids.profile(CANALICULAR_FLOW, source)}"
-            if CANALICULAR_FLOW in self.settings.profiles
-            else ""
-        )
         return Reaction(
             flow_id(
                 substance.sid,
@@ -1222,7 +1290,7 @@ class ZonationBuilder:
                 ids.site(Layer.BILE, target),
             ),
             f"{a} -> {b}",
-            formula=(f"{ids.BILE_FLOW} * {a}{factor}", U.mmole_per_min),
+            formula=(f"{ids.canalicular_flow(source)} * {a}", U.mmole_per_min),
             compartment=ids.volume(Layer.BILE, source),
             name=(
                 f"bile flow of {substance.name} in the canaliculus from {source} "

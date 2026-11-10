@@ -61,6 +61,7 @@ __all__ = [
     "VISCOSITY_LIVER",
     "area",
     "axial",
+    "canalicular_flow",
     "exchange",
     "filtrate_flow",
     "flat",
@@ -305,6 +306,19 @@ def filtrate_flow(zone: str) -> str:
     reabsorbed where the lumen regains flow.
     """
     return f"Q_fil_{zone}"
+
+
+def canalicular_flow(zone: str) -> str:
+    """Get the bile flow the canaliculus carries out of a zone, `Q_bile_<zone>` (l/min).
+
+    The canaliculus collects the secretion of the zones it has passed, so the
+    flow leaving zone `k` towards the portal tract is the secretion of the
+    zones `k` to `n` (the pericentral end): `(n - k + 1) / n * Q_bile` without
+    a profile and the collected weights of a `canalicular_flow` profile with
+    one. The flow of the first zone, which enters the duct, is the bile flow of
+    the whole liver.
+    """
+    return f"Q_bile_{zone}"
 
 
 def flow(quantity: str, source: str, target: str) -> str:

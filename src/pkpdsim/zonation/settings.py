@@ -28,7 +28,7 @@ class BileTransport(StrEnum):
     """The transport along the bile canaliculus (not implemented before the bile of the engine)."""
 
     ADVECTIVE = "advective"
-    """The bile flows towards the portal tract with the bile secretion."""
+    """The bile flows towards the portal tract, collecting the secretion of the zones."""
 
     DIFFUSIVE = "diffusive"
     """The bile mixes by diffusion along the canaliculus."""
