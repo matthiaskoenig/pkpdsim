@@ -10,14 +10,16 @@ import libsbml
 import numpy as np
 import pytest
 from pbpk.conftest import individual
+from sbmlutils.factory import Creator
 from sbmlutils.validation import ValidationOptions, validate_doc
 
 from pkpdsim.database.tables import entry
 from pkpdsim.pbpk.values import Value
-from pkpdsim.perfusion import core, ids
-from pkpdsim.perfusion.builder import build
+from pkpdsim.perfusion import circuit, core, ids
+from pkpdsim.perfusion.builder import build, zone_cell_model
 from pkpdsim.perfusion.definition import LiverOrgan, Perfusate
 from pkpdsim.perfusion.units import PU
+from pkpdsim.templates import terms_of_use
 
 from .conftest import liver_definition, load_circuit
 
@@ -56,7 +58,7 @@ def _label(e: libsbml.SBase) -> str:
 def test_build_writes_a_valid_model(tmp_path: Path, zones: int) -> None:
     """A rat liver in the circuit validates with units and loads at O0."""
     path = build(liver_definition(zones), tmp_path)
-    assert path == tmp_path / "perfusion_liver.xml"
+    assert path == tmp_path / "perfusion_liver_flat.xml"
     doc = libsbml.readSBMLFromFile(str(path))
     assert (doc.getLevel(), doc.getVersion()) == (3, 2)
     assert doc.getModel().getPlugin("comp") is None
@@ -65,6 +67,132 @@ def test_build_writes_a_valid_model(tmp_path: Path, zones: int) -> None:
     assert validation.warning_count == 0
     r = load_circuit(path)
     r.simulate(0, 10, 11)
+
+
+def test_a_liver_is_written_with_its_cell_model_and_the_flat_model(
+    tmp_path: Path,
+) -> None:
+    """The composed model, the cell model of its zones and the flat model which is simulated."""
+    build(liver_definition(3), tmp_path)
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "perfusion_liver.xml",
+        "perfusion_liver_core.xml",
+        "perfusion_liver_flat.xml",
+    ]
+    composed = libsbml.readSBMLFromFile(str(tmp_path / "perfusion_liver.xml"))
+    plugin = composed.getModel().getPlugin("comp")
+    assert [plugin.getSubmodel(k).getId() for k in range(plugin.getNumSubmodels())] == [
+        "M01",
+        "M02",
+        "M03",
+    ]
+
+
+def _problems(path: Path) -> list[tuple[str, int]]:
+    """The libsbml errors and warnings of a file."""
+    document = libsbml.readSBMLFromFile(str(path))
+    document.checkConsistency()
+    return [
+        (e.getSeverityAsString(), e.getErrorId())
+        for e in map(document.getError, range(document.getNumErrors()))
+    ]
+
+
+def test_the_composed_model_of_a_liver_with_cells_is_valid(tmp_path: Path) -> None:
+    """The composed model, which carries the structure and which a reader flattens
+    for himself, has no libsbml error and no warning: the observers of the cells
+    name elements of the composed model, never the ids a flattening produces."""
+    build(liver_definition(3), tmp_path)
+    assert _problems(tmp_path / "perfusion_liver.xml") == []
+
+
+def test_the_flat_ids_of_the_cells_are_the_ids_of_the_perfusion(
+    tmp_path: Path,
+) -> None:
+    """The ids of `pkpdsim.perfusion.ids` name elements of the flat model, whether
+    the cells of a zone are a submodel or not."""
+    definition = liver_definition(3)
+    flat = _ids(_model(build(definition, tmp_path)))
+    cell = _model(tmp_path / "perfusion_liver_core.xml")
+    reactions = [r.getId() for r in cell.getListOfReactions()]
+    for k in (1, 2, 3):
+        z = ids.zone_id(k)
+        expected = {
+            *(
+                ids.species(q, ids.cell_site(z))
+                for q in ids.cell_quantities(definition.released)
+            ),
+            *(ids.species(q, ids.dead_site(z)) for q in definition.released),
+            *(ids.reaction(r, z) for r in reactions if r != "BUF_ext"),
+            ids.buffer(z),
+            ids.alive(z),
+            ids.necrosis_rate(z),
+            ids.bile(z),
+            ids.ph(z),
+        }
+        assert expected <= flat, sorted(expected - flat)
+        # the proxies are merged with the elements of the submodel, not added: no
+        # exposed state is in the flat model under its submodel prefix as well
+        cell_ids = {
+            *(f"{q}_cell" for q in ids.cell_quantities(definition.released)),
+            *(f"{q}_dead" for q in definition.released),
+            *reactions,
+            "f_alive",
+            "v_nec",
+            "Vbile",
+            "pH_ext",
+        }
+        left = {f"M{k:02}__{x}" for x in cell_ids} & flat
+        assert not left, sorted(left)
+
+
+def test_the_start_values_of_the_replaced_vascular_co2_and_the_cell_ph(
+    tmp_path: Path,
+) -> None:
+    """The composed model carries the start of `co2_vas_<z>` (the equilibrium of the
+    buffer, `h*hco3/Ka`) and of `pH_<z>` (`3 - log10(h/1 mM)`) of the fresh
+    perfusate: the expectation is computed from the composition of the definition
+    and its buffer, not copied from the builder. No simulation reads either: the
+    flat model starts the first by the initial assignment of the cell's `co2_ext`
+    and computes the second by the assignment rule of the cell's `pH_ext`."""
+    definition = liver_definition(3)
+    build(definition, tmp_path)
+    model = _model(tmp_path / "perfusion_liver.xml")
+    start = circuit.composition(definition.perfusate).concentrations(
+        definition.released
+    )
+    h, hco3 = start["h"], start["hco3"]
+    assert h is not None and hco3 is not None
+    co2 = h * hco3 / core.Buffer.default().ka.value
+    ph = 3 - math.log10(h)
+    assert co2 > 0 and 6.5 < ph < 8
+    for k in (1, 2, 3):
+        z = ids.zone_id(k)
+        assert model.getSpecies(ids.species("co2", z)).getInitialConcentration() == (
+            pytest.approx(co2, rel=1e-12)
+        )
+        assert model.getParameter(ids.ph(z)).getValue() == pytest.approx(ph, rel=1e-12)
+
+
+def test_an_element_the_liver_does_not_expose_is_addressed_through_its_submodel(
+    tmp_path: Path,
+) -> None:
+    """The spec's addressing, `M<kk>__<id>`, stays for the cell elements the liver
+    does not observe: the temperature factor of the cell is one per zone, the
+    liver has its own."""
+    flat = _ids(_model(build(liver_definition(3), tmp_path)))
+    assert {"M01__f_T", "M02__f_T", "M03__f_T"} <= flat
+    assert "f_T" in flat
+    assert not {"f_T_z1", "f_T_z2", "f_T_z3"} & flat
+
+
+def test_two_definitions_in_one_folder_have_a_cell_model_each(tmp_path: Path) -> None:
+    build(liver_definition(2, sid="one"), tmp_path)
+    build(liver_definition(2, sid="two", profiles={"OXPHOS": [2, 1]}), tmp_path)
+    assert (tmp_path / "one_core.xml").is_file()
+    assert (tmp_path / "two_core.xml").is_file()
+    assert "p_OXPHOS" not in (tmp_path / "one_core.xml").read_text()
+    assert "p_OXPHOS" in (tmp_path / "two_core.xml").read_text()
 
 
 def test_every_element_has_a_name_and_an_sbo_term(tmp_path: Path) -> None:
@@ -239,7 +367,8 @@ def test_the_observers_read_the_sites(tmp_path: Path) -> None:
     # the oxygen falls along the sinusoid
     assert r[ids.po2(ids.PERIPORTAL)] > r[ids.po2(ids.PERICENTRAL)]
     assert r[ids.BILE] == pytest.approx(
-        sum(r[ids.bile(ids.zone_id(k))] for k in range(1, n + 1)) * 1e6, rel=1e-8
+        sum(r[ids.bile(ids.zone_id(k))] for k in range(1, n + 1)) * 1e6,
+        rel=1e-8,
     )
     # µl per g: the bile (µl) over the mass of the organ (kg) in g
     assert r[ids.BILE] > 0
@@ -305,7 +434,7 @@ def test_the_ph_of_the_perfusate_is_in_its_range(ph: float, refused: bool) -> No
 def test_a_tracer_has_no_id_of_the_model() -> None:
     """A tracer whose ids are observers, compartments or constants is refused."""
     d = liver_definition(2)
-    for tracer, clash in (("pO2", "pO2_res"), ("V", "V_res"), ("Vvas", "Vvas_z1")):
+    for tracer, clash in (("pO2", "pO2_res"), ("V", "V_res"), ("V", "V_vas_z1")):
         bad = dataclasses.replace(
             d, perfusate=dataclasses.replace(d.perfusate, tracers=(tracer,))
         )
@@ -411,3 +540,131 @@ def test_the_notes_of_a_definition_follow_the_description(tmp_path: Path) -> Non
     assert "<h2>Terms of use</h2>" in notes
     assert f"<p>{terms}</p>" in notes
     assert notes.index("Machine perfusion of the") < notes.index(terms)
+
+
+def test_the_cell_model_carries_the_notes_and_the_creators_of_its_definition(
+    tmp_path: Path,
+) -> None:
+    """The cell model is a model of its own, so it carries the terms of use and the
+    creators of its package as the composed model does: a reader who has only the
+    cell model has the licence it is under."""
+    terms = "This work is licensed under the terms of use of the test."
+    creator = Creator(
+        familyName="Tester", givenName="A", email="a@test.org", organization="Test"
+    )
+    d = dataclasses.replace(
+        liver_definition(3),
+        creators=(creator,),
+        notes=f"""
+    The liver of the test.
+
+    ## Terms of use
+    {terms}
+    """,
+    )
+    flat = build(d, tmp_path)
+    cell = _model(flat.parent / f"{d.sid}_core.xml")
+    notes = cell.getNotesString()
+    assert "cellular core" in notes
+    assert f"<p>{terms}</p>" in notes
+    # the creators of a model are its model history
+    history = cell.getModelHistory()
+    assert history is not None
+    assert history.getNumCreators() == 1
+    assert history.getCreator(0).getFamilyName() == "Tester"
+
+
+def test_a_zone_has_no_empty_bile_compartment(tmp_path: Path) -> None:
+    """The compartments of the liver are the circuit and, per zone, its vascular
+    space and its cells: no bile compartment is left by an unreplaced port."""
+    model = _model(build(liver_definition(3), tmp_path))
+    compartments = {
+        model.getCompartment(k).getId() for k in range(model.getNumCompartments())
+    }
+    zones = {f"V_{kind}_z{k}" for kind in ("vas", "cell") for k in (1, 2, 3)}
+    assert compartments == {"V_res", "V_in", "V_out"} | zones
+
+
+def test_the_zones_share_the_arrhenius_constants_of_the_circuit(tmp_path: Path) -> None:
+    """One `Ea`, `T_ref` and `R_gas` in the liver: the zones have none of their own."""
+    model = _model(build(liver_definition(3), tmp_path))
+    parameters = {
+        model.getParameter(k).getId() for k in range(model.getNumParameters())
+    }
+    for sid in ("Ea", "T_ref", "R_gas"):
+        assert sid in parameters
+        assert not {p for p in parameters if p.endswith(f"__{sid}")}
+
+
+@pytest.mark.parametrize("flow", [0.5e-3, 3.0e-3, 0.0])
+def test_the_flow_through_the_liver_is_the_flow_of_the_pump(
+    tmp_path: Path, flow: float
+) -> None:
+    """The study sets its flow rates through `Q_pump`: the engine's `Q_li` follows
+    it exactly, whatever the pump is set to (also 0: no flow, nothing divides by it)."""
+    path = build(liver_definition(3), tmp_path)
+    r = individual(path, **{ids.Q_PUMP: flow})
+    assert r["Q_li"] == pytest.approx(flow, abs=0, rel=0)
+    assert r[ids.Q_PUMP] == flow
+
+
+def test_the_cell_model_carries_the_terms_of_use_without_the_circuit(
+    tmp_path: Path,
+) -> None:
+    """The notes of a package are the description of its circuit and its terms of
+    use: the cell model of the zones is one cell, so it takes the terms alone."""
+    description = "A reservoir of 500 ml, the pump and the oxygenator."
+    definition = dataclasses.replace(
+        liver_definition(2, sid="noted"),
+        notes=f"    {description}\n{terms_of_use}",
+    )
+    cell = zone_cell_model(definition)
+    assert cell is not None and cell.notes is not None
+    assert "The cellular core of the liver" in cell.notes
+    # the notes are markdown, which sbmlutils converts: `## Terms of use`
+    assert "<h2>Terms of use</h2>" in cell.notes
+    assert "creativecommons.org" in cell.notes
+    assert description not in cell.notes
+    circuit_model = _model(build(definition, tmp_path))
+    notes = circuit_model.getNotesString()
+    assert description in notes and "Terms of use" in notes
+
+
+def test_the_notes_of_a_package_without_the_terms_of_use_stay_whole(
+    tmp_path: Path,
+) -> None:
+    """Notes the terms of use cannot be told from are not cut: a cell model which
+    says too much loses nothing, one without its licence is unusable."""
+    definition = dataclasses.replace(
+        liver_definition(1, sid="unlicensed"), notes="    Something else entirely."
+    )
+    cell = zone_cell_model(definition)
+    assert cell is not None and cell.notes is not None
+    assert "Something else entirely." in cell.notes
+
+
+def test_the_liver_keeps_the_provenance_of_its_density_and_fractions(
+    tmp_path: Path,
+) -> None:
+    """`rho_li`, `f_vas` and `f_cell` of a perfused liver name their source.
+
+    The organ of the definition holds these three numbers as `Value`s of the
+    physiology table with their citation (the vascular fraction of Brown 1997
+    Table 30, the cell fraction derived from it), the engine carries them
+    through (`SinusoidGeometry.density`, `ZonationSettings.fractions`) and
+    `M_li` shows what the notes of the three looked like before the liver
+    moved onto the engine: a reader of the flat model or of the ODE markdown
+    has to be able to see that the vascular fraction is a measurement, which
+    is the stated purpose of `value_parameter`.
+    """
+    model = _model(build(liver_definition(), tmp_path / "provenance"))
+    notes = {
+        pid: model.getParameter(pid).getNotesString()
+        for pid in ("M_li", "rho_li", "f_vas", "f_cell")
+    }
+    for pid, text in notes.items():
+        assert "Source:" in text, pid
+        assert "doi:" in text or "Choice of a library of pkpdsim" in text, pid
+    assert "Brown" in notes["f_vas"], "the vascular fraction is Brown 1997 Table 30"
+    assert "Table 30" in notes["f_vas"]
+    assert "derived" in notes["f_cell"]

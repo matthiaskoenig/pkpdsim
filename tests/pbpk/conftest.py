@@ -55,6 +55,7 @@ from pkpdsim.pbpk import (
     Transport,
     U,
     Variants,
+    ZonatedLiver,
     ids,
 )
 from pkpdsim.pbpk.builder import BuildResult
@@ -410,7 +411,8 @@ def chemistry_reference_definition(liver: str = "standard") -> PBPKDefinition:
     A metabolism into two products by numbers, a metabolism of the mucosa, a
     basolateral uptake and an apical secretion, and a custom reaction with a
     sbmlutils `Parameter` and a species, in the standard organs or with the
-    zonated liver (`liver="zonated"`); the stored comp and flat SBML were
+    zonated liver (`liver="zonated"`, at the eight zones of the reference,
+    not the default of `ZonatedLiver`); the stored comp and flat SBML were
     built at pkpdsim 0c538ca, before the custom parameters with provenance,
     the shared rates and the fitted product fractions.
     """
@@ -474,7 +476,9 @@ def chemistry_reference_definition(liver: str = "standard") -> PBPKDefinition:
                 ],
             ),
         ],
-        variants=Variants(organs={Organ.LIVER: liver}),
+        variants=Variants(
+            organs={Organ.LIVER: ZonatedLiver(n_zones=8) if zonated else liver}
+        ),
         routes=[Route.iv("drg"), Route.oral("drg")],
     )
 
@@ -537,7 +541,8 @@ def endogenous_reference_definition() -> PBPKDefinition:
     the muscle, with a slow pool of the muscle, taken up from the lumen into
     the mucosa (an apical influx) and given orally, with a start of the
     definition; `kin` in the full form with kinetic erythrocytes; `prf`
-    flow-limited; the zonated liver and the nephron kidney. The stored comp
+    flow-limited; the zonated liver (at the eight zones of the reference, not
+    the default of `ZonatedLiver`) and the nephron kidney. The stored comp
     and flat SBML were built at pkpdsim 87a5e79, before the generated steady
     state refactored the starts (the `Start` records of `_defer_start`, the
     zones of the starts, the inputs of the custom reactions).
@@ -590,7 +595,9 @@ def endogenous_reference_definition() -> PBPKDefinition:
         ],
         parameters=[ModelParameter("k_prod", 0.001, U.mmole_per_min)],
         slow_pools=[SlowPool("end", frozenset({Organ.MUSCLE}), k=0.001, kp=2.0)],
-        variants=Variants(organs={Organ.LIVER: "zonated", Organ.KIDNEY: "nephron"}),
+        variants=Variants(
+            organs={Organ.LIVER: ZonatedLiver(n_zones=8), Organ.KIDNEY: "nephron"}
+        ),
         routes=[Route.oral("end")],
         starts={"MU__Cpl_end": Formula("2 dimensionless * baseline_end", U.mM)},
     )

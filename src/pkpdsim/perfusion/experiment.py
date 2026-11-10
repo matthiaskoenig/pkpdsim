@@ -262,12 +262,18 @@ def _observables(definition: PerfusionDefinition) -> dict[str, tuple[str, str]]:
     for site in [*zones, *means]:
         where = site_label(site)
         for q in ids.cell_quantities(released):
-            key = _key(ids.species(q, ids.cell_site(site)), species=site in zones)
+            key = _key(
+                ids.species(q, ids.cell_site(site)),
+                species=site in zones,
+            )
             out[key] = (
                 f"{core.quantity_name(q)} (cells, {where})",
                 _MM,
             )
-        out[ids.alive(site)] = (f"living fraction ({where})", "dimensionless")
+        out[ids.alive(site)] = (
+            f"living fraction ({where})",
+            "dimensionless",
+        )
     for zone in zones:
         out[ids.necrosis_rate(zone)] = (
             f"rate of necrosis ({site_label(zone)})",

@@ -52,7 +52,8 @@ raises `NotImplementedError` naming the reason: kinetic erythrocytes, the
 full form and the flow-limited organ, an exchange of the organ of its own
 (`ps`), the intestine (it refuses custom reactions, its parts start at the
 equilibrium), the nephron kidney (its tubule starts empty, not at its steady
-state) and a source in the zonated liver (it refuses custom reactions). The
+state) and a source in the zonated liver (its zones have no steady state of
+their own). The
 functions of an organ which has variants take the variants of the definition
 (`variants=`, required), so a model with a variant never gets the formula of
 the standard organ silently. Every function which takes an inflow names it
@@ -647,8 +648,8 @@ def liver_plasma(
     (mmole/min) leaves with it and a clearance of its plasma (l/min) removes
     a part: `Cpl = ((1 - f_shunt)*(Qha*Car + Qpo*Cpo)*c + rate)/((1 -
     f_shunt)*Qh*c + clearance)` with the carrier `c` (`plasma_flow`). The
-    zonated liver (no source and no clearance, it refuses custom reactions)
-    has the same plasma in every zone.
+    zonated liver (no source and no clearance, since its zones have no
+    steady state of their own) has the same plasma in every zone.
 
     Args:
         substance: the substance.

@@ -9,9 +9,11 @@ from sbmlutils.metadata import BQB
 
 from pkpdsim.pbpk.organs import Organ, as_member, as_organ_keys, as_organs
 from pkpdsim.pbpk.proteins import Induction, Inhibition
-from pkpdsim.pbpk.values import Q, check_literals
+from pkpdsim.pbpk.values import Q, Value, check_literals, number, unit_text
+from pkpdsim.sbml.values import DIFFUSION_UNITS
 
 __all__ = [
+    "DIFFUSION_UNITS",
     "Binding",
     "Erythrocytes",
     "Excretion",
@@ -257,6 +259,9 @@ class Substance:
         excretion: the excretion.
         inhibits: the inhibitions of proteins by the substance.
         induces: the inductions of proteins by the substance.
+        diffusion: the aqueous diffusion coefficient, a `Value` in an area per
+            time (`DIFFUSION_UNITS`); `None` derives it from the molar mass
+            (`pkpdsim.zonation.transport`).
         baseline: the plasma concentration (mM) of an endogenous substance at
             the start, `baseline_<s>`; `None` starts every species at 0.
             Every plasma species starts at it, every other species of the
@@ -278,3 +283,17 @@ class Substance:
     inhibits: tuple[Inhibition, ...] = ()
     induces: tuple[Induction, ...] = ()
     baseline: Q | None = None
+    diffusion: Value | None = None
+
+    def __post_init__(self) -> None:
+        """Check that the diffusion is a positive area per time."""
+        d = self.diffusion
+        if d is None:
+            return
+        if not isinstance(d, Value) or unit_text(d.unit) not in DIFFUSION_UNITS:
+            raise ValueError(
+                f"{self.sid}: diffusion must be a Value in an area per time "
+                f"({', '.join(DIFFUSION_UNITS)}), got {d!r}"
+            )
+        if not (number(d) or 0.0) > 0.0:
+            raise ValueError(f"{self.sid}: diffusion must be positive, got {d.value}")

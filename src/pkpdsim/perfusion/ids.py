@@ -16,8 +16,9 @@ the outflow tubing `out` (after the organ); the periportal and pericentral
 means of the zones are the sites `pp` and `pc` (`pp_cell` for the cells), so
 every quantity of a zone has its means under the same pattern (`glc_pp`,
 `atp_pc_cell`, `pO2_pc`). The volume of a site is `V_<site>`
-(`volume`), of the vascular space of a zone `Vvas_<zone>` and of its cells
-`Vcell_<zone>`.
+(`volume`); the compartments of a zone are named by the engine which builds it,
+the vascular space of a zone `V_vas_<zone>` and its cells `V_cell_<zone>`
+(`pkpdsim.zonation.ids`).
 
 The reactions and rules of the core of a zone carry the zone as suffix,
 `<name>_<zone>` (`OXPHOS_z3`, `v_nec_z3`). The constants of the core are
@@ -40,9 +41,17 @@ zone is the reaction `FILT_<q>_<zone>` (`filtration`), the GFR of the organ
 its GFR per mass `gfr_<organ>` (`gfr_specific`) and
 the reabsorbed fraction `f_reab_<organ>` (`reabsorption`); the water which
 leaves a site is `Q_<site>` (`outflow`) where it is not the pump flow.
+
+The zone token and the reaction of a flow between two sites are the zonation
+engine's (`pkpdsim.zonation.ids.is_zone`, `flow`), which this module
+re-exports: the engine names the flows of the chain of zones of an organ and
+this module the flows of the circuit, with the same function, so the two
+agree. The engine is the lower layer, so its ids are imported here directly.
 """
 
-import re
+from pkpdsim.zonation import ids as zids
+from pkpdsim.zonation.geometry import Layer
+from pkpdsim.zonation.ids import flow, is_zone
 
 __all__ = [
     "ACTIVATION_ENERGY",
@@ -85,6 +94,7 @@ __all__ = [
     "activity",
     "alive",
     "bile",
+    "buffer",
     "cell_fraction",
     "cell_quantities",
     "cell_site",
@@ -277,7 +287,8 @@ Q_URINE = "Q_urine"
 """The net urine flow of the organ (l/min), the filtrate which the tubules
 do not reabsorb."""
 
-_ZONE = re.compile(r"z[1-9][0-9]*")
+LIVER = "li"
+"""The token of the liver, the organ whose zones the zonation engine builds."""
 
 
 def perfusate_quantities(released: tuple[str, ...]) -> tuple[str, ...]:
@@ -323,8 +334,20 @@ def zone_id(k: int) -> str:
     return f"z{k}"
 
 
+def _cell_layer() -> str:
+    """Get the layer of the cells of a zone in the engine."""
+    return str(Layer.CELL)
+
+
 def species(quantity: str, site: str) -> str:
     """Get the id of a quantity at a site, `<quantity>_<site>`.
+
+    The vascular space of a zone is the vascular site of the engine,
+    `<quantity>_vas_<zone>`. The cells of a zone are `<quantity>_<zone>_cell`
+    (`<quantity>_<zone>_dead` for the necrotic cells); the other sites are
+    `<quantity>_<site>`. These are the ids of the flat model, whether the cells
+    of a zone are the cell model of a submodel or not: the liver exposes them
+    (`pkpdsim.zonation.composition.compose(expose=)`).
 
     Args:
         quantity: the quantity token (`glc`, `o2`, `atp`).
@@ -334,6 +357,8 @@ def species(quantity: str, site: str) -> str:
     Returns:
         The id of the species.
     """
+    if is_zone(site):
+        return zids.species(quantity, zids.VASCULAR, site)
     return f"{quantity}_{site}"
 
 
@@ -357,34 +382,39 @@ def reaction(name: str, zone: str) -> str:
     return f"{name}_{zone}"
 
 
+def buffer(site: str) -> str:
+    """Get the id of the bicarbonate buffer reaction at a site, `BUF_<site>`."""
+    return f"BUF_{site}"
+
+
 def alive(zone: str) -> str:
-    """Get the id of the living fraction of the cells of a zone."""
+    """Get the id of the living fraction of the cells of a zone, `f_alive_<zone>`."""
     return f"f_alive_{zone}"
 
 
 def necrosis_rate(zone: str) -> str:
-    """Get the id of the rate of necrosis of the cells of a zone (1/min)."""
+    """Get the id of the rate of necrosis of the cells of a zone (1/min), `v_nec_<zone>`."""
     return f"v_nec_{zone}"
 
 
 def bile(zone: str) -> str:
-    """Get the id of the volume of bile which a zone has secreted (l)."""
+    """Get the id of the volume of bile which a zone has secreted (l), `Vbile_<zone>`."""
     return f"Vbile_{zone}"
 
 
 def volume(site: str) -> str:
-    """Get the volume of the perfusate at a site, `V_<site>` or `Vvas_<zone>`."""
+    """Get the volume of the perfusate at a site, `V_<site>` or `V_vas_<zone>`."""
     return vascular(site) if is_zone(site) else f"V_{site}"
 
 
 def vascular(zone: str) -> str:
-    """Get the compartment of the vascular space of a zone, `Vvas_<zone>`."""
-    return f"Vvas_{zone}"
+    """Get the compartment of the vascular space of a zone, `V_vas_<zone>`."""
+    return zids.volume(zids.VASCULAR, zone)
 
 
 def cells(zone: str) -> str:
-    """Get the compartment of the cells of a zone, `Vcell_<zone>`."""
-    return f"Vcell_{zone}"
+    """Get the compartment of the cells of a zone, `V_cell_<zone>`."""
+    return zids.volume(_cell_layer(), zone)
 
 
 def mass(organ: str) -> str:
@@ -403,13 +433,19 @@ def organ_volume(organ: str) -> str:
 
 
 def vascular_fraction(organ: str) -> str:
-    """Get the vascular fraction of the volume of an organ, `f_vas_<organ>`."""
-    return f"f_vas_{organ}"
+    """Get the vascular fraction of the volume of an organ, `f_vas_<organ>`.
+
+    The liver is the one of the engine, `f_vas`.
+    """
+    return zids.fraction(zids.VASCULAR) if organ == LIVER else f"f_vas_{organ}"
 
 
 def cell_fraction(organ: str) -> str:
-    """Get the cell fraction of the volume of an organ, `f_cell_<organ>`."""
-    return f"f_cell_{organ}"
+    """Get the cell fraction of the volume of an organ, `f_cell_<organ>`.
+
+    The liver is the one of the engine, `f_cell`.
+    """
+    return zids.fraction(_cell_layer()) if organ == LIVER else f"f_cell_{organ}"
 
 
 def gfr(organ: str) -> str:
@@ -447,11 +483,6 @@ def outflow(site: str) -> str:
     return f"Q_{site}"
 
 
-def flow(quantity: str, source: str, target: str) -> str:
-    """Get the reaction of the flow of a quantity between two sites."""
-    return f"FLOW_{quantity}_{source}_{target}"
-
-
 def start(quantity: str) -> str:
     """Get the start of a quantity of the cells, `<q>_start` (mM), shared by the zones."""
     return f"{quantity}_start"
@@ -483,10 +514,5 @@ def specific_activity(enzyme: str) -> str:
 
 
 def ph(site: str) -> str:
-    """Get the id of the pH of the perfusate at a site."""
+    """Get the id of the pH of the perfusate at a site, `pH_<site>`."""
     return f"pH_{site}"
-
-
-def is_zone(zone: str) -> bool:
-    """Check whether a text is a zone id (`z1`, `z12`)."""
-    return _ZONE.fullmatch(zone) is not None
