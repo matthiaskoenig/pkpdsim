@@ -21,6 +21,13 @@ The wiring is anatomical:
 * The concentration port `<sid>_ext` of every substance is replaced by the
   species of the substance in the Disse layer of the zone, so the cell model
   sees what the barrier delivers.
+* A **port which holds a substance of the chain** (`bind`) is replaced by the species of
+  the chain in the layer the caller names, e.g. `ged` of the cell by the cell species of
+  the substance and `ged_bi` by its bile species, in the form of the `<sid>_ext` line:
+  the replaced element is the species of the chain, so its id is the one which survives
+  the flattening (`<sid>_cell_z1`, not `M01__ged`). The external concentration stays
+  automatic (every substance of the chain has one); `bind` is for a cell model which
+  holds the substance itself, or the cell and the chain would hold two copies of it.
 * `position` is replaced by a parameter `position_<zone>` per zone with the
   centre of the zone, from `profiles.zone_positions`, the function the
   profiles use, so the cell model and the profile factors agree on where a
@@ -120,6 +127,94 @@ def _port(sid: str) -> str:
     return f"{sid}{PORT_SUFFIX}"
 
 
+def _replace(
+    model: Model,
+    species: Mapping[str | None, Species],
+    sm: str,
+    element: str,
+    port: str,
+) -> None:
+    """Replace the port of a submodel by an element of the liver.
+
+    The one place which forms the replaced element of a port, the metaId and the id
+    (`<submodel>_<element>_<port>_RE`).
+
+    Args:
+        model: the composed model, which gets the replaced element.
+        species: the species of the liver by id; an annotated species of the cell
+            model has a metaid, which comp requires of the species which replaces
+            it as well, and an existing one is kept.
+        sm: the submodel.
+        element: the id of the element of the liver.
+        port: the id of the port of the cell model (without the port suffix).
+    """
+    if element in species:
+        species[element].metaId = species[element].metaId or ids.meta_id(element)
+    rid = f"{sm}_{element}_{port}_RE"
+    model.replaced_elements.append(
+        ReplacedElement(
+            sid=rid,
+            metaId=rid,
+            elementRef=element,
+            submodelRef=sm,
+            portRef=_port(port),
+        )
+    )
+
+
+def _port_ids(cell_model: Model) -> set[str]:
+    """The ids of the elements of the cell model which are ports."""
+    elements = [
+        *(cell_model.compartments or []),
+        *(cell_model.species or []),
+        *(cell_model.parameters or []),
+        *(cell_model.reactions or []),
+    ]
+    return {str(x.sid) for x in elements if getattr(x, "port", False)}
+
+
+def _check_bind(
+    bind: Mapping[str, tuple[str, Layer]],
+    cell_model: Model | None,
+    wired: set[str],
+    solutes: set[str],
+    existing: set[str],
+    geometry: Geometry,
+) -> None:
+    """Check `bind` before anything is composed.
+
+    Args:
+        bind: see `compose`.
+        cell_model: the cell model, `None` when the ports cannot be checked.
+        wired: the ports the engine wires by itself.
+        solutes: the ids of the substances of the chain.
+        existing: the ids of the species of the liver.
+        geometry: the geometry which is composed.
+
+    Raises:
+        ValueError: with the offending name, see `compose`.
+    """
+    cell_ports = _port_ids(cell_model) if cell_model is not None else None
+    for port, (sid, layer) in bind.items():
+        if cell_model is not None and cell_ports is not None and port not in cell_ports:
+            raise ValueError(
+                f"`bind` names '{port}', which is no port of the cell model "
+                f"'{cell_model.sid}' ({sorted(cell_ports)})."
+            )
+        if port in wired:
+            raise ValueError(f"`bind` names '{port}', which the engine wires already.")
+        if sid not in solutes:
+            raise ValueError(
+                f"`bind` binds '{port}' to '{sid}', which is no solute of the chain "
+                f"({sorted(solutes)})."
+            )
+        if ids.species(sid, layer, ids.zone(1)) not in existing:
+            raise ValueError(
+                f"`bind` binds '{port}' to the layer '{layer}' of '{sid}', which the "
+                f"geometry '{geometry}' does not have."
+            )
+
+
 def _proxy(
     cell_model: Model,
     cell_id: str,
@@ -202,6 +297,7 @@ def compose(
     shared: Sequence[str] = (),
     expose: Mapping[str, Callable[[str], str]] | None = None,
     cell_model: Model | None = None,
+    bind: Mapping[str, tuple[str, Layer]] | None = None,
 ) -> Model:
     """Compose the model of a builder with a cell model per zone.
 
@@ -237,7 +333,14 @@ def compose(
             the flattening gives it (`M01__<id>`, which is the id of the flat
             model, unchanged).
         cell_model: the cell model, which `expose` needs for the class, the unit
-            and the compartment of the elements.
+            and the compartment of the elements; with `bind` it checks the ports.
+        bind: the ports of the cell model which hold a substance of the chain: the
+            id of the port to the pair of the substance and the `Layer` whose species
+            of the zone replaces it (`{"ged": ("ged", Layer.CELL), "ged_bi": ("ged",
+            Layer.BILE)}`). Not `expose`, which is a state of the cell the liver
+            addresses, wired with `ReplacedBy` onto an element which is no port: a
+            port cannot carry a `ReplacedBy`, so a cell which shares its state with
+            the chain binds the port to the chain's species instead.
 
     Returns:
         The model of `builder.build()` with the external model definition,
@@ -246,10 +349,13 @@ def compose(
 
     Raises:
         ValueError: if `expose` is given without the cell model, or names an
-            element the cell model does not have.
+            element the cell model does not have; if `bind` names a port the cell
+            model does not have or the engine wires already, a substance which is
+            not a solute of the chain, or a layer the geometry does not have.
     """
     if expose and cell_model is None:
         raise ValueError("`expose` needs the cell model (`cell_model`).")
+    bind = bind or {}
     model = builder.build()
     s = builder.settings
     n = s.n_zones
@@ -281,6 +387,21 @@ def compose(
         else list(builder.substances)
     )
     scaled = [p for p in builder.cell_processes if p in s.profiles]
+    _check_bind(
+        bind,
+        cell_model,
+        {
+            ports.external,
+            ports.cell,
+            ports.position,
+            ports.temperature,
+            *([ports.bile] if s.bile is not None else []),
+            *(ports.concentration.format(sid=x.sid) for x in exchanged),
+        },
+        {x.sid for x in builder.substances},
+        {str(x) for x in species},
+        s.geometry,
+    )
     for k, x in zip(range(1, n + 1), zone_positions(n), strict=True):
         zone = ids.zone(k)
         sm = ids.submodel(k)
@@ -319,6 +440,9 @@ def compose(
             )
             for substance in exchanged
         )
+        wiring.extend(
+            (ids.species(sid, layer, zone), port) for port, (sid, layer) in bind.items()
+        )
         wiring.extend((sid, sid) for sid in shared)
         wiring.extend(
             (ids.profile(process, zone), ports.profile.format(process=process))
@@ -341,22 +465,7 @@ def compose(
                 else:
                     model.reactions.append(proxy)
         for element, port in wiring:
-            if element in species:
-                # an annotated species of the cell model has a metaid, which
-                # comp requires of the species which replaces it as well
-                species[element].metaId = species[element].metaId or ids.meta_id(
-                    element
-                )
-            rid = f"{sm}_{element}_{port}_RE"
-            model.replaced_elements.append(
-                ReplacedElement(
-                    sid=rid,
-                    metaId=rid,
-                    elementRef=element,
-                    submodelRef=sm,
-                    portRef=_port(port),
-                )
-            )
+            _replace(model, species, sm, element, port)
         for sid in deletions:
             did = f"{sm}_{sid}_DE"
             model.deletions.append(

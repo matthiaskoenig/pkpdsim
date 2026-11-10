@@ -35,6 +35,7 @@ def toy_cell_model(
     processes: tuple[str, ...] = (),
     shared: bool = False,
     observed: bool = False,
+    held: bool = False,
 ) -> Model:
     """Get the toy cell model.
 
@@ -47,6 +48,8 @@ def toy_cell_model(
             its own constant, one for all zones.
         observed: the uptake is no port, so a liver can expose it (a reference
             by `ReplacedBy` and a port exclude each other).
+        held: the drug in the cell `drg` is a port and the cell has the drug in
+            the bile `drg_bi` (a port), as a cell model which holds the substance.
 
     Returns:
         The model.
@@ -80,6 +83,22 @@ def toy_cell_model(
                 substanceUnit=U.mmole,
                 hasOnlySubstanceUnits=False,
                 name="drug in the cell",
+                port=held,
+            ),
+            *(
+                [
+                    Species(
+                        "drg_bi",
+                        "Vbi",
+                        initialConcentration=0.0,
+                        substanceUnit=U.mmole,
+                        hasOnlySubstanceUnits=False,
+                        name="drug in the bile",
+                        port=True,
+                    )
+                ]
+                if held
+                else []
             ),
         ],
         parameters=[
@@ -136,6 +155,7 @@ def create_toy_cell(
     annotated: bool = False,
     processes: tuple[str, ...] = (),
     observed: bool = False,
+    held: bool = False,
 ) -> Path:
     """Write the toy cell model as `toy.xml` into `output_dir`.
 
@@ -144,13 +164,14 @@ def create_toy_cell(
         annotated: see `toy_cell_model`.
         processes: see `toy_cell_model`.
         observed: see `toy_cell_model`.
+        held: see `toy_cell_model`.
 
     Returns:
         The path of the file.
     """
     path = output_dir / f"{TOY_ID}.xml"
     create_model(
-        toy_cell_model(annotated, processes, observed=observed),
+        toy_cell_model(annotated, processes, observed=observed, held=held),
         filepath=path,
         sbml_level=3,
         sbml_version=2,

@@ -449,3 +449,132 @@ def test_expose_needs_the_cell_model_and_an_element_of_it() -> None:
             expose={"nothing": lambda z: z},
             cell_model=toy_cell_model(),
         )
+
+
+BIND = {"drg": ("drg", Layer.CELL), "drg_bi": ("drg", Layer.BILE)}
+
+
+def _bound(tmp_path: Path, n: int = 3) -> tuple[Model, Path]:
+    """The toy cell which holds the drug composed into `n` zones, its ports bound."""
+    create_toy_cell(tmp_path, held=True)
+    model = compose(
+        _builder(n),
+        TOY_ID,
+        CellPorts(),
+        cell_model=toy_cell_model(held=True),
+        bind=BIND,
+    )
+    return model, write(model, tmp_path)
+
+
+def test_a_bound_port_is_the_species_of_its_layer(tmp_path: Path) -> None:
+    """The cell port is the cell species, the bile port the bile species, per zone."""
+    model, _ = _bound(tmp_path)
+    for k in (1, 2, 3):
+        sm, zone = ids.submodel(k), ids.zone(k)
+        found = {
+            r.portRef: r
+            for r in model.replaced_elements
+            if r.submodelRef == sm and str(r.portRef).startswith("drg")
+        }
+        for port, layer in (("drg", Layer.CELL), ("drg_bi", Layer.BILE)):
+            r = found[f"{port}{PORT_SUFFIX}"]
+            element = ids.species("drg", layer, zone)
+            assert r.elementRef == element
+            assert r.sid == r.metaId == f"{sm}_{element}_{port}_RE"
+        # the external line stays automatic
+        assert found[f"drg_ext{PORT_SUFFIX}"].elementRef == ids.species(
+            "drg", Layer.DISSE, zone
+        )
+    species = {x.sid: x for x in model.species}
+    assert species[ids.species("drg", Layer.CELL, "z1")].metaId
+
+
+def test_a_bound_port_keeps_the_chain_id_when_it_is_flattened(tmp_path: Path) -> None:
+    """The species of the chain survives, the id of the submodel does not."""
+    _, path = _bound(tmp_path)
+    flat = _all_ids(path)
+    for k in (1, 2, 3):
+        assert ids.species("drg", Layer.CELL, ids.zone(k)) in flat
+        assert ids.species("drg", Layer.BILE, ids.zone(k)) in flat
+        assert f"{ids.submodel(k)}__drg" not in flat
+        assert f"{ids.submodel(k)}__drg_bi" not in flat
+    assert _problems(path) == []
+
+
+def test_binding_an_unknown_port_is_an_error() -> None:
+    """The port has to be a port of the cell model, and is named."""
+    with pytest.raises(ValueError, match=r"'nothing'.*no port"):
+        compose(
+            _builder(2),
+            TOY_ID,
+            CellPorts(),
+            cell_model=toy_cell_model(held=True),
+            bind={"nothing": ("drg", Layer.CELL)},
+        )
+    with pytest.raises(ValueError, match=r"'drg'.*no port"):
+        compose(
+            _builder(2),
+            TOY_ID,
+            CellPorts(),
+            cell_model=toy_cell_model(),
+            bind={"drg": ("drg", Layer.CELL)},
+        )
+
+
+def test_binding_a_port_the_engine_wires_is_an_error() -> None:
+    """A port is replaced once."""
+    with pytest.raises(ValueError, match=r"'drg_ext'.*wires already"):
+        compose(
+            _builder(2),
+            TOY_ID,
+            CellPorts(),
+            bind={"drg_ext": ("drg", Layer.CELL)},
+        )
+
+
+def test_binding_a_substance_which_is_not_in_the_chain_is_an_error() -> None:
+    """The substance has to be a solute of the builder."""
+    with pytest.raises(ValueError, match=r"'other'.*no solute"):
+        compose(
+            _builder(2),
+            TOY_ID,
+            CellPorts(),
+            bind={"drg": ("other", Layer.CELL)},
+        )
+
+
+def test_binding_the_bile_layer_without_a_bile_is_an_error() -> None:
+    """The layer has to exist in the geometry that is composed."""
+    b = ZonationBuilder(
+        ZonationSettings(
+            n_zones=2,
+            bile=None,
+            liver_mass=mass_g(1000.0),
+            reference_flow=liver_flow(),
+        ),
+        [DRUG],
+        None,
+    )
+    with pytest.raises(ValueError, match=r"layer 'bile'.*does not have"):
+        compose(b, TOY_ID, CellPorts(), bind={"drg_bi": ("drg", Layer.BILE)})
+
+
+def test_binding_the_plasma_layer_in_the_well_stirred_geometry_is_an_error() -> None:
+    """The well-stirred geometry has one vascular site and no plasma layer."""
+    b = ZonationBuilder(
+        ZonationSettings(
+            n_zones=2,
+            geometry=Geometry.WELL_STIRRED,
+            liver_mass=mass_g(1000.0),
+            reference_flow=liver_flow(),
+        ),
+        [DRUG],
+        None,
+    )
+    with pytest.raises(ValueError, match=r"layer 'plasma'.*does not have"):
+        compose(b, TOY_ID, CellPorts(), bind={"drg": ("drg", Layer.PLASMA)})
+    m = compose(b, TOY_ID, CellPorts(), bind={"drg": ("drg", Layer.CELL)})
+    assert ids.species("drg", Layer.CELL, "z1") in {
+        r.elementRef for r in m.replaced_elements
+    }
