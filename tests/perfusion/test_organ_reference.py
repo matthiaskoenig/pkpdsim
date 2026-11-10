@@ -20,7 +20,7 @@ import pytest
 
 from pkpdsim.perfusion.builder import build, compose, model_ids
 
-from .organ_id_map import SUBMODEL, map_file, rename
+from .organ_id_map import ADDED, SUBMODEL, map_file, rename
 from .organ_id_map import model_ids as file_ids
 from .organ_reference import DEFINITIONS, ids_file, simulate, trajectories_file
 
@@ -82,7 +82,14 @@ def _images(name: str) -> set[str]:
 
 
 def test_the_map_is_what_the_rules_say() -> None:
-    """The record of the map is the rules of `organ_id_map`, id by id."""
+    """The record of the map is the rules of `organ_id_map`, id by id.
+
+    The ids the model gained included: `added` is the `ADDED` of the rules and
+    not a difference computed from the model, so a parameter or a species the
+    liver gains is a failure of
+    `test_the_ids_are_the_ids_before_through_the_map` and not a line the next
+    regeneration of the maps writes.
+    """
     for name in NAMES:
         before = _before(name)
         assert set(_renamed(name)) <= before
@@ -93,6 +100,7 @@ def test_the_map_is_what_the_rules_say() -> None:
             else:
                 assert _renamed(name).get(old, old) == expected, (name, old)
         assert not _dropped(name) - before
+        assert set(_map(name)["added"]) == ADDED[name], name  # ty: ignore[invalid-argument-type]
 
 
 def test_the_ids_are_the_ids_before_through_the_map(
@@ -101,7 +109,7 @@ def test_the_ids_are_the_ids_before_through_the_map(
     """Equality, not inclusion: nothing is gained but the listed, nothing lost."""
     name, path = organ
     now = file_ids(path)
-    added = set(_map(name)["added"])  # ty: ignore[invalid-argument-type]
+    added = ADDED[name]
     renamed = _renamed(name)
     assert len(set(renamed.values())) == len(renamed), "the map is injective"
     assert len(_images(name)) == len(_before(name) - _dropped(name)), (

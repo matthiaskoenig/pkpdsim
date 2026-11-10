@@ -17,18 +17,17 @@ The rules below are written from the id schemes (the ids of the engine,
 `pkpdsim.zonation.ids`, and the flat ids of a comp submodel, `M<kk>__<id>` for the elements which the
 liver does not expose),
 not read off the new model: an old id which a rule sends to an id the model
-does not have fails the test. Run from `tests/` with
+does not have fails the test, and so does an id the model gained which `ADDED`
+does not state. Nothing here reads the new model, so regenerating the maps
+cannot absorb a change of it. Run from `tests/` with
 `python -m perfusion.organ_id_map` after a deliberate change of the ids.
 """
 
 import json
 import re
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import libsbml
-
-from pkpdsim.perfusion.builder import build
 
 from .organ_reference import DATA, DEFINITIONS, ids_file
 
@@ -36,6 +35,38 @@ PERFUSATE = {"o2", "glc", "lac", "h", "co2", "hco3", "k", "alt", "ast", "ldh", "
 """The quantities of the perfusate of the references (the tracer `tr` included)."""
 SUBMODEL = {"organ": True, "kidney": False, "generic": False}
 """The cells of the zones are a submodel of the model (the liver) or are emitted by the builder."""
+
+ZONES = range(1, 11)
+"""The zones of the reference definitions (`organ_reference.DEFINITIONS`)."""
+
+ADDED = {
+    "organ": {"Q_li", "f_par"}
+    | {f"position_z{k}" for k in ZONES}
+    | {f"M{k:02}__f_T" for k in ZONES},
+    "kidney": set[str](),
+    "generic": set[str](),
+}
+"""The ids the model has now and the model before did not, by the rules.
+
+Stated here as `rename` states the renames and not read off the model, so that
+an id the liver gained which is not one of these fails
+`test_the_ids_are_the_ids_before_through_the_map` instead of being absorbed the
+next time the maps are written. The liver is the one organ whose zones the
+zonation engine builds, and it gains four kinds of id:
+
+- `Q_li`, the flow of the chain, which the engine writes as the parameter of
+  its imposed flow (the pump flow of the circuit); the circuit before drove
+  the zones with its own flows and had no parameter of the organ,
+- `f_par`, the parenchymal fraction of the geometry of the engine, 1 in a
+  circuit (`pkpdsim.perfusion.builder._liver`),
+- `position_z<k>`, the lobular position of every zone, which the engine
+  writes for the profiles and the cell models,
+- `M<kk>__f_T`, the temperature factor of the cell model of every zone, which
+  the cells now carry as a submodel each and the liver does not expose (its
+  own `f_T` is in the model before and stays).
+
+The kidney and a generic organ emit their zones themselves and gain nothing.
+"""
 
 
 def map_file(name: str) -> Path:
@@ -77,23 +108,20 @@ def model_ids(path: Path) -> set[str]:
 
 
 def main() -> None:
-    """Write the maps from the rules and the models which are built."""
-    for name, make in DEFINITIONS.items():
+    """Write the maps from the rules, which read no model."""
+    for name in DEFINITIONS:
         submodel = SUBMODEL[name]
         before = json.loads(ids_file(name).read_text())
-        with TemporaryDirectory() as tmp:
-            now = model_ids(build(make(), Path(tmp)))
         renamed = {
             old: new
             for old in before
             if (new := rename(old, submodel)) not in (old, None)
         }
-        kept = {rename(old, submodel) or old for old in before}
         out = {
             "before": "98aacca",
             "renamed": renamed,
             "dropped": [old for old in before if rename(old, submodel) is None],
-            "added": sorted(now - kept - set(renamed.values())),
+            "added": sorted(ADDED[name]),
         }
         map_file(name).write_text(json.dumps(out, indent=1, sort_keys=True) + "\n")
 

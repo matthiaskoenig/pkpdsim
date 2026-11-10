@@ -1,5 +1,7 @@
 """Tests of the geometry, the volume fractions and the haematocrit split."""
 
+import math
+
 import pytest
 
 from pkpdsim.species import Species
@@ -93,9 +95,21 @@ def test_axial_area_is_volume_over_length() -> None:
 
 
 def test_sinusoid_count_fills_the_lumen() -> None:
+    """The count is the lumen over the volume of one sinusoid, by hand.
+
+    10 g of rat liver at 1.05 kg/l is 9.523810 ml of parenchyma, the lumen
+    10.6 % of it: 1.009524e-6 m3. One sinusoid is a cylinder of the radius
+    4.4 um and the length 300 um, pi * (4.4e-6)**2 * 300e-6 = 1.8246370e-14
+    m3, so 55 327 378 of them hold the lumen. The arithmetic is written out
+    here and not taken from the geometry, so a radius which is not squared
+    (12568 sinusoids) or a missing pi (1.7378e7) fails.
+    """
     geo, fr = geometry(Species.RAT), fractions(Species.RAT)
     n = sinusoid_count(mass_g(10.0), geo, fr)
-    assert n > 1e5
+    one_sinusoid = math.pi * (4.4e-6) ** 2 * 300e-6
+    assert one_sinusoid == pytest.approx(1.8246370e-14, rel=1e-6)
+    assert n == pytest.approx(1.009524e-6 / 1.8246370e-14, rel=1e-5)
+    assert n == pytest.approx(5.5327378e7, rel=1e-6)
 
 
 def test_human_haematocrit_and_density_are_human_values_not_fallbacks() -> None:

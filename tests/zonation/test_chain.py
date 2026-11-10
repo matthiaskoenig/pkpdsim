@@ -4,6 +4,7 @@ The tests use a tracer, a substance which does not react, so no cell model is
 needed. The chain is simulated with roadrunner as the experiments are.
 """
 
+import dataclasses
 import warnings
 from pathlib import Path
 
@@ -59,6 +60,14 @@ class _Diffusing(ZonationBuilder):
             "diffusion tracer",
             SBO.DIFFUSION_COEFFICIENT,
         )
+
+
+class _Permeable(_Diffusing):
+    """A builder whose tracer is small enough to cross the fenestrae."""
+
+    def _radius(self, substance: Solute) -> Value:
+        """Get the radius of a small solute, 0.365 nm against 53.5 nm of a fenestra."""
+        return Value(0.365e-9, U.meter)
 
 
 def _settings(
@@ -194,9 +203,16 @@ def test_mean_residence_time_is_volume_over_flow(tmp_path: Path) -> None:
     which is why it stays in the plasma: this is no claim about every solute.
     A small solute distributes into the space of Disse and stays longer
     (`test_barrier.py`).
+
+    The first moment of a chain of stirred tanks is `V / Q` whatever the zone
+    count, so the only error here is the integration of the curve: measured,
+    the quotient is 1.0000000000070 (7e-12), the same number in three runs.
+    The tolerance is 1e-8, a margin of a thousand over that and a tenth of
+    what the sibling moment tests use, where a zone ten percent too large
+    passed at the previous 1/10.
     """
     r = _tracer_chain(10, 1.0, 0.0, tmp_path, haematocrit=0.0)
-    assert _mrt(r) == pytest.approx(_volume(r) / 1.0, rel=1 / 10)
+    assert _mrt(r) == pytest.approx(_volume(r) / 1.0, rel=1e-8)
 
 
 def test_the_outflow_auc_converges_in_the_zone_count(tmp_path: Path) -> None:
@@ -226,14 +242,21 @@ def test_the_outflow_auc_converges_in_the_zone_count(tmp_path: Path) -> None:
     assert fine == pytest.approx(1.0, rel=1e-8)
 
 
-def test_numerical_dispersion_matches_two_n(tmp_path: Path) -> None:
+@pytest.mark.parametrize("n", [4, 10])
+def test_numerical_dispersion_matches_two_n(n: int, tmp_path: Path) -> None:
     """The upwind chain of n zones has the Peclet number 2n.
 
     The tracer is an intravascular marker which cannot cross the fenestrae, so
-    only the convection spreads the bolus.
+    only the convection spreads the bolus. The normalized variance of `n`
+    stirred tanks in series is `2 / Pe` = `1 / n`, which the chain realizes
+    to the integration of the curve: measured 0.10000000006 at ten zones and
+    0.2500000000013 at four, the same numbers in three runs. The tolerance is
+    1e-6, that of the sibling moment tests and four orders tighter than the
+    1/4 which let a Peclet number a quarter off pass; two zone counts, so the
+    `1 / n` and not one point of it is pinned.
     """
-    variance = _outflow_variance(_tracer_chain(10, 1.0, 0.0, tmp_path, haematocrit=0.0))
-    assert variance == pytest.approx(2.0 / 20.0, rel=0.25)  # Pe = 2n
+    variance = _outflow_variance(_tracer_chain(n, 1.0, 0.0, tmp_path, haematocrit=0.0))
+    assert variance == pytest.approx(2.0 / (2 * n), rel=1e-6)  # Pe = 2n
 
 
 @pytest.mark.parametrize("flow,diffusion", [(0.0, 0.0), (1.0, 0.0), (0.0, 1e-9)])
@@ -256,6 +279,29 @@ def test_a_diffusion_above_the_numerical_dispersion_does_not_warn() -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         _builder(10, 1.0, 1e-3).build()
+
+
+def test_the_warning_fires_at_the_factor_of_ten_and_not_before() -> None:
+    """The threshold is pinned on both sides of `DISPERSION_FACTOR`.
+
+    The chain of these tests disperses like 7.429245e-10 m2/s (the arithmetic
+    of `test_a_physical_diffusion_lowers_the_peclet_number`: 1 l/min through
+    the 0.1009524 l of lumen of 1 kg of liver, ten zones of 300 um), so the
+    limit of the warning is a tenth of it, 7.429245e-11 m2/s. A diffusion 1 %
+    below the limit warns and one 1 % above it does not, and the message names
+    the factor and the dispersion: the two were tested at 1e-14 and 1e-3
+    before, five orders either side of the limit, so the factor could move
+    without failing.
+    """
+    limit = 7.429245e-11
+    with pytest.warns(
+        UserWarning,
+        match=r"more than 10 times below the numerical dispersion 7\.43e-10",
+    ):
+        _builder(10, 1.0, 0.99 * limit).build()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        _builder(10, 1.0, 1.01 * limit).build()
 
 
 @pytest.mark.parametrize(
@@ -285,15 +331,155 @@ def test_the_builds_a_caller_cannot_avoid_do_not_warn(
         _builder(n, 1.0, diffusion, geometry=geometry).build()
 
 
+def _equivalence_chain(
+    geo: Geometry, tmp_path: Path, porosity: float, p_endo: float
+) -> roadrunner.RoadRunner:
+    """A bolus in the carrier of the first zone of a chain of the given geometry.
+
+    One kg of rat liver, ten zones, 1 l/min imposed, no erythrocytes and no
+    axial diffusion, and the same geometry constants in both geometries, so
+    the geometry is the only difference. `porosity` is the fenestral porosity
+    of every zone and `p_endo` the transcellular permeability of the
+    endothelium (m/s), the two paths of the barrier; the well-stirred
+    geometry has neither, having no barrier. The dose is an amount, so the
+    two carriers receive the same dose although their volumes differ.
+    """
+    constants = dataclasses.replace(
+        geometry(Species.RAT), porosity_pp=porosity, porosity_pc=porosity
+    )
+    builder = _Permeable(
+        ZonationSettings(
+            n_zones=10,
+            geometry=geo,
+            flow=ImposedFlow(1.0),
+            liver_mass=_MASS,
+            haematocrit=0.0,
+            reference_flow=liver_flow(),
+            geometry_constants=constants,
+        ),
+        [TRACER],
+        None,
+    )
+    path = tmp_path / f"{geo}_{porosity}_{p_endo}.xml"
+    create_model(
+        builder.build(), filepath=path, sbml_level=3, sbml_version=2, validate=False
+    )
+    r = (
+        individual(path)
+        if geo is Geometry.WELL_STIRRED
+        else individual(path, P_endo_in_tr=p_endo, P_endo_out_tr=p_endo)
+    )
+    r.integrator.absolute_tolerance = 1e-14
+    r.integrator.relative_tolerance = 1e-10
+    r[ids.species("tr", _carrier(geo), ids.zone(1))] = 1.0
+    return r
+
+
+def _carrier(geo: Geometry) -> Layer | str:
+    """The layer the blood carries the tracer in, by the geometry."""
+    return ids.VASCULAR if geo is Geometry.WELL_STIRRED else Layer.PLASMA
+
+
+def _carrier_volume(r: roadrunner.RoadRunner, geo: Geometry) -> float:
+    """The volume (l) of every compartment of the chain which holds the tracer."""
+    layers = (
+        [ids.VASCULAR]
+        if geo is Geometry.WELL_STIRRED
+        else [Layer.PLASMA, Layer.ENDOTHELIUM, Layer.DISSE]
+    )
+    return sum(
+        r[ids.volume(layer, ids.zone(k))] for layer in layers for k in range(1, 11)
+    )
+
+
+def _pericentral_curve(r: roadrunner.RoadRunner, geo: Geometry) -> np.ndarray:
+    """The concentration at the pericentral end over twelve minutes."""
+    last = ids.species("tr", _carrier(geo), ids.zone(10))
+    out = r.simulate(0, 12.0, 2001, selections=["time", f"[{last}]"])
+    return np.asarray(out)[:, 1]
+
+
+def test_the_sinusoid_with_an_open_barrier_is_the_well_stirred_chain(
+    tmp_path: Path,
+) -> None:
+    """The limit the design states, on the outflow curve of the engine itself.
+
+    "The sinusoid with the diffusion off and the barrier open equals well
+    stirred": the well-stirred geometry holds the four layers of the lumen in
+    one compartment, so a sinusoid whose barrier does not limit the transfer
+    has to give the same outflow. The two builds differ in the geometry alone
+    (ten zones, 1 kg of rat liver, 1 l/min imposed, no erythrocytes, no axial
+    diffusion) and hold the same volume, 0.1742857 l in both: the 0.106 + 0.028
+    + 0.049 of the parenchyma as three compartments per zone and as one.
+
+    The barrier is opened with a fenestral porosity of 1 (a fully fenestrated
+    endothelium, the table has 6 to 8 %) and a transcellular permeability of
+    1 m/s, which makes the exchange of a zone about 7e4 times its flow.
+    Measured, the two curves agree to 9.0e-7 of the peak, and to 9.0e-8 at ten
+    times the two permeabilities, so the residual is the finite barrier and
+    not a difference of the chains; the assertion is at 1e-5, a margin of ten
+    over the measurement.
+
+    The test is not vacuous. Opening only the fenestrae leaves the
+    endothelium, 15 % of the volume of the lumen, out of the exchange and the
+    curves differ by 0.41 of the peak; a barrier which is nearly closed keeps
+    the tracer in the plasma, a third of the volume, and differs by 1.25.
+    """
+    stirred = _equivalence_chain(Geometry.WELL_STIRRED, tmp_path, 1.0, 1.0)
+    opened = _equivalence_chain(Geometry.SINUSOID, tmp_path, 1.0, 1.0)
+    volume = _carrier_volume(stirred, Geometry.WELL_STIRRED)
+    assert volume == pytest.approx(0.1742857, rel=1e-6)
+    assert _carrier_volume(opened, Geometry.SINUSOID) == pytest.approx(
+        volume, rel=1e-12
+    )
+
+    reference = _pericentral_curve(stirred, Geometry.WELL_STIRRED)
+    peak = float(np.max(reference))
+    assert peak > 0.0
+
+    def deviation(r: roadrunner.RoadRunner) -> float:
+        """The largest difference from the well-stirred curve, over its peak."""
+        curve = _pericentral_curve(r, Geometry.SINUSOID)
+        return float(np.max(np.abs(curve - reference))) / peak
+
+    assert deviation(opened) < 1e-5
+    assert deviation(_equivalence_chain(Geometry.SINUSOID, tmp_path, 1.0, 0.0)) > 0.4
+    assert deviation(_equivalence_chain(Geometry.SINUSOID, tmp_path, 1e-9, 0.0)) > 1.0
+
+
 def test_the_reported_peclet_number_is_the_physical_one() -> None:
     """Without physical diffusion the chain realizes 2n."""
     assert effective_peclet(_settings(n=10), d_eff=0.0) == pytest.approx(20.0)
 
 
 def test_a_physical_diffusion_lowers_the_peclet_number() -> None:
-    """The numerical and the physical dispersion add."""
+    """The numerical and the physical dispersion add, by the arithmetic below.
+
+    1 kg of liver at the rat density 1.05 kg/l is 0.9523810 l of parenchyma,
+    the lumen 10.6 % of it: 0.1009524 l. A flow of 1 l/min needs 0.1009524 min
+    = 6.057143 s to replace it, so the blood crosses the 300 um of the sinusoid
+    at 300e-6 / 6.057143 = 4.952830e-5 m/s (49.53 um/s) and `v * L` is
+    1.485849e-8 m2/s.
+
+    Ten zones disperse like `v * L / (2 * 10)` = 7.429245e-10 m2/s, so the
+    Peclet number `v * L / (d_eff + v * L / 20)` is 1.485849e-8 / 7.429245e-10
+    = 20 without a physical diffusion and 1.485849e-8 / 1.742925e-9 = 8.525034
+    with 1e-9 m2/s; four zones disperse like 1.857311e-9 m2/s, and with the
+    0.9e-9 m2/s of glucose the number is 1.485849e-8 / 2.757311e-9 = 5.388761.
+
+    The three numbers are the division of the two quantities written out and
+    not the expression of `peclet`, so a `d_eff` which is scaled before it is
+    added (a tenth of it leaves 15.46 at ten zones) or a dispersion without
+    its factor of two fails here.
+    """
     free = effective_peclet(_settings(n=10, flow=1.0), d_eff=0.0)
-    assert effective_peclet(_settings(n=10, flow=1.0), d_eff=1e-9) < free
+    assert free == pytest.approx(20.0, rel=1e-9)
+    assert effective_peclet(_settings(n=10, flow=1.0), d_eff=1e-9) == pytest.approx(
+        8.525034, rel=1e-6
+    )
+    assert effective_peclet(_settings(n=4, flow=1.0), d_eff=0.9e-9) == pytest.approx(
+        5.388761, rel=1e-6
+    )
     assert effective_peclet(_settings(n=10, flow=0.0), d_eff=1e-9) == 0.0
 
 
@@ -317,7 +503,9 @@ def test_the_plasma_flow_is_the_blood_flow_without_the_erythrocytes(
     r = _tracer_chain(10, 1.0, 0.0, tmp_path, haematocrit=0.45)
     assert r["Q_plasma_li"] == pytest.approx(0.55)
     assert r["Q_rbc_li"] == pytest.approx(0.45)
-    assert _mrt(r) == pytest.approx(_volume(r) / 0.55, rel=1 / 10)
+    # measured 1.000000000052 of V / Q_plasma, as in
+    # `test_mean_residence_time_is_volume_over_flow`
+    assert _mrt(r) == pytest.approx(_volume(r) / 0.55, rel=1e-8)
 
 
 def test_without_erythrocytes_no_reaction_names_them() -> None:
@@ -460,6 +648,13 @@ def test_a_negative_flow_is_refused() -> None:
 
 
 def test_the_notes_the_warning_and_the_function_report_one_peclet_number() -> None:
-    """The reported number is the one the builder computes."""
+    """The reported number is the one the builder computes, and it is the right one.
+
+    The identity of the two paths says nothing on its own, so the shared value
+    is pinned against the 8.525034 of
+    `test_a_physical_diffusion_lowers_the_peclet_number`, where the arithmetic
+    is written out.
+    """
     builder = _builder(10, 1.0, 0.0)
     assert builder.peclet(1e-9) == effective_peclet(builder.settings, 1e-9)
+    assert builder.peclet(1e-9) == pytest.approx(8.525034, rel=1e-6)

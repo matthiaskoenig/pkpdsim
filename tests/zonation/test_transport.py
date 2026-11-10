@@ -94,6 +94,34 @@ def test_renkin_is_never_negative() -> None:
     assert all(renkin(i / 1000) >= 0.0 for i in range(1001))
 
 
+@pytest.mark.parametrize(
+    ("lambda_", "expected"),
+    [(0.5, 0.044890625), (0.7, 0.007596315), (0.9, 0.000690445)],
+    ids=["half", "seven_tenths", "nine_tenths"],
+)
+def test_renkin_carries_the_published_coefficients(
+    lambda_: float, expected: float
+) -> None:
+    """The hindrance where the high order terms of Renkin 1954 matter.
+
+    `(1 - l)**2 * (1 - 2.104 l + 2.09 l**3 - 0.95 l**5)`, the arithmetic
+    written out with the published coefficients:
+
+    - l = 0.5: 0.25 * (1 - 1.052 + 0.26125 - 0.0296875) = 0.25 * 0.1795625
+      = 0.044890625,
+    - l = 0.7: 0.09 * (1 - 1.4728 + 0.716870 - 0.1596665) = 0.09 * 0.0844035
+      = 0.007596315,
+    - l = 0.9: 0.01 * (1 - 1.8936 + 1.523610 - 0.5609655) = 0.01 * 0.0690445
+      = 0.000690445.
+
+    The fifth order term is what the test exists for. At l = 0.1, where the
+    hindrance was pinned, it is 7e-6 of the polynomial and a coefficient of
+    0.5 instead of 0.95 passes; here it is 17 % of the polynomial at l = 0.5,
+    189 % at 0.7 and 812 % at 0.9, so the same change fails at every point.
+    """
+    assert renkin(lambda_) == pytest.approx(expected, rel=1e-9)
+
+
 def test_fenestral_permeability_follows_the_formula() -> None:
     geo = geometry(Species.RAT)
     d = aqueous_diffusion(_mr(180.16))
