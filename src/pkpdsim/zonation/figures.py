@@ -80,6 +80,12 @@ _BAND_ALPHA = 0.25
 """The opacity of the fill of a band of the draws."""
 _CAPSIZE = 3.0
 """The length of the caps of the error bars of the data, in points."""
+_ONE_ZONE_MARKER = "o"
+"""The marker of a profile of a single zone.
+
+One zone is the well-stirred limit of the engine and must draw as easily as a
+sinusoid of ten: a line of one point has no segment to draw, so the panel is
+empty without a marker."""
 _NEUTRAL = "0.3"
 """The colour of a legend handle which stands for a time in every column."""
 _TRIAD_OFFSET = 0.045
@@ -268,6 +274,39 @@ def colorbar(
     return bar
 
 
+def _finite(values: Sequence[np.ndarray]) -> np.ndarray:
+    """Get the finite values of a sequence of arrays, flat.
+
+    A single NaN makes `np.min` and `np.max` NaN and every comparison against
+    it false, so a scale computed from them falls through to its no-range
+    branch: data from 200 to 1000 with one gap was drawn from 0 to 1, every
+    zone saturated and the colorbar stated a range the figure did not have. A
+    gap of the data is not a reason to draw a wrong figure, and no data at all
+    is not a reason to draw a plausible one.
+
+    Args:
+        values: the arrays of the axis or the colour scale.
+
+    Returns:
+        The finite values of all of them.
+
+    Raises:
+        ValueError: if no value is finite, which is no scale (and if there is
+            no value at all).
+    """
+    flat = [np.asarray(v, dtype=float).ravel() for v in values]
+    finite = np.concatenate(flat) if flat else np.empty(0)
+    finite = finite[np.isfinite(finite)]
+    if finite.size == 0:
+        total = sum(int(v.size) for v in flat)
+        raise ValueError(
+            f"None of the {total} values is finite (NaN or infinite), so there "
+            "is no scale to draw them on: the figure would state a range it "
+            "does not have."
+        )
+    return finite
+
+
 def _limits(
     values: Sequence[np.ndarray], headroom: float = 0.0
 ) -> tuple[float, float] | None:
@@ -276,10 +315,14 @@ def _limits(
     A concentration is never negative, so an axis of values at or above zero
     starts at zero; a layer which is zero everywhere gets zero to one. Values
     below zero leave the limits to matplotlib (`None`). A colour scale does not
-    start at zero, it spans its values (`_scale`).
+    start at zero, it spans its values (`_scale`). NaN is ignored, and nothing
+    but NaN raises (`_finite`).
+
+    Raises:
+        ValueError: if no value is finite.
     """
-    low = min(float(np.min(v)) for v in values)
-    high = max(float(np.max(v)) for v in values)
+    finite = _finite(values)
+    low, high = float(finite.min()), float(finite.max())
     if low < 0.0:
         return None
     return (0.0, high * (1.0 + headroom) if high > 0.0 else 1.0)
@@ -300,11 +343,14 @@ def _scale(
     the value of a constant therefore raises (no range), while the default
     call for the same data returns the fallback (0, 1) or (0, value).
 
+    NaN is ignored, and nothing but NaN raises (`_finite`).
+
     Raises:
-        ValueError: if the limits are not `vmin < vmax`.
+        ValueError: if the limits are not `vmin < vmax`, and if no value is
+            finite.
     """
-    low = min(float(np.min(v)) for v in values)
-    high = max(float(np.max(v)) for v in values)
+    finite = _finite(values)
+    low, high = float(finite.min()), float(finite.max())
     if vmin is not None or vmax is not None:
         low = low if vmin is None else vmin
         high = high if vmax is None else vmax
@@ -327,8 +373,22 @@ def _colors(count: int) -> np.ndarray:
 
 
 def _row_times(profile: ZoneProfile, times: Sequence[float]) -> list[float]:
-    """Get the times of a row: its own times, else the times of the figure."""
-    return [float(t) for t in (times if profile.times is None else profile.times)]
+    """Get the times of a row: its own times, else the times of the figure.
+
+    Raises:
+        ValueError: for a profile whose own times are empty, which draws
+            nothing; the figure says so instead of failing on a bare
+            `min() iterable argument is empty` when the row has no values to
+            scale.
+    """
+    own = profile.times is not None
+    row = [float(t) for t in (profile.times if own else times)]
+    if not row:
+        raise ValueError(
+            f"The times of the profile '{profile.label}' are empty, so its row "
+            "draws no line; leave them out to take the times of the figure."
+        )
+    return row
 
 
 def _frame_column(
@@ -350,6 +410,15 @@ def _frame_column(
                 y if profile.transform is None else profile.transform(y)
             )
     return ZoneColumn("", values)
+
+
+def _marker(count: int) -> str | None:
+    """Get the marker of a profile of `count` zones, `None` for a line.
+
+    A profile of one zone is drawn as a point: matplotlib draws nothing for a
+    line of one point, so the panel of a well-stirred build would be empty.
+    """
+    return _ONE_ZONE_MARKER if count == 1 else None
 
 
 def _band_of(column: ZoneColumn, label: str, time: float) -> Band:
@@ -388,6 +457,12 @@ def fill_band(
         alpha: the opacity of the fill.
     """
     if band.lower is None or band.upper is None:
+        return
+    if x.size == 1:
+        # a fill between one x is empty, so the band of a single zone is drawn
+        # as the segment it is; without it the panel would show the median
+        # alone and state no uncertainty
+        ax.vlines(x, band.lower, band.upper, color=color, alpha=alpha, lw=6.0)
         return
     ax.fill_between(x, band.lower, band.upper, color=color, alpha=alpha, lw=0.0)
 
@@ -581,9 +656,10 @@ def zone_profiles(
             has no band of a profile and a time it is asked for. A frame is
             read before the data is checked, so a missing selection is named
             before a label of the data which no profile has.
-        ValueError: if `profiles`, `times` or `result` is empty, if a row of
-            `data` has a label which no profile or no column has, or if no row
-            of `data` is drawn.
+        ValueError: if `profiles`, `times`, `result` or the own times of a
+            profile are empty, if a row of `data` has a label which no profile
+            or no column has, if no row of `data` is drawn, or if no value of a
+            row is finite.
     """
     if not profiles:
         raise ValueError("The profiles are empty, there is no row to draw.")
@@ -621,6 +697,7 @@ def zone_profiles(
                     linestyle=_LINE_STYLES[k % len(_LINE_STYLES)],
                     color=color,
                     linewidth=2.0,
+                    marker=_marker(x.size),
                     label=text if single else NO_LEGEND,
                 )
                 values += [
@@ -844,7 +921,7 @@ def layer_profile(
     for i, (ax, (layer, n), y) in enumerate(
         zip(flat[: len(present)], present, profiles, strict=True)
     ):
-        ax.plot(_positions(n), y, color="C0", linewidth=2.0)
+        ax.plot(_positions(n), y, color="C0", linewidth=2.0, marker=_marker(n))
         limits = shared if share_y else _limits([y], _HEADROOM)
         if limits is not None:
             ax.set_ylim(*limits)
@@ -1076,13 +1153,28 @@ def lobule_map(
 
     Raises:
         KeyError: if the result has no column of a zone.
-        ValueError: for less than one zone.
+        ValueError: for less than one zone, and for a number of zones which is
+            not the one of the result: the bands of the map are the area
+            shares of `zones`, so `zones=5` on a ten zone result would draw a
+            lobule of five zones out of the five periportal ones of the
+            result, a figure of nothing.
     """
     if zones < 1:
         raise ValueError(f"A lobule has at least one zone, not {zones}.")
+    found = _zones(result, quantity, layer)
+    if found and found != zones:
+        raise ValueError(
+            f"The result holds {found} zones of '{quantity}' in '{layer}' and "
+            f"not the {zones} of the lobule: the map would draw the first "
+            f"{zones} of them as the whole lobule."
+        )
     name = quantity if name is None else name
     values = _at(result, observers.profile_ids(quantity, layer, zones), time)
-    limits = _scale([values], vmin, vmax) or (float(values.min()), float(values.max()))
+    finite = _finite([values])
+    limits = _scale([values], vmin, vmax) or (
+        float(finite.min()),
+        float(finite.max()),
+    )
     mappable = ScalarMappable(Normalize(*limits), colormaps["viridis"])
     figure = Figure(figsize=(5.0, 4.4), layout="constrained")
     ax = figure.subplots()

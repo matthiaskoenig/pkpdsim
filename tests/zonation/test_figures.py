@@ -37,6 +37,8 @@ from pkpdsim.zonation.figures import (
     Band,
     ZoneColumn,
     ZoneProfile,
+    _limits,
+    _scale,
     colorbar,
     data_axes,
     draw_lobule,
@@ -1227,3 +1229,83 @@ def test_the_error_bars_of_the_data_have_caps_of_three_points() -> None:
         assert len(caps) == 2
         # matplotlib draws a cap as a marker of twice the capsize
         assert all(cap.get_markersize() == pytest.approx(2 * _CAPSIZE) for cap in caps)
+
+
+# --- what a figure must not draw ---------------------------------------------
+
+
+def test_a_gap_in_the_data_does_not_collapse_a_scale() -> None:
+    """One NaN made every scale the fallback zero to one.
+
+    `np.min` and `np.max` of an array with a NaN are NaN and every comparison
+    against NaN is false, so both scales fell through to their no-range
+    branch: data from 200 to 1000 was drawn from 0 to 1, every zone saturated
+    and the colorbar stated a range the figure did not have.
+    """
+    whole = np.array([200.0, 500.0, 1000.0])
+    gap = np.array([200.0, np.nan, 1000.0])
+    assert _limits([gap]) == _limits([whole]) == (0.0, 1000.0)
+    assert _scale([gap]) == _scale([whole]) == (200.0, 1000.0)
+
+
+def test_a_scale_of_nothing_but_nan_is_refused() -> None:
+    """No data is no reason to draw a plausible figure."""
+    nans = np.array([np.nan, np.nan])
+    for scale in (_limits, _scale):
+        with pytest.raises(ValueError, match="None of the 2 values is finite"):
+            scale([nans])
+
+
+def test_a_heatmap_of_a_result_with_a_gap_keeps_the_scale_of_its_values() -> None:
+    """The scale of a figure of a result with a gap is the one of what it has."""
+    result = _result((Layer.PLASMA,), n=4)
+    first = observers.profile_ids("drg", Layer.PLASMA, 4)[0]
+    result.loc[3, first] = np.nan
+    values = result[observers.profile_ids("drg", Layer.PLASMA, 4)].to_numpy(dtype=float)
+    finite = values[np.isfinite(values)]
+    fig = space_time(result, "drg", layers=(Layer.PLASMA,), outflow=False)
+    (mesh,) = [c for c in data_axes(fig)[0].collections if isinstance(c, QuadMesh)]
+    assert mesh.get_clim() == (float(finite.min()), float(finite.max()))
+
+
+def test_a_profile_of_a_single_zone_is_drawn_as_a_point() -> None:
+    """One zone is the well-stirred limit and must draw as easily as ten.
+
+    A line of one point has no segment, so the panel was empty; the median
+    gets a marker and the band of the draws, which a fill between one x does
+    not show either, is drawn as the segment it is.
+    """
+    profiles = _profiles(1, n=1)
+    column = _column("one", profiles=profiles, times=(60.0,), spread=0.5)
+    fig = zone_profiles([column], profiles, times=(60.0,))
+    (ax,) = data_axes(fig)
+    (line,) = ax.lines
+    assert line.get_marker() == "o"
+    assert len(ax.collections) == 1  # the band, a segment of its own
+    frame = data_axes(zone_profiles(_result(n=1), _profiles(1, n=1), times=(60,)))[0]
+    assert frame.lines[0].get_marker() == "o"
+    panel = data_axes(layer_profile(_result((Layer.PLASMA,), n=1), "drg", time=60))[0]
+    assert panel.lines[0].get_marker() == "o"
+
+
+def test_a_profile_of_many_zones_is_a_line_without_markers() -> None:
+    """The marker is for the point which would otherwise not be drawn."""
+    fig = zone_profiles(_result(), _profiles(1), times=(60,))
+    (line,) = data_axes(fig)[0].lines
+    assert line.get_marker() == "None"
+
+
+def test_a_row_without_times_of_its_own_says_so() -> None:
+    """`times=()` of a profile drew no line and failed on a bare `min()`."""
+    profile = ZoneProfile(
+        "empty", "mM", tuple(observers.profile_ids("drg", Layer.PLASMA, N)), times=()
+    )
+    with pytest.raises(ValueError, match="times of the profile 'empty' are empty"):
+        zone_profiles(_result(), [profile], times=(60,))
+
+
+def test_a_lobule_of_another_number_of_zones_than_the_result_is_refused() -> None:
+    """`zones=5` on a ten zone result drew five periportal zones as a lobule."""
+    with pytest.raises(ValueError, match="holds 10 zones"):
+        lobule_map(_result(), "drg", time=60, zones=5)
+    assert lobule_map(_result(), "drg", time=60, zones=N) is not None
