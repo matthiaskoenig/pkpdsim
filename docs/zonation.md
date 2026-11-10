@@ -143,9 +143,11 @@ figure = lobule_map(pd.DataFrame(columns), "drg", time=60, zones=10)
 figure.savefig("lobule.svg")
 ```
 
-`draw_lobule(ax, values, mappable=...)` is the renderer behind the map, for a model which composes a grid of lobules of its own (its conditions, its measured data and its legend stay in the model): it draws one band per zone and wedge into the axes its caller made and sets them up for the hexagon, the limits, the equal aspect, no ticks and no spines. A value which is not finite takes the colour the colormap gives a masked value, so a zone without data is told from the lowest value of the scale (`colormaps["viridis"].with_extremes(bad="#f0f0f0")`). `thirds=True` adds the isolines of 1/3 and 2/3 as dotted rings, the thirds a histology counts its zones in; `anatomy=True` the outline of the hexagon and the three dots of the portal triad of every corner (portal vein, hepatic artery, bile duct); `labels=True` names the vessels, `CV` at the centre and `PT` beside one corner, for the first panel of a grid. The centre of this idealization is the central vein itself, so no disc of a vein lumen covers the pericentral bands. `colorbar(figure, mappable, ax, label=...)` is the one colorbar of the package: it un-rasterizes the solids of the bar, which matplotlib draws as an embedded image, and marks its axes `COLORBAR`; it passes its keyword arguments on to `Figure.colorbar`, so a grid takes one bar over its panels (`ax=[...]`, `location`, `shrink`, `aspect`).
+`draw_lobule(ax, values, mappable=...)` is the renderer behind the map, for a model which composes a grid of lobules of its own (its conditions, its measured data and its legend stay in the model): it draws one band per zone and wedge into the axes its caller made and sets them up for the hexagon, the limits, the equal aspect, no ticks and no spines. A value which is not finite is a zone without data and is drawn in `missing`, a grey (`MISSING`) which the caller may change; the colour is taken here and not from the `bad` of the colormap, whose default is transparent, because a white hole in the hexagon reads as a defect of the geometry. `thirds=True` adds the isolines of 1/3 and 2/3 as dotted rings, the thirds a histology counts its zones in; `anatomy=True` the outline of the hexagon and the three dots of the portal triad of every corner (portal vein, hepatic artery, bile duct); `labels=True` names the vessels, `CV` at the centre and `PT` below the lower right corner, for the first panel of a grid; both are written over a white stroke, so they read on a dark map and on a light one. The centre of this idealization is the central vein itself, so no disc of a vein lumen covers the pericentral bands. `colorbar(figure, mappable, ax, label=...)` is the one colorbar of the package: it un-rasterizes the solids of the bar, which matplotlib draws as an embedded image, and marks its axes `COLORBAR`; it passes its keyword arguments on to `Figure.colorbar`, so a grid takes one bar over its panels (`ax=[...]`, `location`, `shrink`, `aspect`).
 
-`lobule_isoline(position)` (`pkpdsim.zonation.render`) is one contour of the lobular position over the same hexagon, the twelve wedges of `lobular_radius` joined into a closed ring around the centre: the isoline of 0 is the hexagon itself (the radius 1 towards a triad, the apothem `cos(pi / 6)` towards the middle of an edge), the isoline of 1 is the centre, the radius towards a triad is `1 - position`, and the area inside the ring is `1 - lobular_area(position)` of the area of the hexagon.
+`lobule_isoline(position)` (`pkpdsim.zonation.render`) is one contour of the lobular position over the same hexagon, the twelve wedges of `lobular_radius` joined into a closed ring around the centre: the isoline of 0 is the hexagon itself (the radius 1 towards a triad, the apothem `cos(pi / 6)` towards the middle of an edge), the isoline of 1 is the centre, the radius towards a triad is `1 - position`, and the area inside the ring is `1 - lobular_area(position)` of the area of the hexagon. A band of `lobule_bands` is two such isolines, so the inner arc of a band is point for point the outer arc of the band inside it and the two leave no seam.
+
+Both take the sampling of their isolines as `points`, the directions over the arc of an Apollonius circle; the part which runs along the edge of the hexagon is straight and needs none. The default is what a drawing needs: the area of a zone is then within 8.6e-4 of `zone_areas` and the SVG of a panel of ten zones is about 113 kB, where the accuracy a measurement wants (`points=256`, within 3e-6) is 1.4 MB. The areas of the engine come from `lobular_area` and never from these polygons.
 
 ```python
 import numpy as np
@@ -157,10 +159,8 @@ from matplotlib.figure import Figure
 from pkpdsim.zonation.figures import colorbar, draw_lobule
 
 values = np.linspace(0.2, 1.0, 10)
-values[3] = np.nan  # a zone without data, the grey of the colormap
-scale = ScalarMappable(
-    Normalize(0.2, 1.0), colormaps["viridis"].with_extremes(bad="#f0f0f0")
-)
+values[3] = np.nan  # a zone without data, drawn in the grey of `MISSING`
+scale = ScalarMappable(Normalize(0.2, 1.0), colormaps["viridis"])
 figure = Figure(figsize=(6.4, 3.2), layout="constrained")
 left, right = figure.subplots(1, 2)
 draw_lobule(left, values, mappable=scale, thirds=True, anatomy=True, labels=True)

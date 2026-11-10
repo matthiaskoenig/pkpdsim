@@ -21,7 +21,7 @@ from pkpdsim.zonation import ids, observers
 from pkpdsim.zonation.figures import COLORBAR, data_axes, lobule_map, space_time
 from pkpdsim.zonation.geometry import Layer, geometry
 from pkpdsim.zonation.profiles import lobular_area, zone_areas
-from pkpdsim.zonation.render import lobule_isoline, tube_mesh
+from pkpdsim.zonation.render import lobule_bands, lobule_isoline, tube_mesh
 
 N = 10
 HEXAGON_AREA = 3.0 * np.sqrt(3.0) / 2.0
@@ -100,10 +100,53 @@ def test_the_colours_are_the_scale_of_the_values() -> None:
         assert _zone_colour(fig, k) == pytest.approx(cmap((k - 1) / (N - 1)))
 
 
+def _band_areas(**sampling: int) -> list[float]:
+    """The share of the area of the hexagon of every zone, from the polygons."""
+    bands = lobule_bands(N, **sampling)
+    return [
+        sum(_shoelace(np.asarray(wedge)) for wedge in wedges) / HEXAGON_AREA
+        for wedges in bands
+    ]
+
+
 def test_the_hexagon_area_per_zone_is_the_exact_zone_area() -> None:
-    """A zone is the interval `[(k - 1) / n, k / n]`, its area `zone_areas(n)`."""
-    areas = _areas_per_zone(lobule_map(_result(), "drg", time=60, zones=N))
-    assert areas == pytest.approx(list(zone_areas(N)), rel=2e-4)
+    """A zone is the interval `[(k - 1) / n, k / n]`, its area `zone_areas(n)`.
+
+    The polygons are the chords of the isolines, so the accurate sampling is
+    asked for here; the areas of the engine come from `lobular_area` and never
+    from these polygons, and the default of a drawing is the coarser one below.
+    """
+    areas = _band_areas(points=256)
+    assert areas == pytest.approx(list(zone_areas(N)), rel=1e-5)
+    assert sum(areas) == pytest.approx(1.0, rel=1e-9)
+
+
+def test_the_sampling_of_a_drawing_keeps_the_areas_within_a_thousandth() -> None:
+    """What the figures draw is coarse, and a zone is still its area."""
+    assert _band_areas() == pytest.approx(list(zone_areas(N)), rel=1e-3)
+    drawn = _areas_per_zone(lobule_map(_result(), "drg", time=60, zones=N))
+    assert drawn == pytest.approx(list(zone_areas(N)), rel=1e-3)
+
+
+def test_the_bands_refuse_a_wedge_of_one_point() -> None:
+    with pytest.raises(ValueError, match="two points"):
+        lobule_bands(4, points=1)
+
+
+def _wedge_arc(position: float, points: int) -> np.ndarray:
+    """The first wedge of the isoline of a position, the arc two bands share."""
+    ring = lobule_isoline(position, points=points)
+    return ring[: (len(ring) - 1) // 12 + 1]
+
+
+def test_a_band_and_the_band_inside_it_share_their_isoline() -> None:
+    """No seam: the inner arc of a band is the outer arc of the band inside it."""
+    n, points = 4, 8
+    bands = lobule_bands(n, points=points)
+    for k, (outside, inside) in enumerate(pairwise(bands), start=1):
+        arc = _wedge_arc(k / n, points)
+        assert outside[0][-len(arc) :] == pytest.approx(arc[::-1])
+        assert inside[0][: len(arc)] == pytest.approx(arc)
 
 
 def test_every_point_of_the_hexagon_lies_in_exactly_one_patch() -> None:
@@ -253,11 +296,13 @@ def test_the_isoline_is_closed_and_ordered() -> None:
     assert angle[-1] - angle[0] == pytest.approx(2.0 * np.pi)
 
 
-def test_the_isoline_samples_a_wedge_as_asked_and_refuses_one_point() -> None:
-    assert len(lobule_isoline(0.0, points=8)) < len(lobule_isoline(0.0, points=64))
+def test_the_isoline_samples_its_arc_as_asked_and_refuses_one_point() -> None:
+    assert len(lobule_isoline(0.5, points=8)) < len(lobule_isoline(0.5, points=64))
     assert _shoelace(lobule_isoline(0.5, points=16)) == pytest.approx(
-        _shoelace(lobule_isoline(0.5)), rel=1e-3
+        _shoelace(lobule_isoline(0.5, points=256)), rel=1e-3
     )
+    # the isoline of 0 is the hexagon, twelve straight pieces and no arc at all
+    assert len(lobule_isoline(0.0, points=64)) == 13
     with pytest.raises(ValueError, match="two points"):
         lobule_isoline(0.5, points=1)
 

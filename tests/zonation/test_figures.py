@@ -9,6 +9,7 @@ matplotlib.use("Agg")
 
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 from matplotlib import colormaps
 from matplotlib.axes import Axes
@@ -20,12 +21,15 @@ from matplotlib.figure import Figure
 from matplotlib.legend import Legend
 from matplotlib.lines import Line2D
 from matplotlib.patches import Polygon
+from matplotlib.patheffects import withStroke
+from matplotlib.text import Text
 from pbpk.conftest import individual
 from sbmlutils.factory import create_model
 
 from pkpdsim.zonation import ids, observers
 from pkpdsim.zonation.figures import (
     COLORBAR,
+    MISSING,
     POSITION,
     Band,
     ZoneColumn,
@@ -965,6 +969,15 @@ def _face_at(ax: Axes, point: tuple[float, float]) -> tuple[float, ...]:
     return colours.pop()
 
 
+def _stroke(text: Text) -> dict[str, Any]:
+    """The arguments of the one stroke behind a text (`withStroke` keeps them private)."""
+    (effect,) = text.get_path_effects()
+    assert isinstance(effect, withStroke)
+    arguments = vars(effect)["_gc"]
+    assert isinstance(arguments, dict)
+    return arguments
+
+
 def _xy(line: Line2D) -> np.ndarray:
     """The points of a line as an array of shape (n, 2)."""
     return np.column_stack([_x(line), _y(line)])
@@ -989,20 +1002,32 @@ def test_draw_lobule_colours_a_band_per_zone() -> None:
     assert not any(spine.get_visible() for spine in ax.spines.values())
 
 
-def test_draw_lobule_draws_a_zone_without_data_as_the_bad_colour() -> None:
+def test_draw_lobule_draws_a_zone_without_data_in_the_missing_colour() -> None:
+    """A plain colormap: the renderer takes the colour, the caller sets no `bad`."""
     values = _values()
     for k in (4, 5, 6, 7):
         values[k - 1] = float("nan")
-    mappable = _mappable()
+    mappable = ScalarMappable(Normalize(1.0, float(N)), colormaps["viridis"])
+    assert np.asarray(colormaps["viridis"].get_bad()) == pytest.approx(to_rgba("none"))
     ax = _axes()
     draw_lobule(ax, values, mappable=mappable)
     for k in (4, 7):
-        assert _zone_face(ax, k) == pytest.approx(to_rgba(BAD))
-        # not the lowest value of the scale, which a zone without data is not
+        assert _zone_face(ax, k) == pytest.approx(to_rgba(MISSING))
+        # neither transparent, which is a hole in the hexagon, nor a value
+        assert _zone_face(ax, k)[3] == pytest.approx(1.0)
         assert _zone_face(ax, k) != pytest.approx(_colour(mappable, 1.0))
     # the zones with data keep the colour of their own value, not of a neighbour
     for k in (1, 3, 8, N):
         assert _zone_face(ax, k) == pytest.approx(_colour(mappable, float(k)))
+
+
+def test_the_colour_of_a_zone_without_data_is_the_callers_to_choose() -> None:
+    values = _values()
+    values[2] = float("nan")
+    ax = _axes()
+    draw_lobule(ax, values, mappable=_mappable(), missing="#ff00ff")
+    assert _zone_face(ax, 3) == pytest.approx(to_rgba("#ff00ff"))
+    assert _zone_face(ax, 4) == pytest.approx(_colour(_mappable(), 4.0))
 
 
 def test_draw_lobule_draws_the_thirds_only_when_asked() -> None:
@@ -1063,10 +1088,16 @@ def test_draw_lobule_names_the_vessels_only_when_asked() -> None:
     assert centre.get_position() == pytest.approx((0.0, 0.0))
     assert centre.get_fontsize() == pytest.approx(7.0)
     assert triad.get_fontsize() == pytest.approx(7.0)
-    # beside the corner at the angle 0, outside the hexagon and not over a band
+    # below the corner at 300 degrees, under the panel, clear of its three dots
     x, y = triad.get_position()
-    assert x >= 1.0
-    assert y == pytest.approx(0.0)
+    assert (x, y) == pytest.approx((0.5, -0.95))
+    assert triad.get_verticalalignment() == "top"
+    assert y < -np.cos(np.pi / 6.0) - 0.045 - 0.02
+    # both read on a dark map and on a light one: a white stroke behind them
+    for text in (centre, triad):
+        stroke = _stroke(text)
+        assert to_rgba(stroke["foreground"]) == to_rgba("white")
+        assert stroke["linewidth"] == pytest.approx(2.0)
 
 
 def test_lobule_map_is_unchanged_by_the_renderer() -> None:

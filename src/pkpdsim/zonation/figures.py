@@ -32,10 +32,11 @@ from matplotlib import colormaps
 from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
 from matplotlib.colorbar import Colorbar
-from matplotlib.colors import Normalize
+from matplotlib.colors import Normalize, to_rgba
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import Polygon
+from matplotlib.patheffects import withStroke
 from matplotlib.typing import LineStyleType
 
 from pkpdsim.zonation import ids, observers
@@ -43,6 +44,7 @@ from pkpdsim.zonation.geometry import Layer
 from pkpdsim.zonation.render import lobule_bands, lobule_isoline
 
 __all__ = [
+    "MISSING",
     "Band",
     "ZoneColumn",
     "ZoneProfile",
@@ -88,6 +90,8 @@ _THIRDS_GREY = "0.25"
 """The grey of the dotted isolines of the thirds."""
 _VESSEL_SIZE = 7
 """The font size of the names of the vessels (`CV`, `PT`) on a lobule."""
+MISSING = "#f0f0f0"
+"""The colour of a zone without data on a lobule, the default of `draw_lobule`."""
 NO_LEGEND = "_nolegend_"
 """The label matplotlib leaves out of a legend, the lines of a grid of columns.
 
@@ -865,6 +869,7 @@ def draw_lobule(
     values: Sequence[float] | np.ndarray,
     *,
     mappable: ScalarMappable,
+    missing: str = MISSING,
     thirds: bool = False,
     anatomy: bool = False,
     labels: bool = False,
@@ -890,26 +895,34 @@ def draw_lobule(
     Args:
         ax: the axes, which the caller made and owns.
         values: the value of every zone, periportal first; their number is the
-            number of zones. A value which is not finite is drawn in the colour
-            the colormap gives a masked value, so a zone without data is told
-            from the lowest value of the scale: the caller sets that colour on
-            its colormap (`colormaps["viridis"].with_extremes(bad="#f0f0f0")`).
+            number of zones. A value which is not finite is a zone without
+            data and is drawn in `missing`.
         mappable: the colour of a value, a `ScalarMappable` of a norm and a
             colormap; the same one goes to `colorbar`.
+        missing: the colour of a zone without data, a grey by default. It is
+            taken here and not from the `bad` colour of the colormap, whose
+            default is transparent: a caller who forgets to set it would get
+            white holes in the hexagon, which read as a defect of the geometry
+            and not as a zone without data.
         thirds: draw the isolines of 1/3 and 2/3 as dotted lines, the thirds of
             the lobulus the histology of a study counts its zones in.
         anatomy: draw the outline of the hexagon and the three dots of the
             portal triad of every corner (portal vein, hepatic artery, bile
             duct).
-        labels: name the vessels, `CV` at the centre and `PT` beside one
-            corner, for the first panel of a grid of several.
+        labels: name the vessels, `CV` at the centre and `PT` below the lower
+            right corner, for the first panel of a grid of several; both are
+            written over a white stroke, so they read on a dark map and on a
+            light one.
 
     Raises:
         ValueError: if there is no value, so no zone to draw.
     """
     per_zone = np.asarray(values, dtype=float)
     bands = lobule_bands(len(per_zone))
+    # the mask keeps the norm off the values which are not finite; their colour
+    # is `missing` and not what the colormap happens to give a masked value
     colours = mappable.to_rgba(np.ma.masked_invalid(per_zone))
+    colours[~np.isfinite(per_zone)] = to_rgba(missing)
     for k, polygons in enumerate(bands, start=1):
         colour = colours[k - 1]
         for polygon in polygons:
@@ -930,11 +943,29 @@ def draw_lobule(
         ax.plot(*lobule_isoline(0.0).T, color=_ANATOMY_GREY, lw=1.1)
         _portal_triads(ax)
     if labels:
-        ax.text(0.0, 0.0, "CV", ha="center", va="center", fontsize=_VESSEL_SIZE)
-        # beside the corner at the angle 0, outside the rim and clear of the
-        # dots of its triad: no band is covered, and the hexagon fills the
-        # limits, so the name of the triads stands a little outside them
-        ax.text(1.08, 0.0, "PT", ha="left", va="center", fontsize=_VESSEL_SIZE)
+        # the stroke carries the name over whatever the map is: the centre is
+        # the dark end of the scale whenever the gradient falls to the vein
+        halo = [withStroke(linewidth=2.0, foreground="white")]
+        ax.text(
+            0.0,
+            0.0,
+            "CV",
+            ha="center",
+            va="center",
+            fontsize=_VESSEL_SIZE,
+            path_effects=halo,
+        )
+        # below the corner at 300 degrees, under the panel and clear of the
+        # dots of that triad: no band is covered and no dot is touched
+        ax.text(
+            0.5,
+            -0.95,
+            "PT",
+            ha="center",
+            va="top",
+            fontsize=_VESSEL_SIZE,
+            path_effects=halo,
+        )
     ax.set_xlim(-1.02, 1.02)
     ax.set_ylim(-0.9, 0.9)
     ax.set_aspect("equal")

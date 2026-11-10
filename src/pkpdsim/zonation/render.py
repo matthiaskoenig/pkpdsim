@@ -17,7 +17,6 @@ the zone values, `values[k]` for the segment `k`.
 """
 
 import math
-from collections.abc import Sequence
 from itertools import pairwise
 
 import numpy as np
@@ -30,8 +29,19 @@ __all__ = ["lobule_bands", "lobule_isoline", "tube_mesh"]
 
 _WEDGE = math.pi / 6.0
 """The angle of one twelfth of the hexagon, the wedge of one portal triad."""
-_ARC_POINTS = 256
-"""The points of the isoline of a band in a wedge; the error of the area is below 1e-4 of a zone."""
+_ARC_POINTS = 16
+"""The directions sampled over the arc of an isoline by default, what a drawing needs.
+
+A polygon is the chords of its isolines, so its area falls a little short of
+the area of the zone; the areas of the engine come from `lobular_area`
+analytically and never from these polygons, so the sampling is a question of
+the picture alone. At 16 directions the area of a zone is within 8.6e-4 of
+`zone_areas` (the smallest zone, the one at the triads; the others are nearer)
+and the sagitta of a chord is below 1.2e-4 of the circumradius, a twentieth of
+a pixel in a panel of 3 inches at 200 dpi, while the SVG of a panel of ten
+zones is about 113 kB. A caller who measures the polygons themselves asks for
+more: `points=256` is within 3e-6, at 1.4 MB a panel.
+"""
 
 
 def _zone_edges(n: int) -> list[float]:
@@ -47,54 +57,53 @@ def _zone_edges(n: int) -> list[float]:
     return [k / n for k in range(n + 1)]
 
 
-def _directions(positions: Sequence[float], points: int) -> np.ndarray:
-    """Get the directions of the wedge of a triad, the kinks of the positions included.
+def _kink(position: float) -> float:
+    """Get the direction in which the isoline of a position leaves the hexagon.
 
-    The wedge is sampled with `points` directions from the triad (theta 0) to
-    the midpoint of an edge (theta `pi / 6`), and the direction in which the
-    isoline of a position leaves through the edge of the hexagon
-    (`sin(theta) = sqrt(3) / 2 * x / (1 - x)`) is sampled too: it is the corner
-    where the isoline meets the edge, which the chords would otherwise cut off.
+    Beyond this direction the edge of the hexagon bounds the lobule and the
+    isoline follows it (`sin(theta) = sqrt(3) / 2 * x / (1 - x)`); the isoline
+    of 0 is the edge over the whole wedge and the isoline of 1 is the centre,
+    which has no straight part.
     """
-    theta = np.linspace(0.0, _WEDGE, points)
-    kinks = [
-        math.asin(min(1.0, math.sqrt(3.0) / 2.0 * x / (1.0 - x)))
-        for x in positions
-        if 0.0 < x < 1.0
-    ]
-    return np.unique(np.concatenate([theta, np.clip(kinks, 0.0, _WEDGE)]))
+    if position <= 0.0:
+        return 0.0
+    if position >= 1.0:
+        return _WEDGE
+    return math.asin(min(1.0, math.sqrt(3.0) / 2.0 * position / (1.0 - position)))
+
+
+def _directions(position: float, points: int) -> np.ndarray:
+    """Get the directions which the isoline of a position is sampled in.
+
+    The isoline is an arc of an Apollonius circle up to the direction in which
+    it leaves through the edge of the hexagon (`_kink`) and the straight edge
+    beyond it, so `points` directions cover the arc and the kink and the
+    midpoint of the edge (theta `pi / 6`) close it: a chord of the straight
+    part is the part itself, and no point is spent where the polygon is exact.
+    The isoline of 0 is therefore two points, the corner and the midpoint of
+    the edge.
+    """
+    theta = np.linspace(0.0, min(_kink(position), _WEDGE), points)
+    return np.unique(np.append(theta, _WEDGE))
 
 
 def _arc(position: float, points: int) -> np.ndarray:
     """Get the polyline of one position over the wedge of a triad, `(n, 2)`."""
-    theta = _directions((position,), points)
+    theta = _directions(position, points)
     radius = np.array([lobular_radius(position, t) for t in theta])
     return np.column_stack([radius * np.cos(theta), radius * np.sin(theta)])
 
 
-def _band(low: float, high: float) -> np.ndarray:
+def _band(low: float, high: float, points: int) -> np.ndarray:
     """Get the polygon of the band `[low, high]` of a position in the wedge of a triad.
 
-    The outer arc is the isoline of `low`, the inner arc that of `high`, both
-    from the direction of the triad (theta 0) to that of the edge midpoint,
-    over the same directions (`_directions`), which include the kinks of both.
+    The outer arc is the isoline of `low` and the inner arc that of `high`,
+    reversed, each sampled in its own directions (`_directions`): the isoline
+    of a position is one polyline wherever it is used, so the inner arc of a
+    band is point for point the outer arc of the band inside it and the two
+    leave no seam, and `lobule_isoline` draws the same line.
     """
-    theta = _directions((low, high), _ARC_POINTS)
-    outer = [lobular_radius(low, t) for t in theta]
-    inner = [lobular_radius(high, t) for t in theta]
-    return np.vstack(
-        [
-            np.column_stack(
-                [np.array(outer) * np.cos(theta), np.array(outer) * np.sin(theta)]
-            ),
-            np.column_stack(
-                [
-                    np.array(inner[::-1]) * np.cos(theta[::-1]),
-                    np.array(inner[::-1]) * np.sin(theta[::-1]),
-                ]
-            ),
-        ]
-    )
+    return np.vstack([_arc(low, points), _arc(high, points)[::-1]])
 
 
 def _twelve(wedge: np.ndarray) -> list[np.ndarray]:
@@ -120,7 +129,7 @@ def _twelve(wedge: np.ndarray) -> list[np.ndarray]:
     return copies
 
 
-def lobule_bands(n: int) -> list[list[np.ndarray]]:
+def lobule_bands(n: int, *, points: int = _ARC_POINTS) -> list[list[np.ndarray]]:
     """Get the polygons of the zones of the idealized hexagonal lobule.
 
     The hexagon has the circumradius 1, the central vein (zone `n`) at the
@@ -130,21 +139,27 @@ def lobule_bands(n: int) -> list[list[np.ndarray]]:
 
     Args:
         n: the number of zones.
+        points: the directions sampled over one wedge, the resolution of the
+            polygons; the default is what a drawing needs (`_ARC_POINTS`), a
+            caller who measures the polygons themselves asks for more.
 
     Returns:
-        For every zone from periportal, its twelve polygons, arrays of shape
-        `(points, 2)`; the areas of the zones are `zone_areas(n)` to the chord
-        error of the isolines (8.7e-5 relative at 10 zones).
+        For every zone from periportal, its twelve polygons, arrays of the
+        points of the two isolines which bound the band; the areas of the
+        zones are `zone_areas(n)` to the chord error of the isolines (at 10
+        zones within 8.6e-4 of a zone at the default, 3e-6 at `points=256`).
 
     Raises:
-        ValueError: for less than one zone.
+        ValueError: for less than one zone or less than two points.
     """
     if n < 1:
         raise ValueError(f"A lobule has at least one zone, not {n}.")
-    return [_twelve(_band(low, high)) for low, high in pairwise(_zone_edges(n))]
+    if points < 2:
+        raise ValueError(f"A wedge has at least two points, not {points}.")
+    return [_twelve(_band(low, high, points)) for low, high in pairwise(_zone_edges(n))]
 
 
-def lobule_isoline(position: float, *, points: int = 256) -> np.ndarray:
+def lobule_isoline(position: float, *, points: int = _ARC_POINTS) -> np.ndarray:
     """Get the closed polyline of the points of one lobular position.
 
     The isoline over the whole hexagon of `lobule_bands`: the twelve copies of
@@ -165,7 +180,8 @@ def lobule_isoline(position: float, *, points: int = 256) -> np.ndarray:
         position: the lobular position, 0 periportal (the portal triads) and 1
             pericentral (the central vein).
         points: the directions sampled over one wedge; the kink where the
-            isoline leaves through an edge is always one of them.
+            isoline leaves through an edge is always one of them. The default
+            is what a drawing needs (`_ARC_POINTS`), as for `lobule_bands`.
 
     Returns:
         The points of the ring, an array of shape `(n, 2)` in the hexagon of
