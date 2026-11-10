@@ -148,6 +148,36 @@ def _outflow_variance(r: roadrunner.RoadRunner) -> float:
     return _moments(r)[1]
 
 
+def _relative_outflow_auc(n: int, tmp_path: Path) -> float:
+    """The outflow AUC of a bolus through `n` zones over the AUC of plug flow.
+
+    The dose is the amount of the bolus in the plasma of the first zone, which
+    the zone count divides, so the bolus is normalized to the same dose at
+    every zone count: the concentration `dose / V_plasma_z1`, a bolus which
+    enters the chain at the periportal end and becomes a point source there as
+    the zones grow. Its outflow AUC over the whole elution is `dose /
+    Q_plasma` for a chain which carries the dose out and holds nothing back,
+    the AUC of plug flow and of any other discretization of it, so the
+    quotient is 1 and the convergence of the AUC in the zone count is the
+    convergence of that quotient.
+
+    Args:
+        n: the number of zones.
+        tmp_path: the directory of the model.
+
+    Returns:
+        The AUC of the outflow concentration over `dose / Q_plasma`.
+    """
+    dose = 1e-3
+    r = _tracer_chain(n, 1.0, 0.0, tmp_path, haematocrit=0.0)
+    r[f"[{ids.species('tr', Layer.PLASMA, ids.zone(1))}]"] = (
+        dose / r[ids.volume(Layer.PLASMA, ids.zone(1))]
+    )
+    tau = _volume(r) / r["Q_plasma_li"]
+    t, c = _outflow(r, 20.0 * tau)
+    return float(np.trapezoid(c, t)) * r["Q_plasma_li"] / dose
+
+
 def test_a_closed_chain_conserves_the_substance(tmp_path: Path) -> None:
     """Without a flow only the diffusion moves the tracer, and none leaves."""
     r = _tracer_chain(10, 0.0, 1e-9, tmp_path)
@@ -167,6 +197,33 @@ def test_mean_residence_time_is_volume_over_flow(tmp_path: Path) -> None:
     """
     r = _tracer_chain(10, 1.0, 0.0, tmp_path, haematocrit=0.0)
     assert _mrt(r) == pytest.approx(_volume(r) / 1.0, rel=1 / 10)
+
+
+def test_the_outflow_auc_converges_in_the_zone_count(tmp_path: Path) -> None:
+    """The outflow AUC of a tracer at ten zones is within 2 % of forty zones.
+
+    The acceptance criterion of the design for the discretization of the
+    chain, on which every model of the engine stands at ten zones. Measured,
+    the two agree to 4.3e-11 of each other and each is the AUC of plug flow
+    (`dose / Q_plasma`, an oracle outside the chain) to 1e-10, so ten zones
+    meet the criterion with nine orders of magnitude to spare; the assertions
+    are at 1e-8, a hundredfold margin over the integration of the curve.
+
+    The criterion is met that well because the AUC of a conservative tracer is
+    fixed by the mass balance and not by the discretization: whatever the zone
+    count smears, the whole dose leaves through the pericentral end at the
+    plasma flow. What the test pins is therefore that the chain carries the
+    dose out and holds none of it back at any zone count, and the chain's
+    discretization error is in the shape of the outflow and not in its area:
+    it is the variance of `test_numerical_dispersion_matches_two_n`, which is
+    `1/n` and falls with the zone count (0.1 at ten zones, 0.025 at forty).
+    """
+    coarse = _relative_outflow_auc(10, tmp_path)
+    fine = _relative_outflow_auc(40, tmp_path)
+    assert coarse == pytest.approx(fine, rel=0.02)
+    assert coarse == pytest.approx(fine, rel=1e-8)
+    assert coarse == pytest.approx(1.0, rel=1e-8)
+    assert fine == pytest.approx(1.0, rel=1e-8)
 
 
 def test_numerical_dispersion_matches_two_n(tmp_path: Path) -> None:
