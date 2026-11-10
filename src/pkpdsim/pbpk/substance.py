@@ -9,9 +9,11 @@ from sbmlutils.metadata import BQB
 
 from pkpdsim.pbpk.organs import Organ, as_member, as_organ_keys, as_organs
 from pkpdsim.pbpk.proteins import Induction, Inhibition, Stabilisation
-from pkpdsim.pbpk.values import Q, check_literals
+from pkpdsim.pbpk.values import Q, Value, check_literals, number, unit_text
+from pkpdsim.sbml.values import DIFFUSION_UNITS
 
 __all__ = [
+    "DIFFUSION_UNITS",
     "Binding",
     "Erythrocytes",
     "Excretion",
@@ -267,6 +269,9 @@ class Substance:
             tubule and the sinks at 0. A `Formula` may read the parameters of
             the top model and the observers of the definition (a production
             over a clearance), not what changes during the simulation.
+        diffusion: the aqueous diffusion coefficient, a `Value` in an area per
+            time (`DIFFUSION_UNITS`); `None` derives it from the molar mass
+            (`pkpdsim.zonation.transport`).
     """
 
     sid: str
@@ -281,3 +286,17 @@ class Substance:
     induces: tuple[Induction, ...] = ()
     stabilises: tuple[Stabilisation, ...] = ()
     baseline: Q | None = None
+    diffusion: Value | None = None
+
+    def __post_init__(self) -> None:
+        """Check that the diffusion is a positive area per time."""
+        d = self.diffusion
+        if d is None:
+            return
+        if not isinstance(d, Value) or unit_text(d.unit) not in DIFFUSION_UNITS:
+            raise ValueError(
+                f"{self.sid}: diffusion must be a Value in an area per time "
+                f"({', '.join(DIFFUSION_UNITS)}), got {d!r}"
+            )
+        if not (number(d) or 0.0) > 0.0:
+            raise ValueError(f"{self.sid}: diffusion must be positive, got {d.value}")

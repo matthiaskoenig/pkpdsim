@@ -537,7 +537,7 @@ def test_a_dissolution_without_factors_is_unchanged(tmp_path: Path) -> None:
         law = model.getReaction(_gu(ids.dose_reaction("po", S))).getKineticLaw()
         assert (
             libsbml.formulaToL3String(law.getMath())
-            == f"({ids.dissolution(S)} / 60 GU__min_per_hr) * {ids.po_dose(S)} / {ids.mr(S)}"
+            == f"({ids.dissolution(S)} / 60 min_per_hr) * {ids.po_dose(S)} / {ids.mr(S)}"
         )
 
 

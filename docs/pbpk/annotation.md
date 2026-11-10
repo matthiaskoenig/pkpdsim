@@ -78,6 +78,8 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | sharpness of the renal threshold of a saturable reabsorption | `BIOCHEMICAL_PARAMETER` |
 | tissue composition (water, protein, lipid fractions) | `PHYSIOLOGICAL_PARAMETER` |
 | permeability surface area product (exchange flow) | `BIOCHEMICAL_PARAMETER` |
+| permeability of a solute through a membrane or a pore (a velocity) | `BIOCHEMICAL_PARAMETER` |
+| geometry of the hepatic sinusoid (the radius and the length of the lumen, the lateral area of an interface, the fenestral porosity of the endothelium) | `PHYSIOLOGICAL_PARAMETER` |
 | exchange rate constant of plasma and blood cells | `BIOCHEMICAL_PARAMETER` |
 | endothelial exchange rate constant per organ volume | `PHYSIOLOGICAL_PARAMETER` |
 | relative activity of enzyme or transporter | `BIOCHEMICAL_PARAMETER` |

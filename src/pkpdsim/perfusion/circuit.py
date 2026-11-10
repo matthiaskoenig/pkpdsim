@@ -139,14 +139,18 @@ def converted(value: Value, factor: float, unit: UnitType, text: str) -> Value:
     )
 
 
-def temperature_objects(temperature: Value) -> core.CoreObjects:
+def temperature_objects(
+    temperature: Value, variable: str = ids.TEMPERATURE
+) -> core.CoreObjects:
     """Get the temperature and the Arrhenius factor `f_T` of the rates.
 
     Args:
         temperature: the temperature of the perfusion (degC).
+        variable: the id of the temperature parameter, `T` of a perfusion
+            model and the port `temperature` of the cell model.
 
     Returns:
-        The constants `T`, `T_ref`, `R_gas` and `Ea` (the activation energy
+        The constants `T` (`variable`), `T_ref`, `R_gas` and `Ea` (the activation energy
         `f_Ea*R*T_ref` of the database, a constant, so a change of the
         reference keeps it) and `f_T` with its initial assignment.
     """
@@ -165,7 +169,7 @@ def temperature_objects(temperature: Value) -> core.CoreObjects:
     return core.CoreObjects(
         parameters=[
             value_parameter(
-                ids.TEMPERATURE,
+                variable,
                 temperature,
                 PU.degC,
                 "temperature",
@@ -202,7 +206,7 @@ def temperature_objects(temperature: Value) -> core.CoreObjects:
                 ids.F_T,
                 f"exp({ids.ACTIVATION_ENERGY}/{ids.GAS_CONSTANT} * "
                 f"(1 dimensionless/({ids.TEMPERATURE_REF} + {t_abs}) - "
-                f"1 dimensionless/({ids.TEMPERATURE} + {t_abs})))",
+                f"1 dimensionless/({variable} + {t_abs})))",
                 U.dimensionless,
                 "temperature factor of the rates (Arrhenius)",
             )
@@ -567,6 +571,7 @@ def flow_objects(
     perfusate: Perfusate,
     released: tuple[str, ...] = ids.RELEASABLE,
     outflows: Mapping[str, str] | None = None,
+    zone_flows: bool = True,
 ) -> core.CoreObjects:
     """Get the flow of the perfusate through the sites of the circuit.
 
@@ -578,6 +583,8 @@ def flow_objects(
         outflows: the id of the flow out of a site (l/min) where it is not
             the pump flow, e.g. after a kidney, which takes the urine out of
             the perfusate (`ids.outflow`).
+        zone_flows: emit the flow from a zone into the next; `False` where the
+            zonation engine chains the zones (the liver), which then emits it.
 
     Returns:
         The reaction `FLOW_<q>_<site>_<next>` of every quantity and site,
@@ -586,6 +593,8 @@ def flow_objects(
     out = core.CoreObjects()
     outflows = outflows or {}
     for source, target in zip(sites, [*sites[1:], sites[0]], strict=True):
+        if not zone_flows and ids.is_zone(source) and ids.is_zone(target):
+            continue
         flow = outflows.get(source, ids.Q_PUMP)
         for q in quantities(perfusate, released):
             a, b = ids.species(q, source), ids.species(q, target)

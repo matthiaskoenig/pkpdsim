@@ -26,7 +26,7 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import KW_ONLY, dataclass, field
-from typing import TYPE_CHECKING, ClassVar, Literal, Self
+from typing import TYPE_CHECKING, ClassVar, Literal, Protocol, Self
 
 from sbmlutils.factory import Creator
 from sbmlutils.factory.units import UnitDefinition, UnitType
@@ -279,6 +279,14 @@ _SITE_TOKENS = frozenset(
 _ORGAN_TOKEN = re.compile(r"[a-z][a-z0-9]*")
 
 
+class _ProfileLike(Protocol):
+    """A zonal profile of `pkpdsim.zonation.profiles`, which gives its levels for `n` zones."""
+
+    def values(self, n: int) -> Sequence[float]:
+        """Get the level of every zone."""
+        ...
+
+
 @dataclass(frozen=True)
 class _Zonated(ABC):
     """The zones, the fractions and the released quantities of an organ.
@@ -298,8 +306,9 @@ class _Zonated(ABC):
     Attributes:
         zones: the number of zones, 1 the single compartment.
         profiles: the relative weight of a process of `core.PROCESSES` in
-            every zone, the first zone first; a process without a profile is
-            uniform.
+            every zone, the first zone first (a list, or a profile of
+            `pkpdsim.zonation.profiles` which gives the levels of the zones);
+            a process without a profile is uniform.
         vascular_fraction: the volume fraction of the vascular space,
             `None` for the value of the table of the species.
         cell_fraction: the volume fraction of the cells, `None` for the
@@ -343,7 +352,7 @@ class _Zonated(ABC):
             ...
 
         @property
-        def profiles(self) -> Mapping[str, Sequence[float]]:
+        def profiles(self) -> Mapping[str, Sequence[float] | _ProfileLike]:
             """The relative weight of a process of `core.PROCESSES` per zone."""
             ...
 
@@ -355,10 +364,31 @@ class _Zonated(ABC):
         """
         if self.zones < 1:
             raise ValueError(f"A {self.what} has at least one zone, not {self.zones}.")
-        profiles = {k: tuple(float(x) for x in v) for k, v in self.profiles.items()}
+        profiles = {
+            k: tuple(float(x) for x in self._weights(v))
+            for k, v in self.profiles.items()
+        }
         object.__setattr__(self, "profiles", FrozenMap(profiles))
         if self.released is not None:
             object.__setattr__(self, "released", tuple(self.released))
+
+    def _weights(self, profile: Sequence[float] | _ProfileLike) -> Sequence[float]:
+        """Get the weights of the zones of a profile: a list or the shape of a profile.
+
+        A profile of `pkpdsim.zonation.profiles` (a `Sigmoid`, a `Weights`)
+        gives its levels for the zones of the organ.
+        """
+        values = getattr(profile, "values", None)
+        if callable(values):
+            return values(self.zones)
+        return profile  # ty: ignore[invalid-return-type]
+
+    def weights(self) -> dict[str, tuple[float, ...]]:
+        """Get the weight of every zone of every profile, the first zone first."""
+        return {
+            process: tuple(float(x) for x in self._weights(values))
+            for process, values in self.profiles.items()
+        }
 
     def releases(self) -> tuple[str, ...]:
         """Get the released quantities, the default of the organ for `None`."""
@@ -409,7 +439,7 @@ class _Zonated(ABC):
         f_vas, f_cell = self.vascular_fraction, self.cell_fraction
         if f_vas is not None and f_cell is not None and f_vas.value + f_cell.value > 1:
             out.append(f"{where}: the vascular and cell fractions exceed 1")
-        for process, values in self.profiles.items():
+        for process, values in self.weights().items():
             if process not in PROCESSES:
                 out.append(
                     f"{where}: the profile '{process}' is no process of the core "
@@ -466,13 +496,13 @@ class LiverOrgan(_Zonated):
 
     mass: Value
     zones: int = 1
-    profiles: Mapping[str, Sequence[float]] = field(default_factory=dict)
+    profiles: Mapping[str, Sequence[float] | _ProfileLike] = field(default_factory=dict)
 
     @classmethod
     def default(
         cls,
         zones: int = 1,
-        profiles: Mapping[str, Sequence[float]] | None = None,
+        profiles: Mapping[str, Sequence[float] | _ProfileLike] | None = None,
         species: Species = Species.RAT,
     ) -> "LiverOrgan":
         """Get the reference liver of a species (`[liver_<species>]`)."""
@@ -537,7 +567,7 @@ class KidneyOrgan(_Zonated):
 
     mass: Value
     zones: int = 1
-    profiles: Mapping[str, Sequence[float]] = field(default_factory=dict)
+    profiles: Mapping[str, Sequence[float] | _ProfileLike] = field(default_factory=dict)
     _: KW_ONLY
     gfr: Value | None = None
     reabsorption: Value | None = None
@@ -547,7 +577,7 @@ class KidneyOrgan(_Zonated):
     def default(
         cls,
         zones: int = 1,
-        profiles: Mapping[str, Sequence[float]] | None = None,
+        profiles: Mapping[str, Sequence[float] | _ProfileLike] | None = None,
         species: Species = Species.RAT,
     ) -> "KidneyOrgan":
         """Get the reference kidney of a species (`[kidney_<species>]`)."""
@@ -618,7 +648,7 @@ class GenericOrgan(_Zonated):
     key: str
     mass: Value
     zones: int = 1
-    profiles: Mapping[str, Sequence[float]] = field(default_factory=dict)
+    profiles: Mapping[str, Sequence[float] | _ProfileLike] = field(default_factory=dict)
 
     @classmethod
     def default(cls, key: str, species: Species = Species.RAT) -> "GenericOrgan":

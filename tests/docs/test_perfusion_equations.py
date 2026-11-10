@@ -4,7 +4,8 @@ The page shows the equations of a machine perfusion in fences with the info
 string `equations`, in the syntax of the PBPK pages
 (`tests/docs/test_pbpk_equations.py`, whose parser and comparison this test
 reuses), with the placeholders `<q>` for a quantity of the perfusate, `<z>`
-for a zone and `<o>` for the token of the organ. The test builds a rat liver
+for a zone, `<m>` for the submodel of the zone (`M01`, the cells of a zone are
+the cell model of its submodel) and `<o>` for the token of the organ. The test builds a rat liver
 and a rat kidney of two zones with an inert tracer `trc` and finds every
 equation, by its id, in one of them with the same math.
 """
@@ -62,7 +63,11 @@ def test_every_equation_is_generated(
             quantities = circuit.quantities(definition.perfusate, definition.released)
             organ = definition.organ.key
             for q, z in itertools.product(quantities, ZONES):
-                difference = _lookup(model, match, {"<q>": q, "<z>": z, "<o>": organ})
+                difference = _lookup(
+                    model,
+                    match,
+                    {"<q>": q, "<z>": z, "<o>": organ, "<m>": f"M{int(z[1:]):02}"},
+                )
                 if difference == "":
                     break
                 if difference != "missing":

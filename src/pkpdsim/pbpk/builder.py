@@ -135,6 +135,7 @@ from pkpdsim.pbpk.stationary import (
 from pkpdsim.pbpk.substance import Kp, KpMethod, Substance
 from pkpdsim.pbpk.units import EXTRA_UNITS, MODEL_UNITS, U
 from pkpdsim.pbpk.values import Formula, Q, Value
+from pkpdsim.sbml.flatten import merge_unit_definitions
 
 __all__ = [
     "BuildResult",
@@ -1409,6 +1410,14 @@ def flat_model(comp_path: Path, flat_path: Path) -> None:
     `create_model` checks it: libsbml checks a constructed comp document
     differently from one it read.
 
+    The flattening copies the unit definitions of every organ, one set per
+    organ with the prefix of its submodel, so the math of an organ read `1
+    M01__mM` where the top model reads `1 mM`; the copies are merged before
+    the flat model is written (`pkpdsim.sbml.flatten.merge_unit_definitions`),
+    so every unit of the flat model is the one the library defined. Nothing
+    computes differently, and the ODEs of an organ name the units of the
+    model.
+
     The flat model depends on the content of the comp model alone, which the
     cache of the builds of the tests uses (`tests/conftest.py`).
 
@@ -1423,6 +1432,7 @@ def flat_model(comp_path: Path, flat_path: Path) -> None:
     doc = read_sbml(comp_path)
     _validate(doc, comp_path, ValidationOptions.fast())
     _flatten(doc, comp_path)
+    merge_unit_definitions(doc.getModel())
     write_sbml(doc, filepath=flat_path)
     _validate(doc, flat_path, ValidationOptions())
 

@@ -13,6 +13,7 @@ from pkpdsim.pbpk import MODEL_UNITS, U, cite, ids, load, physiology, sources
 from pkpdsim.pbpk.organs import PORTAL_ORGANS, Organ, Pool
 from pkpdsim.pbpk.physiology import Sex, physiology_objects
 from pkpdsim.pbpk.sex_differences import BRAIN_FLOW, CARDIAC_OUTPUT, sex_curves
+from pkpdsim.species import Species
 
 from .conftest import individual
 
@@ -365,3 +366,33 @@ def test_liver_defaults_are_fractions(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(physiology.LIVER_DEFAULTS, ids.F_SHUNT, 1.5)
     with pytest.raises(ValueError, match=r"f_shunt.*\[0, 1\].*1\.5"):
         physiology_objects(Sex.MALE)
+
+
+@pytest.mark.parametrize("species", list(Species))
+def test_the_source_of_the_reference_liver_flow_is_a_source(species: Species) -> None:
+    """The source of `reference_flow` is a key of `sources.toml` for every species.
+
+    The flow is an aggregate of rows of `physiology_<species>.toml` and a
+    caller writes it as a parameter of a model with its provenance
+    (`value_parameter` of the zonation engine, which takes it as its reference
+    flow), so `cite()` has to resolve its source: a source which is no key
+    raises a `KeyError` naming it, and it would raise it at the build of every
+    zonated model and not here.
+
+    The aggregate carries the sources of the rows it rests on: their one key
+    where they agree, with a derivation in the notes, and `ModelChoice` where
+    they differ, with every key in the notes.
+    """
+    value = physiology.reference_flow(species)
+    assert value.source is not None
+    assert cite(value.source) in [cite(key) for key in sources()]
+    assert value.notes is not None
+    assert value.notes.startswith("derived: ")
+    keys = physiology._liver_flow_sources(species)
+    if len(keys) == 1:
+        assert value.source == keys[0]
+    else:
+        assert value.source == "ModelChoice"
+        for key in keys:
+            assert key in value.notes, key
+    assert value.value == pytest.approx(physiology.reference_liver_flow(species))

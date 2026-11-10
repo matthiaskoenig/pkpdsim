@@ -6,7 +6,7 @@ from pymetadata.omex import EntryFormat, Omex
 
 from pkpdsim.perfusion.archive import create_archive
 
-from .conftest import kidney_definition
+from .conftest import kidney_definition, liver_definition
 
 
 def test_the_archive_has_the_model_its_files_and_the_figure(tmp_path: Path) -> None:
@@ -69,3 +69,35 @@ def test_the_archive_has_the_model_its_files_and_the_figure(tmp_path: Path) -> N
     ).is_file()
     omex = Omex.from_omex(tmp_path / "kidney_circuit_model.omex")
     assert "./models/kidney_circuit.svg" in {e.location for e in omex.manifest.entries}
+
+
+def test_the_archive_of_a_liver_has_the_flat_model_as_its_master(
+    tmp_path: Path,
+) -> None:
+    """The liver is simulated as its flat model, which is the master entry; the
+    composed model and the cell model are written beside it."""
+    results = create_archive(
+        liver_definition(2, sid="liver_circuit"),
+        tmp_path / "models",
+        model="liver_circuit",
+        copyright="2026 Matthias König",
+    )
+    assert results["liver_circuit_flat"]["entry"].master
+    assert results["liver_circuit_flat"]["path"] == (
+        tmp_path / "models" / "liver_circuit_flat.xml"
+    )
+    for name in ("liver_circuit.xml", "liver_circuit_core.xml"):
+        assert (tmp_path / "models" / name).is_file()
+    # the three models the build writes are entries of the archive, the cell
+    # model among them: it stays loadable alone, for a mesh or another coupling
+    for key in ("liver_circuit", "liver_circuit_flat", "liver_circuit_core"):
+        assert results[key]["path"].is_file(), key
+    omex = Omex.from_omex(tmp_path / "liver_circuit_model.omex")
+    locations = {e.location for e in omex.manifest.entries}
+    assert {
+        "./models/liver_circuit.xml",
+        "./models/liver_circuit_flat.xml",
+        "./models/liver_circuit_core.xml",
+    } <= locations
+    masters = {e.location for e in omex.manifest.entries if e.master}
+    assert masters == {"./models/liver_circuit_flat.xml"}

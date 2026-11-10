@@ -478,8 +478,10 @@ def test_the_zonated_liver_starts_at_the_mix_of_its_inflows(tmp_path: Path) -> N
     """Every zone of the zonated liver at the mix of the hepatic artery and the portal vein.
 
     The pancreas raises the portal vein above the arterial plasma; the
-    zonated liver refuses custom reactions, so the liver neither produces nor
-    clears. A pinned substance in the zonated liver as well.
+    zonated liver has no steady state of its zones, so the liver of this
+    definition neither produces nor clears
+    (`test_a_declared_process_of_the_zonated_liver_says_what_is_missing`). A
+    pinned substance in the zonated liver as well.
     """
     variants = Variants(organs={Organ.LIVER: "zonated"})
     d = _definition([PROD, PASRC, SEC], variants=variants)
@@ -496,6 +498,28 @@ def test_the_zonated_liver_starts_at_the_mix_of_its_inflows(tmp_path: Path) -> N
         expected = mix if "Cpl" in sid else r[f"Kp_{S}"] * mix
         assert r[f"[{sid}]"] == pytest.approx(expected, rel=1e-12), sid
     _assert_stationary(_load(_pinned(variants), tmp_path / "pinned"))
+
+
+def test_a_declared_process_of_the_zonated_liver_says_what_is_missing(
+    tmp_path: Path,
+) -> None:
+    """The refusal names the per zone steady state, not a refusal of the reaction.
+
+    The zonated liver places a custom reaction in every zone; what it has no
+    closed form for is the plasma of a zone, since the stationary start
+    collects one unzoned contribution per declared process. A modeller told
+    that the organ "refuses custom reactions" deletes the reaction, which is
+    the wrong half of the definition: the message has to send them to the
+    `stationary` declaration.
+    """
+    variants = Variants(organs={Organ.LIVER: "zonated"})
+    d = _definition([PROD, LICL], variants=variants)
+    with pytest.raises(ValueError, match=rf"{S}.*zonated organ 'li'") as error:
+        build(d, tmp_path / "declared")
+    message = str(error.value)
+    assert "no steady state per zone" in message
+    assert "refuses custom reactions" not in message
+    assert "Drop the declaration of the stationary start" in message
 
 
 def test_a_slow_pool_starts_at_its_tissue(tmp_path: Path) -> None:

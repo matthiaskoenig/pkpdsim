@@ -1,6 +1,6 @@
-"""The table of the id scheme on the overview page is the id scheme of the library.
+"""The table of the id scheme on the build page is the id scheme of the library.
 
-A row of the table `docs/pbpk/index.md` names the pattern of an id and the
+A row of the table `docs/pbpk/build.md` names the pattern of an id and the
 function of `pkpdsim.pbpk.ids` which makes it:
 
     | `fu_<s>` | the unbound fraction in plasma | `ids.fu(s)` |
@@ -14,7 +14,7 @@ from pathlib import Path
 
 from pkpdsim.pbpk import Organ, Part, Pool, ids
 
-PAGE = Path(__file__).parent.parent.parent / "docs" / "pbpk" / "index.md"
+PAGE = Path(__file__).parent.parent.parent / "docs" / "pbpk" / "build.md"
 
 #: a row of the id table
 ROW = re.compile(
@@ -88,7 +88,7 @@ def test_every_id_of_the_scheme_has_a_row() -> None:
     """Every name of `ids.__all__` is the call of a row, so a new id is documented."""
     documented = {row["call"].removeprefix("ids.").split("(")[0] for row in rows()}
     missing = sorted(set(ids.__all__) - documented - NO_ROW)
-    assert not missing, f"ids without a row in docs/pbpk/index.md: {missing}"
+    assert not missing, f"ids without a row in docs/pbpk/build.md: {missing}"
     assert not NO_ROW & documented
 
 

@@ -57,6 +57,7 @@ from pkpdsim.pbpk import (
     Transport,
     U,
     Variants,
+    ZonatedLiver,
     ids,
 )
 from pkpdsim.pbpk.builder import BuildResult
@@ -424,7 +425,8 @@ def chemistry_reference_definition(liver: str = "standard") -> PBPKDefinition:
     A metabolism into two products by numbers, a metabolism of the mucosa, a
     basolateral uptake and an apical secretion, and a custom reaction with a
     sbmlutils `Parameter` and a species, in the standard organs or with the
-    zonated liver (`liver="zonated"`); the stored comp and flat SBML were
+    zonated liver (`liver="zonated"`, at the eight zones of the reference,
+    not the default of `ZonatedLiver`); the stored comp and flat SBML were
     built at pkpdsim 0c538ca, before the custom parameters with provenance,
     the shared rates and the fitted product fractions.
     """
@@ -488,7 +490,9 @@ def chemistry_reference_definition(liver: str = "standard") -> PBPKDefinition:
                 ],
             ),
         ],
-        variants=Variants(organs={Organ.LIVER: liver}),
+        variants=Variants(
+            organs={Organ.LIVER: ZonatedLiver(n_zones=8) if zonated else liver}
+        ),
         routes=[Route.iv("drg"), Route.oral("drg")],
     )
 
@@ -551,7 +555,8 @@ def endogenous_reference_definition() -> PBPKDefinition:
     the muscle, with a slow pool of the muscle, taken up from the lumen into
     the mucosa (an apical influx) and given orally, with a start of the
     definition; `kin` in the full form with kinetic erythrocytes; `prf`
-    flow-limited; the zonated liver and the nephron kidney. The stored comp
+    flow-limited; the zonated liver (at the eight zones of the reference, not
+    the default of `ZonatedLiver`) and the nephron kidney. The stored comp
     and flat SBML were built at pkpdsim 87a5e79, before the generated steady
     state refactored the starts (the `Start` records of `_defer_start`, the
     zones of the starts, the inputs of the custom reactions).
@@ -604,7 +609,9 @@ def endogenous_reference_definition() -> PBPKDefinition:
         ],
         parameters=[ModelParameter("k_prod", 0.001, U.mmole_per_min)],
         slow_pools=[SlowPool("end", frozenset({Organ.MUSCLE}), k=0.001, kp=2.0)],
-        variants=Variants(organs={Organ.LIVER: "zonated", Organ.KIDNEY: "nephron"}),
+        variants=Variants(
+            organs={Organ.LIVER: ZonatedLiver(n_zones=8), Organ.KIDNEY: "nephron"}
+        ),
         routes=[Route.oral("end")],
         starts={"MU__Cpl_end": Formula("2 dimensionless * baseline_end", U.mM)},
     )
@@ -693,7 +700,7 @@ def assert_reference_sbml(result: BuildResult) -> None:
     and with the heart failure factors of the consensus (Leithe 1984), the
     kidney volume and transit of CKD of Malik 2020 and the cirrhosis factors
     cited from Edginton 2008 (factors, notes and sources only), and all rebuilt with the factors of the sex of the female build and the constant factors of the age of a build without the physiology over age (`PBPKDefinition.age`, which is not the default: the reference values and the factors are those of the individual of 35 years, as before, and the parameters `fage_*` are their constant 1; the values of the default individual unchanged); a change of the library which changes the
-    SBML of every model on purpose rebuilds them and says so, and all rebuilt with the notes of the age table read from the primary publications (`age_human.toml`; the notes of the age factors and the two sources Fomon 1982 and Jopling 2009 only, no value changed) and with the citation of NHANES which names the script of the waist regression (the one line of the sources of the hematocrit and the albumin; the waist itself belongs to the adipose option, which these references do not have), and with the citation of `ModelChoice` which names both libraries of pkpdsim, the PBPK and the machine perfusion library (that text only). `turnover_reference_definition()` was built at the commit before the degradation rate of a protein and the stabilisation, with the library of this branch.
+    SBML of every model on purpose rebuilds them and says so, and all rebuilt with the notes of the age table read from the primary publications (`age_human.toml`; the notes of the age factors and the two sources Fomon 1982 and Jopling 2009 only, no value changed) and with the citation of NHANES which names the script of the waist regression (the one line of the sources of the hematocrit and the albumin; the waist itself belongs to the adipose option, which these references do not have), and with the citation of `ModelChoice` which names both libraries of pkpdsim, the PBPK and the machine perfusion library (that text only), and with the units of the flat model merged (`pkpdsim.sbml.flatten.merge_unit_definitions` in `flat_model`: the flat references carry 21 unit definitions instead of the 315 copies of them the flattening made, and every `units`, `substanceUnits` and unit of the math names the definition of the model instead of the copy of its organ, `mmole` instead of `LU__mmole`; line by line the former references otherwise, the comp references unchanged). `turnover_reference_definition()` was built at the commit before the degradation rate of a protein and the stabilisation, with the library of this branch.
     """
     for path in (result.comp_path, result.flat_path):
         reference = gzip.decompress((REFERENCE / f"{path.name}.gz").read_bytes())

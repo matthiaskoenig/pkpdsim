@@ -52,15 +52,15 @@ The content of the model `rat_liver_nmp`: the organ in its circuit (A) and the s
 
 ## The circuit
 
-The pump drives the perfusate at the flow `Q_pump` (l/min, the total flow of the pump) from the reservoir `res` through the inflow tubing `in`, the zones of the organ `z1` to `zn` and the outflow tubing `out` back into the reservoir. Every site is a well-stirred volume (`V_res`, `V_in`, `V_out`, `Vvas_<z>`), and every quantity of the perfusate flows from a site to the next at `Q_pump` times its concentration, so the amount of the perfusate is conserved and a flow of 0 is defined (no rate divides by the flow). The membrane oxygenator in the inflow tubing exchanges the gases with its sweep gas, first order: the oxygen towards the target of the perfusate, the CO2 towards the pCO2 of the gas, so the CO2 which the cells produce is vented and the bicarbonate buffer of the perfusate is open. Without a pCO2 of the gas in the definition it is that of the fresh perfusate, the initial assignment `pCO2_gas = co2_fresh/alpha_co2`, at whose buffer equilibrium the oxygenator then leaves it, also after a change of the fresh perfusate before the initialization.
+The pump drives the perfusate at the flow `Q_pump` (l/min, the total flow of the pump) from the reservoir `res` through the inflow tubing `in`, the zones of the organ `z1` to `zn` (their vascular space is the site `vas_<z>` of the zonation engine, `<q>_vas_<z>`) and the outflow tubing `out` back into the reservoir. Every site is a well-stirred volume (`V_res`, `V_in`, `V_out`, `V_vas_<z>`), and every quantity of the perfusate flows from a site to the next at `Q_pump` times its concentration (in the liver the flow between the zones is `Q_li`, the flow through the liver, which the pump sets: the zonation engine chains the zones), so the amount of the perfusate is conserved and a flow of 0 is defined (no rate divides by the flow). The membrane oxygenator in the inflow tubing exchanges the gases with its sweep gas, first order: the oxygen towards the target of the perfusate, the CO2 towards the pCO2 of the gas, so the CO2 which the cells produce is vented and the bicarbonate buffer of the perfusate is open. Without a pCO2 of the gas in the definition it is that of the fresh perfusate, the initial assignment `pCO2_gas = co2_fresh/alpha_co2`, at whose buffer equilibrium the oxygenator then leaves it, also after a change of the fresh perfusate before the initialization.
 
-The equations below are those of a toy (`<q>` a quantity of the perfusate, `<z>` a zone, `<o>` the organ, `li` or `ki`); `tests/docs/test_perfusion_equations.py` builds a liver and a kidney of two zones and checks every equation of this page against them.
+The equations below are those of a toy (`<q>` a quantity of the perfusate, `<z>` a zone, `<m>` the submodel of a zone, `M01` for `z1` (the cell elements which the liver does not expose keep `<m>__<id>` in the flat model, the states it observes have the ids of the zone), `<o>` the organ, `li` or `ki`); `tests/docs/test_perfusion_equations.py` builds a liver and a kidney of two zones and checks every equation of this page against them.
 
 ```equations title="the flow through the circuit (a liver of two zones)"
 FLOW_<q>_res_in: <q>_res -> <q>_in = Q_pump * <q>_res
-FLOW_<q>_in_z1: <q>_in -> <q>_z1 = Q_pump * <q>_in
-FLOW_<q>_z1_z2: <q>_z1 -> <q>_z2 = Q_pump * <q>_z1
-FLOW_<q>_z2_out: <q>_z2 -> <q>_out = Q_pump * <q>_z2
+FLOW_<q>_in_vas_z1: <q>_in -> <q>_vas_z1 = Q_pump * <q>_in
+FLOW_<q>_vas_z1_vas_z2: <q>_vas_z1 -> <q>_vas_z2 = Q_li * <q>_vas_z1
+FLOW_<q>_vas_z2_out: <q>_vas_z2 -> <q>_out = Q_pump * <q>_vas_z2
 FLOW_<q>_out_res: <q>_out -> <q>_res = Q_pump * <q>_out
 ```
 
@@ -83,12 +83,14 @@ pH_res = 3 - log10(h_res / 1)
 
 ## The zonated organ
 
-The organ is a chain of `n` zones in series with the flow, the first zone first (periportal in the liver, as the zonated liver of the PBPK library): each zone a vascular space through which the perfusate flows and its cells with the cellular core, so that oxygen, glucose, lactate, ATP and the damage form gradients along the sinusoid; `n = 1` is the single compartment. An organ with the token `<o>` has the mass `M_<o>` (kg), the density `rho_<o>`, the volume `V_<o>` and the vascular and cell fractions `f_vas_<o>` and `f_cell_<o>`; the zones share the volume equally. The volumes are initial assignments of the mass, so a change of the mass before a simulation (the liver weight of an animal) sets the zones.
+The organ is a chain of `n` zones in series with the flow, the first zone first (periportal in the liver, as the zonated liver of the PBPK library): each zone a vascular space through which the perfusate flows and its cells with the cellular core, so that oxygen, glucose, lactate, ATP and the damage form gradients along the sinusoid; `n = 1` is the single compartment. An organ with the token `<o>` has the mass `M_<o>` (kg), the density `rho_<o>`, the volume `V_<o>` and the vascular and cell fractions `f_vas_<o>` and `f_cell_<o>`; the zones share the volume equally. The zones of the liver are those of the zonation engine (`pkpdsim.zonation`, in the well-stirred geometry with the fractions of the organ), so the liver (the last two equations) has the engine's ids `f_vas`, `f_cell`, `f_par` (1) and `V_vas_<z>`, `V_cell_<z>` and `V_li = M_li/rho_li`; the cells of a zone are a submodel of the cell model `<sid>_core`, `M<kk>__<id>` in the flat model, and the constants of the core are shared by the zones. The volumes are initial assignments of the mass, so a change of the mass before a simulation (the liver weight of an animal) sets the zones.
 
 ```equations title="the volumes of the zones (an organ of two zones)"
 V_<o> = M_<o> / rho_<o>
-Vvas_<z> = f_vas_<o> * V_<o> / 2
-Vcell_<z> = f_cell_<o> * V_<o> / 2
+V_vas_<z> = f_vas_<o> * V_<o> / 2
+V_cell_<z> = f_cell_<o> * V_<o> / 2
+V_vas_<z> = f_vas * f_par * M_li / rho_li / 2
+V_cell_<z> = f_cell * f_par * M_li / rho_li / 2
 ```
 
 A profile of a process (`LiverOrgan(profiles={"OXPHOS": [2, 1]})`) weighs it per zone with the factor `p_<process>_<z> = n*p/sum(p)` in its rate, so the factors sum to `n` and the total capacity of the organ is that of one zone of the whole organ; a process without a profile has none, a uniform profile is 1 in every zone.
@@ -102,45 +104,45 @@ atp_<z>_cell = atp_start
 alt_<z>_cell = ALT_content
 ```
 
-Every biological rate scales with the temperature factor `f_T`, the living fraction `f_alive_<z>` and the cell volume, only the living cells metabolise; a Hill term reads the absolute value of its species, so it stays defined for the small negative values of the integrator, and no rate divides by a species which can reach 0 (the inhibition of the glycolysis by ATP is defined at ATP 0).
+Every biological rate scales with the temperature factor `f_T` (the liver has its own `f_T`, which its bile secretion uses, and every cell model has one, `<m>__f_T`, which the equations below use; both are the same function of the temperature), the living fraction `f_alive_<z>` and the cell volume, only the living cells metabolise; a Hill term reads the absolute value of its species, so it stays defined for the small negative values of the integrator, and no rate divides by a species which can reach 0 (the inhibition of the glycolysis by ATP is defined at ATP 0).
 
 ```equations title="transport between the perfusate and the cells"
-GLCIM_<z>: glc_<z> -> glc_<z>_cell = (f_T * f_alive_<z> * Vcell_<z> * GLCIM_Vmax / GLCIM_Km_glc) * (glc_<z> - glc_<z>_cell) / (1 + glc_<z> / GLCIM_Km_glc + glc_<z>_cell / GLCIM_Km_glc)
-O2IM_<z>: o2_<z> -> o2_<z>_cell = (f_T * f_alive_<z> * Vcell_<z> * O2IM_Vmax / O2IM_Km_o2) * (o2_<z> - o2_<z>_cell) / (1 + o2_<z> / O2IM_Km_o2 + o2_<z>_cell / O2IM_Km_o2)
-LACEX_<z>: lac_<z>_cell -> lac_<z> + h_<z> = (f_T * f_alive_<z> * Vcell_<z> * LACEX_Vmax / LACEX_Km_lac) * (lac_<z>_cell - lac_<z> * h_<z> / LACEX_h_cell) / (1 + lac_<z>_cell / LACEX_Km_lac + lac_<z> / LACEX_Km_lac)
+GLCIM_<z>: glc_vas_<z> -> glc_<z>_cell = (<m>__f_T * f_alive_<z> * V_cell_<z> * GLCIM_Vmax / GLCIM_Km_glc) * (glc_vas_<z> - glc_<z>_cell) / (1 + glc_vas_<z> / GLCIM_Km_glc + glc_<z>_cell / GLCIM_Km_glc)
+O2IM_<z>: o2_vas_<z> -> o2_<z>_cell = (<m>__f_T * f_alive_<z> * V_cell_<z> * O2IM_Vmax / O2IM_Km_o2) * (o2_vas_<z> - o2_<z>_cell) / (1 + o2_vas_<z> / O2IM_Km_o2 + o2_<z>_cell / O2IM_Km_o2)
+LACEX_<z>: lac_<z>_cell -> lac_vas_<z> + h_vas_<z> = (<m>__f_T * f_alive_<z> * V_cell_<z> * LACEX_Vmax / LACEX_Km_lac) * (lac_<z>_cell - lac_vas_<z> * h_vas_<z> / LACEX_h_cell) / (1 + lac_<z>_cell / LACEX_Km_lac + lac_vas_<z> / LACEX_Km_lac)
 ```
 
 ```equations title="the energy metabolism"
-GLGP_<z>: glyc_<z>_cell -> glc_<z>_cell = f_T * f_alive_<z> * Vcell_<z> * GLGP_Vmax * glyc_<z>_cell / (GLGP_Km_glyc + glyc_<z>_cell)
-GLC2PYR_<z>: glc_<z>_cell + adp_<z>_cell + nad_<z>_cell -> pyr_<z>_cell + atp_<z>_cell + nadh_<z>_cell = f_T * f_alive_<z> * Vcell_<z> * GLC2PYR_Vmax * glc_<z>_cell / (GLC2PYR_Km_glc + glc_<z>_cell) * adp_<z>_cell / (GLC2PYR_Km_adp + adp_<z>_cell) * nad_<z>_cell / (GLC2PYR_Km_nad + nad_<z>_cell) * 1 / (1 + (abs(atp_<z>_cell) / GLC2PYR_Ki_atp)^GLC2PYR_n_atp)
-LDH_<z>: pyr_<z>_cell + nadh_<z>_cell -> lac_<z>_cell + nad_<z>_cell = (f_T * f_alive_<z> * Vcell_<z> * LDH_Vmax / (LDH_Km_pyr * LDH_Km_nadh)) * (pyr_<z>_cell * nadh_<z>_cell - lac_<z>_cell * nad_<z>_cell / LDH_Keq) / ((1 + pyr_<z>_cell / LDH_Km_pyr + lac_<z>_cell / LDH_Km_lac) * (1 + nadh_<z>_cell / LDH_Km_nadh + nad_<z>_cell / LDH_Km_nad))
-TCA_<z>: pyr_<z>_cell + nad_<z>_cell -> nadh_<z>_cell + co2_<z> = f_T * f_alive_<z> * Vcell_<z> * TCA_Vmax * pyr_<z>_cell / (TCA_Km_pyr + pyr_<z>_cell) * nad_<z>_cell / (TCA_Km_nad + nad_<z>_cell)
-OXPHOS_<z>: nadh_<z>_cell + o2_<z>_cell + adp_<z>_cell -> nad_<z>_cell + atp_<z>_cell = f_T * f_alive_<z> * Vcell_<z> * OXPHOS_Vmax * nadh_<z>_cell / (OXPHOS_Km_nadh + nadh_<z>_cell) * o2_<z>_cell / (OXPHOS_Km_o2 + o2_<z>_cell) * adp_<z>_cell / (OXPHOS_Km_adp + adp_<z>_cell)
-ATPU_<z>: atp_<z>_cell -> adp_<z>_cell = f_T * f_alive_<z> * Vcell_<z> * ATPU_Vmax * atp_<z>_cell / (ATPU_Km_atp + atp_<z>_cell)
+GLGP_<z>: glyc_<z>_cell -> glc_<z>_cell = <m>__f_T * f_alive_<z> * V_cell_<z> * GLGP_Vmax * glyc_<z>_cell / (GLGP_Km_glyc + glyc_<z>_cell)
+GLC2PYR_<z>: glc_<z>_cell + adp_<z>_cell + nad_<z>_cell -> pyr_<z>_cell + atp_<z>_cell + nadh_<z>_cell = <m>__f_T * f_alive_<z> * V_cell_<z> * GLC2PYR_Vmax * glc_<z>_cell / (GLC2PYR_Km_glc + glc_<z>_cell) * adp_<z>_cell / (GLC2PYR_Km_adp + adp_<z>_cell) * nad_<z>_cell / (GLC2PYR_Km_nad + nad_<z>_cell) * 1 / (1 + (abs(atp_<z>_cell) / GLC2PYR_Ki_atp)^GLC2PYR_n_atp)
+LDH_<z>: pyr_<z>_cell + nadh_<z>_cell -> lac_<z>_cell + nad_<z>_cell = (<m>__f_T * f_alive_<z> * V_cell_<z> * LDH_Vmax / (LDH_Km_pyr * LDH_Km_nadh)) * (pyr_<z>_cell * nadh_<z>_cell - lac_<z>_cell * nad_<z>_cell / LDH_Keq) / ((1 + pyr_<z>_cell / LDH_Km_pyr + lac_<z>_cell / LDH_Km_lac) * (1 + nadh_<z>_cell / LDH_Km_nadh + nad_<z>_cell / LDH_Km_nad))
+TCA_<z>: pyr_<z>_cell + nad_<z>_cell -> nadh_<z>_cell + co2_vas_<z> = <m>__f_T * f_alive_<z> * V_cell_<z> * TCA_Vmax * pyr_<z>_cell / (TCA_Km_pyr + pyr_<z>_cell) * nad_<z>_cell / (TCA_Km_nad + nad_<z>_cell)
+OXPHOS_<z>: nadh_<z>_cell + o2_<z>_cell + adp_<z>_cell -> nad_<z>_cell + atp_<z>_cell = <m>__f_T * f_alive_<z> * V_cell_<z> * OXPHOS_Vmax * nadh_<z>_cell / (OXPHOS_Km_nadh + nadh_<z>_cell) * o2_<z>_cell / (OXPHOS_Km_o2 + o2_<z>_cell) * adp_<z>_cell / (OXPHOS_Km_adp + adp_<z>_cell)
+ATPU_<z>: atp_<z>_cell -> adp_<z>_cell = <m>__f_T * f_alive_<z> * V_cell_<z> * ATPU_Vmax * atp_<z>_cell / (ATPU_Km_atp + atp_<z>_cell)
 ```
 
 The stoichiometry of a reaction is in its SBML (the equations list the species): the glycolysis `glc + 2 ADP + 2 NAD -> 2 pyr + 2 ATP + 2 NADH`, the TCA cycle `pyr + 5 NAD -> 5 NADH + 3 CO2` (the CO2 into the perfusate), the oxidative phosphorylation `NADH + 0.5 O2 + 3 ADP -> NAD + 3 ATP`.
 
 ```equations title="the redox"
-ROSP_<z>: nadh_<z>_cell + o2_<z>_cell -> nad_<z>_cell + ros_<z>_cell = f_T * f_alive_<z> * Vcell_<z> * ROSP_Vmax * nadh_<z>_cell / (ROSP_Km_nadh + nadh_<z>_cell) * o2_<z>_cell / (ROSP_Km_o2 + o2_<z>_cell) * 1 / (1 + (abs(o2_<z>_cell) / ROSP_Ki_o2)^ROSP_n_o2)
-ROSDETOX_<z>: ros_<z>_cell + gsh_<z>_cell -> gssg_<z>_cell = f_T * f_alive_<z> * Vcell_<z> * ROSDETOX_k * gsh_<z>_cell * ros_<z>_cell / (ROSDETOX_Km_ros + ros_<z>_cell)
-GR_<z>: gssg_<z>_cell + nadph_<z>_cell -> gsh_<z>_cell + nadp_<z>_cell = f_T * f_alive_<z> * Vcell_<z> * GR_k * gssg_<z>_cell * nadph_<z>_cell / (GR_Km_nadph + nadph_<z>_cell)
-PPP_<z>: glc_<z>_cell + nadp_<z>_cell -> nadph_<z>_cell + co2_<z> = f_T * f_alive_<z> * Vcell_<z> * PPP_Vmax * glc_<z>_cell / (PPP_Km_glc + glc_<z>_cell) * nadp_<z>_cell / (PPP_Km_nadp + nadp_<z>_cell)
+ROSP_<z>: nadh_<z>_cell + o2_<z>_cell -> nad_<z>_cell + ros_<z>_cell = <m>__f_T * f_alive_<z> * V_cell_<z> * ROSP_Vmax * nadh_<z>_cell / (ROSP_Km_nadh + nadh_<z>_cell) * o2_<z>_cell / (ROSP_Km_o2 + o2_<z>_cell) * 1 / (1 + (abs(o2_<z>_cell) / ROSP_Ki_o2)^ROSP_n_o2)
+ROSDETOX_<z>: ros_<z>_cell + gsh_<z>_cell -> gssg_<z>_cell = <m>__f_T * f_alive_<z> * V_cell_<z> * ROSDETOX_k * gsh_<z>_cell * ros_<z>_cell / (ROSDETOX_Km_ros + ros_<z>_cell)
+GR_<z>: gssg_<z>_cell + nadph_<z>_cell -> gsh_<z>_cell + nadp_<z>_cell = <m>__f_T * f_alive_<z> * V_cell_<z> * GR_k * gssg_<z>_cell * nadph_<z>_cell / (GR_Km_nadph + nadph_<z>_cell)
+PPP_<z>: glc_<z>_cell + nadp_<z>_cell -> nadph_<z>_cell + co2_vas_<z> = <m>__f_T * f_alive_<z> * V_cell_<z> * PPP_Vmax * glc_<z>_cell / (PPP_Km_glc + glc_<z>_cell) * nadp_<z>_cell / (PPP_Km_nadp + nadp_<z>_cell)
 ```
 
 The cells die at the rate `v_nec_<z>`, either drive alone gives the full rate: the energy failure, a smooth threshold of ATP, and the acidosis of the perfusate, a Hill term of the free protons. The acidosis drives the damage and does not inhibit the energy metabolism, since the medium changes of the study protect the liver far beyond the dilution of the enzymes. A dying cell moves its enzymes and potassium into the dead cells of the zone (`<q>_<z>_dead`), which release them first order into the vascular space, so the totals are conserved; the release is the leak of a ruptured membrane and does not scale with the temperature. The liver releases ALT, AST, LDH and potassium, the kidney and a generic organ LDH and potassium.
 
 ```equations title="necrosis and release"
-v_nec_<z> = NEC_k * f_T * (1 - (abs(atp_<z>_cell) / NEC_atp)^NEC_n_atp / ((1 + (abs(atp_<z>_cell) / NEC_atp)^NEC_n_atp) * (1 + (abs(h_<z>) / NEC_h)^NEC_n_h)))
+v_nec_<z> = NEC_k * <m>__f_T * (1 - (abs(atp_<z>_cell) / NEC_atp)^NEC_n_atp / ((1 + (abs(atp_<z>_cell) / NEC_atp)^NEC_n_atp) * (1 + (abs(h_vas_<z>) / NEC_h)^NEC_n_h)))
 d(f_alive_<z>)/dt = -v_nec_<z> * f_alive_<z>
-ALTD_<z>: alt_<z>_cell -> alt_<z>_dead = v_nec_<z> * alt_<z>_cell * Vcell_<z>
-ALTR_<z>: alt_<z>_dead -> alt_<z> = PROTEINR_k * alt_<z>_dead * Vcell_<z>
-KD_<z>: k_<z>_cell -> k_<z>_dead = v_nec_<z> * k_<z>_cell * Vcell_<z>
-KR_<z>: k_<z>_dead -> k_<z> = KR_k * k_<z>_dead * Vcell_<z>
+ALTD_<z>: alt_<z>_cell -> alt_<z>_dead = v_nec_<z> * alt_<z>_cell * V_cell_<z>
+ALTR_<z>: alt_<z>_dead -> alt_vas_<z> = PROTEINR_k * alt_<z>_dead * V_cell_<z>
+KD_<z>: k_<z>_cell -> k_<z>_dead = v_nec_<z> * k_<z>_cell * V_cell_<z>
+KR_<z>: k_<z>_dead -> k_vas_<z> = KR_k * k_<z>_dead * V_cell_<z>
 ```
 
 ```equations title="bile (a liver of two zones)"
-d(Vbile_<z>)/dt = f_T * f_alive_<z> * Vcell_<z> * BILE_Vmax * atp_<z>_cell / (BILE_Km_atp + atp_<z>_cell)
+d(Vbile_<z>)/dt = <m>__f_T * f_alive_<z> * V_cell_<z> * BILE_Vmax * atp_<z>_cell / (BILE_Km_atp + atp_<z>_cell)
 bile = 1000000 * (Vbile_z1 + Vbile_z2)
 ```
 
@@ -231,7 +233,7 @@ The fit mappings of a perfusion describe their data with the vocabulary of `pkpd
 
 ## The observers and the sites
 
-Every quantity can be read at every site: the reservoir `res` (where the study samples the perfusate), the inflow `in` after the oxygenator, every zone `z<k>`, the outflow `out` after the organ, and the periportal and pericentral means `pp` and `pc`, the first and the last third of the zones, each zone weighted by its overlap with the third (with one zone both means are the zone). The cells of a zone are the site `<z>_cell` (`pp_cell`, `pc_cell` for the means). A species is an amount in roadrunner and sbmlsim and its concentration is selected as `[<q>_<site>]` (the 10 ml of the inflow tubing hold 0.065 mmole of glucose, `glc_in`, at 6.5 mM, `[glc_in]`); the means and the other observers are assignment rules, selected by their id. The labels and units of `observable_labels` and `observable_units` are keyed by these selections.
+Every quantity can be read at every site: the reservoir `res` (where the study samples the perfusate), the inflow `in` after the oxygenator, every zone `z<k>`, the outflow `out` after the organ, and the periportal and pericentral means `pp` and `pc`, the first and the last third of the zones, each zone weighted by its overlap with the third (with one zone both means are the zone). The cells of a zone are the site `<z>_cell` (the species `<q>_<z>_cell`) (`pp_cell`, `pc_cell` for the means). A species is an amount in roadrunner and sbmlsim and its concentration is selected as `[<q>_<site>]` (the 10 ml of the inflow tubing hold 0.065 mmole of glucose, `glc_in`, at 6.5 mM, `[glc_in]`); the means and the other observers are assignment rules, selected by their id. The labels and units of `observable_labels` and `observable_units` are keyed by these selections.
 
 | observer | unit | what |
 |---|---|---|
@@ -250,13 +252,13 @@ Every quantity can be read at every site: the reservoir `res` (where the study s
 | `urine`, `urine_rate` | µl, µl/min | the urine of a kidney |
 
 ```equations title="observers"
-pO2_<z> = o2_<z> / alpha_o2
-pCO2_<z> = co2_<z> / alpha_co2
+pO2_<z> = o2_vas_<z> / alpha_o2
+pCO2_<z> = co2_vas_<z> / alpha_co2
 alt_act_res = alt_res * a_alt
 VO2 = O2IM_z1 + O2IM_z2
 bile_per_mass = bile / (1000 * M_li)
-o2_pp = o2_z1
-glc_pc = glc_z2
+o2_pp = o2_vas_z1
+glc_pc = glc_vas_z2
 ```
 
 The specific activities `a_<e>` (µkat per mmole of enzyme) are placeholders of 1 until the enzyme contents are fitted, see the notes of `[enzymes]` of the parameter database.
@@ -270,9 +272,9 @@ GFR_max_ki = gfr_ki * M_ki
 GFR_ki = piecewise(GFR_max_ki, GFR_max_ki <= FF_max_ki * Q_pump, FF_max_ki * Q_pump)
 Q_urine = (1 - f_reab_ki) * GFR_ki
 Q_z1 = Q_pump - (1 / 2) * Q_urine
-FLOW_<q>_z1_z2: <q>_z1 -> <q>_z2 = Q_z1 * <q>_z1
-FILT_glc_<z>: glc_<z> -> glc_urine = ((1 - f_reab_ki) * GFR_ki / 2) * glc_<z>
-FILT_trc_<z>: trc_<z> -> trc_urine = (GFR_ki / 2) * trc_<z>
+FLOW_<q>_vas_z1_vas_z2: <q>_vas_z1 -> <q>_vas_z2 = Q_z1 * <q>_vas_z1
+FILT_glc_<z>: glc_vas_<z> -> glc_urine = ((1 - f_reab_ki) * GFR_ki / 2) * glc_vas_<z>
+FILT_trc_<z>: trc_vas_<z> -> trc_urine = (GFR_ki / 2) * trc_vas_<z>
 d(V_res)/dt = -Q_urine
 d(V_urine)/dt = Q_urine
 urine_rate = 1000000 * Q_urine
@@ -288,5 +290,5 @@ The open points of the first version, each a decision of the implementation (pkp
 - The figures draw the organ of a laboratory animal with the shape of the human organ of the anatomy resources (`pkpdsim.perfusion.anatomy`).
 - The maximal filtration fraction `FF_max_ki` of the kidney (0.5) is a `ModelChoice` without a source; the kidney has no data and is not validated.
 - The enzyme activities are placeholders and most constants of the core are values of the ported model, to be fitted with the study (`ModelChoice`, see the notes of the parameter database).
-- The rates of the cells are those of the living cells (`f_T*f_alive_<z>*Vcell_<z>` times a rate per litre of cells), while the concentrations of the cells are per litre of all cells: the dead cells keep their metabolites (glucose, ATP, glycogen, ...), only the enzymes and the potassium move into the dead pool, and the time constants of the cells grow as `1/f_alive_<z>` while the cells die, so a zone with few living cells changes its metabolites slowly.
+- The rates of the cells are those of the living cells (`f_T*f_alive_<z>*V_cell_<z>` times a rate per litre of cells), while the concentrations of the cells are per litre of all cells: the dead cells keep their metabolites (glucose, ATP, glycogen, ...), only the enzymes and the potassium move into the dead pool, and the time constants of the cells grow as `1/f_alive_<z>` while the cells die, so a zone with few living cells changes its metabolites slowly.
 - A Michaelis-Menten term `s/(km + s)` is singular at `s = -km`, which the integrator reaches only at an undershoot of a species far below 0 (the Hill terms read `abs` and stay defined); the tolerances of the tests keep the species far from it.

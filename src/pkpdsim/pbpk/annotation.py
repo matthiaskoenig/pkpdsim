@@ -25,6 +25,28 @@ terms, the protein of a process, the substance of a species); the location
 is `BQB.IS_PART_OF` for a compartment, `BQB.IS_PROPERTY_OF` for a parameter
 and `BQB.OCCURS_IN` for a reaction; a parameter of a protein (activity,
 inhibition constant) is `BQB.IS_PROPERTY_OF` the protein.
+
+The annotations which every library of pkpdsim writes, the initial assignment
+of a constant (`initial_assignment`) and the taxon of a build (`TAXA`), are
+the SBML writing kit's (`pkpdsim.sbml.annotation`); this module is the import
+path of the library and re-exports them unchanged.
+
+`annotate`, `KINDS` and the places (`ORGANS`, `POOLS`, `SEGMENTS`, `SITES`)
+stay here, and on purpose. `annotate` is called by this library only: the
+zonation engine and the machine perfusion library write their own
+annotations and take `initial_assignment` and `TAXA` from the kit. And the
+PBPKO term of a kind is resolved through the vocabulary of this library,
+`_resolve` over the organ, the blood pool and the tokens of a `_Place`.
+Moving the table down would mean a registry which this library fills with its
+kinds and a hook which it fills with its resolver - machinery for one
+registrant, and a rewrite of the function whose output is the byte-pinned
+SBML of `tests/pbpk/data`.
+
+The condition under which it should move: a **second** library of pkpdsim
+needs `annotate`. Then `Kind`, `_Place` and the registry belong in
+`pkpdsim.sbml.annotation`, every library registering its kinds and the
+resolver of a place, and this module keeps the PBPK rows and the PBPK
+resolver. Until then the smaller shape is the right one.
 """
 
 from collections.abc import Iterable, Mapping
@@ -33,18 +55,17 @@ from dataclasses import dataclass, field
 from pymetadata.ontologies.pbpko import PBPKO
 from sbmlutils.factory import (
     Compartment,
-    InitialAssignment,
     Reaction,
     Sbase,
     Species,
 )
-from sbmlutils.factory.units import UnitType
 from sbmlutils.metadata import BQB, SBO
 
 from pkpdsim.annotations import compartments as _compartments
 from pkpdsim.pbpk.organs import Organ, Pool
 from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.substance import Mode, Substance
+from pkpdsim.sbml.annotation import TAXA, initial_assignment
 from pkpdsim.species import Species as BuildSpecies
 
 __all__ = [
@@ -662,6 +683,21 @@ KINDS: dict[str, Kind] = {
     "permeability": Kind(
         _P, _BIOCHEM, requested="permeability surface area product (exchange flow)"
     ),
+    "pore_permeability": Kind(
+        _P,
+        _BIOCHEM,
+        requested="permeability of a solute through a membrane or a pore (a velocity)",
+    ),
+    "diffusion": Kind(None, "DIFFUSION_COEFFICIENT"),
+    "sinusoid_geometry": Kind(
+        _P,
+        _PHYS,
+        requested=(
+            "geometry of the hepatic sinusoid (the radius and the length of the "
+            "lumen, the lateral area of an interface, the fenestral porosity of "
+            "the endothelium)"
+        ),
+    ),
     "bp": Kind(_P, "BLOOD_PLASMA_RATIO"),
     "kbc": Kind(_P, "RED_BLOOD_CELLS_PARTITION_COEFFICIENT"),
     "exchange_rate": Kind(
@@ -1026,30 +1062,6 @@ def _location(element: Sbase) -> BQB:
     return BQB.IS_PROPERTY_OF
 
 
-def initial_assignment(
-    symbol: str, formula: str, unit: UnitType, name: str
-) -> InitialAssignment:
-    """Get the initial assignment of a constant, with a name and an SBO term.
-
-    Every quantity of the library which depends on parameters only is a
-    constant with an initial assignment; the assignment carries the name of
-    its target and the SBO term of a mathematical expression, so the factory
-    has nothing to hint about.
-
-    Args:
-        symbol: the id of the target.
-        formula: the formula.
-        unit: the unit of the formula.
-        name: the name of the target.
-
-    Returns:
-        The initial assignment.
-    """
-    return InitialAssignment(
-        symbol, formula, unit, name=name, sboTerm=SBO.MATHEMATICAL_EXPRESSION
-    )
-
-
 def annotate[S: Sbase](
     element: S,
     kind: str,
@@ -1121,15 +1133,6 @@ def annotate[S: Sbase](
         t for t in dict.fromkeys(terms) if t not in existing
     ]
     return element
-
-
-TAXA: dict[BuildSpecies, str] = {
-    BuildSpecies.HUMAN: "taxonomy/9606",  # Homo sapiens
-    BuildSpecies.RAT: "taxonomy/10116",  # Rattus norvegicus
-    BuildSpecies.MOUSE: "taxonomy/10090",  # Mus musculus
-    BuildSpecies.PIG: "taxonomy/9823",  # Sus scrofa
-}
-"""The NCBI taxon of every species of a build."""
 
 
 def model_annotations(

@@ -77,6 +77,7 @@ __all__ = [
     "FONT",
     "LEGEND_WIDTH",
     "MAX_TEXT",
+    "builds_text",
     "model_figure",
     "schematic_svg",
 ]
@@ -687,7 +688,7 @@ class _Figure:
         y = self._paragraph(
             (self.lx + _PAD),
             y,
-            f"PBPK model {d.sid}: {_builds(self.sexes)}, population {d.population}, "
+            f"PBPK model {d.sid}: {builds_text(self.sexes)}, population {d.population}, "
             f"arm vein {d.arm_vein}",
             "pkf-dim",
         )
@@ -1231,7 +1232,7 @@ def _dissolution(route: Route) -> str:
     return ", ".join([kind, *options])
 
 
-def _builds(sexes: Sequence[Sex]) -> str:
+def builds_text(sexes: Sequence[Sex]) -> str:
     """The builds of the figure in words: `male build`, `male and female builds`."""
     if len(sexes) == 1:
         return f"{sexes[0]} build"

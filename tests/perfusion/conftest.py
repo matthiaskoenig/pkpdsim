@@ -43,15 +43,40 @@ __all__ = [
     "load_circuit",
     "load_zone",
     "zone_model",
+    "zone_objects",
 ]
 
 ZONE = "z1"
-CELLS = "Vcell_z1"
-VASCULAR = "Vvas_z1"
+CELLS = ids.cells(ZONE)
+VASCULAR = ids.vascular(ZONE)
 CELL_VOLUME = 0.0069
 """The cells of a liver of 10 g (l), 0.69 of its volume."""
 VASCULAR_VOLUME = 0.1
 """The closed vascular space of the test zone (l), as large as a reservoir."""
+
+
+def zone_objects(
+    zone: str,
+    cells: str,
+    vascular: str,
+    params: core.CoreParameters,
+    *,
+    profile: Mapping[str, float] | None = None,
+    composition: core.Composition | None = None,
+    bile: bool = True,
+    released: tuple[str, ...] = ids.RELEASABLE,
+) -> core.CoreObjects:
+    """Get the cellular core of a zone and its vascular space (the objects of a kidney zone)."""
+    return core.core_objects(
+        core.CoreNames(zone),
+        cells,
+        vascular,
+        params,
+        profile=profile,
+        composition=composition,
+        bile=bile,
+        released=released,
+    )
 
 
 def zone_model(
@@ -71,8 +96,8 @@ def zone_model(
     objects = core.CoreObjects()
     compartments = []
     for zone in zones:
-        cells, vascular = f"Vcell_{zone}", f"Vvas_{zone}"
-        objects += core.zone_objects(
+        cells, vascular = ids.cells(zone), ids.vascular(zone)
+        objects += zone_objects(
             zone,
             cells,
             vascular,

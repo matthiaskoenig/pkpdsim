@@ -47,7 +47,7 @@ the sex when it builds a model (the ICRP 89 anatomy, the hematocrit, the
 partition coefficients, the GFR, see [Physiology](pbpk/physiology.md)). A model
 whose studies include women has a female build next to the male one, from the
 same definition (`create_archive(..., sexes=(Sex.MALE, Sex.FEMALE))`, see
-[PBPK library](pbpk/index.md#builds-per-sex)), and its model object holds both:
+[PBPK library](pbpk/build.md#builds-per-sex)), and its model object holds both:
 
 ```python
 # not executed

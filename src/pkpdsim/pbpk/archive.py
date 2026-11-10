@@ -156,7 +156,7 @@ def create_archive(
         path = model_output_dir / f"{definition.sid}.svg"
         figures.append(model_figure(definition, path, sexes))
         body = model_output_dir / f"{definition.sid}_body.svg"
-        figures.append(anatomy_figure(definition, body))
+        figures.append(anatomy_figure(definition, body, sexes=sexes))
     return write_archive(
         models,
         model_output_dir.parent,
