@@ -426,8 +426,10 @@ def _liver(definition: PerfusionDefinition, organ: LiverOrgan) -> _Organ:
             },
         }
 
+    table = {ids.zone_id(k): _cell_names(cell, ids.zone_id(k)) for k in range(1, n + 1)}
+
     def names(zone: str) -> dict[str, str]:
-        return _cell_names(cell, zone)
+        return table[zone]
 
     model = composition.compose(
         builder,
@@ -437,19 +439,23 @@ def _liver(definition: PerfusionDefinition, organ: LiverOrgan) -> _Organ:
         temperature=temperature,
         shared=shared,
         expose={
-            sid: (lambda zone, sid=sid: names(zone)[sid]) for sid in sorted(names("z1"))
+            sid: (lambda zone, sid=sid: table[zone][sid]) for sid in sorted(table["z1"])
         },
         cell_model=cell,
     )
     # the species of the vascular space are those of the perfusion
     start = circuit.composition(definition.perfusate)
-    h = start.concentrations(released)["h"]
-    assert h is not None
+    c = start.concentrations(released)
+    h, hco3 = c["h"], c["hco3"]
+    assert h is not None and hco3 is not None
+    ph = {ids.ph(ids.zone_id(k)): 3 - math.log10(h) for k in range(1, n + 1)}
     for p in model.parameters:
-        if p.value is None and str(p.sid).startswith("pH_z"):
-            # the pH of the cells is a rule of the cell model, the proxy has the
-            # value of its start (`pH = 3 - log10(h/1 mM)`, h in mM)
-            p.value = 3 - math.log10(h)
+        if p.sid in ph and p.value is None:
+            # The pH of the cells is an assignment rule of the cell model, `pH =
+            # 3 - log10(h/1 mM)`, which the flat model keeps as the rule of the
+            # element of the submodel (the proxy is merged with it): this value is
+            # what the composed model carries, no simulation reads it.
+            p.value = ph[str(p.sid)]
     species: dict[str, Species] = {}
     out = core.CoreObjects()
     bile: list[str] = []
@@ -463,15 +469,13 @@ def _liver(definition: PerfusionDefinition, organ: LiverOrgan) -> _Organ:
             for t in definition.perfusate.tracers
         ]
         for x in zone_species:
-            if x.initialConcentration is None and str(x.sid).startswith("co2_"):
-                # the CO2 of the vascular space is at the equilibrium of the buffer,
-                # an initial assignment of the flat model (the cell's); a replaced
-                # species still carries its value, the assignment is not repeated
-                c = start.concentrations(released)
-                assert c["h"] is not None and c["hco3"] is not None
-                x.initialConcentration = (
-                    c["h"] * c["hco3"] / core.Buffer.default().ka.value
-                )
+            if x.sid == ids.species("co2", zone):
+                # The CO2 of the vascular space starts at the equilibrium of the
+                # buffer, `h*hco3/Ka`. The flat model starts it with the initial
+                # assignment of the cell model's `co2_ext`, which replaces this
+                # species (it takes the assignment of the replacing element): this
+                # value is what the composed model carries, no simulation reads it.
+                x.initialConcentration = h * hco3 / core.Buffer.default().ka.value
         species.update({str(x.sid): x for x in zone_species})
         out += circuit.fresh_assignments(zone, definition.perfusate, released)
         bile.append(_zone_formula(str(rule.value), names(zone), replaced_by(zone)))

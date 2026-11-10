@@ -104,7 +104,7 @@ atp_<z>_cell = atp_start
 alt_<z>_cell = ALT_content
 ```
 
-Every biological rate scales with the temperature factor `f_T` (that of the cell model, `<m>__f_T`), the living fraction `f_alive_<z>` and the cell volume, only the living cells metabolise; a Hill term reads the absolute value of its species, so it stays defined for the small negative values of the integrator, and no rate divides by a species which can reach 0 (the inhibition of the glycolysis by ATP is defined at ATP 0).
+Every biological rate scales with the temperature factor `f_T` (the liver has its own `f_T`, which its bile secretion uses, and every cell model has one, `<m>__f_T`, which the equations below use; both are the same function of the temperature), the living fraction `f_alive_<z>` and the cell volume, only the living cells metabolise; a Hill term reads the absolute value of its species, so it stays defined for the small negative values of the integrator, and no rate divides by a species which can reach 0 (the inhibition of the glycolysis by ATP is defined at ATP 0).
 
 ```equations title="transport between the perfusate and the cells"
 GLCIM_<z>: glc_vas_<z> -> glc_<z>_cell = (<m>__f_T * f_alive_<z> * V_cell_<z> * GLCIM_Vmax / GLCIM_Km_glc) * (glc_vas_<z> - glc_<z>_cell) / (1 + glc_vas_<z> / GLCIM_Km_glc + glc_<z>_cell / GLCIM_Km_glc)
@@ -130,7 +130,7 @@ GR_<z>: gssg_<z>_cell + nadph_<z>_cell -> gsh_<z>_cell + nadp_<z>_cell = <m>__f_
 PPP_<z>: glc_<z>_cell + nadp_<z>_cell -> nadph_<z>_cell + co2_vas_<z> = <m>__f_T * f_alive_<z> * V_cell_<z> * PPP_Vmax * glc_<z>_cell / (PPP_Km_glc + glc_<z>_cell) * nadp_<z>_cell / (PPP_Km_nadp + nadp_<z>_cell)
 ```
 
-The cells die at the rate `v_nec_<z>`, either drive alone gives the full rate: the energy failure, a smooth threshold of ATP, and the acidosis of the perfusate, a Hill term of the free protons. The acidosis drives the damage and does not inhibit the energy metabolism, since the medium changes of the study protect the liver far beyond the dilution of the enzymes. A dying cell moves its enzymes and potassium into the dead cells of the zone (`<q>_<z>_dead`, `<m>__<q>_dead`), which release them first order into the vascular space, so the totals are conserved; the release is the leak of a ruptured membrane and does not scale with the temperature. The liver releases ALT, AST, LDH and potassium, the kidney and a generic organ LDH and potassium.
+The cells die at the rate `v_nec_<z>`, either drive alone gives the full rate: the energy failure, a smooth threshold of ATP, and the acidosis of the perfusate, a Hill term of the free protons. The acidosis drives the damage and does not inhibit the energy metabolism, since the medium changes of the study protect the liver far beyond the dilution of the enzymes. A dying cell moves its enzymes and potassium into the dead cells of the zone (`<q>_<z>_dead`), which release them first order into the vascular space, so the totals are conserved; the release is the leak of a ruptured membrane and does not scale with the temperature. The liver releases ALT, AST, LDH and potassium, the kidney and a generic organ LDH and potassium.
 
 ```equations title="necrosis and release"
 v_nec_<z> = NEC_k * <m>__f_T * (1 - (abs(atp_<z>_cell) / NEC_atp)^NEC_n_atp / ((1 + (abs(atp_<z>_cell) / NEC_atp)^NEC_n_atp) * (1 + (abs(h_vas_<z>) / NEC_h)^NEC_n_h)))
@@ -233,13 +233,13 @@ The fit mappings of a perfusion describe their data with the vocabulary of `pkpd
 
 ## The observers and the sites
 
-Every quantity can be read at every site: the reservoir `res` (where the study samples the perfusate), the inflow `in` after the oxygenator, every zone `z<k>`, the outflow `out` after the organ, and the periportal and pericentral means `pp` and `pc`, the first and the last third of the zones, each zone weighted by its overlap with the third (with one zone both means are the zone). The cells of a zone are the site `<z>_cell` (the species `<m>__<q>_cell`) (`pp_cell`, `pc_cell` for the means). A species is an amount in roadrunner and sbmlsim and its concentration is selected as `[<q>_<site>]` (the 10 ml of the inflow tubing hold 0.065 mmole of glucose, `glc_in`, at 6.5 mM, `[glc_in]`); the means and the other observers are assignment rules, selected by their id. The labels and units of `observable_labels` and `observable_units` are keyed by these selections.
+Every quantity can be read at every site: the reservoir `res` (where the study samples the perfusate), the inflow `in` after the oxygenator, every zone `z<k>`, the outflow `out` after the organ, and the periportal and pericentral means `pp` and `pc`, the first and the last third of the zones, each zone weighted by its overlap with the third (with one zone both means are the zone). The cells of a zone are the site `<z>_cell` (the species `<q>_<z>_cell`) (`pp_cell`, `pc_cell` for the means). A species is an amount in roadrunner and sbmlsim and its concentration is selected as `[<q>_<site>]` (the 10 ml of the inflow tubing hold 0.065 mmole of glucose, `glc_in`, at 6.5 mM, `[glc_in]`); the means and the other observers are assignment rules, selected by their id. The labels and units of `observable_labels` and `observable_units` are keyed by these selections.
 
 | observer | unit | what |
 |---|---|---|
 | `[<q>_<site>]` | mM | a quantity of the perfusate (glucose, oxygen, lactate, CO2, bicarbonate, protons, potassium, the released enzymes, the tracers) at the reservoir, the inflow, a zone or the outflow, a species |
 | `<q>_pp`, `<q>_pc` | mM | the periportal and pericentral mean of a quantity of the perfusate, an assignment rule |
-| `[<q>_<z>_cell]` (`[<m>__<q>_cell]`), `<q>_pp_cell`, `<q>_pc_cell` | mM | a quantity of the cells of a zone (a species) and its means |
+| `[<q>_<z>_cell]`, `<q>_pp_cell`, `<q>_pc_cell` | mM | a quantity of the cells of a zone (a species) and its means |
 | `<q>_urine` | mmole | the amount of a filtered quantity in the urine of a kidney: the urine volume starts at 0, so its concentration `[<q>_urine]` is 0/0 at the start and the urine is selected by its amount |
 | `pO2_<site>` | kPa | the oxygen partial pressure, the free oxygen over its solubility at the temperature |
 | `pCO2_<site>` | kPa | the CO2 partial pressure |

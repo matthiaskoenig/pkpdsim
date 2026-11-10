@@ -14,7 +14,7 @@ from sbmlutils.validation import ValidationOptions, validate_doc
 
 from pkpdsim.database.tables import entry
 from pkpdsim.pbpk.values import Value
-from pkpdsim.perfusion import core, ids
+from pkpdsim.perfusion import circuit, core, ids
 from pkpdsim.perfusion.builder import build
 from pkpdsim.perfusion.definition import LiverOrgan, Perfusate
 from pkpdsim.perfusion.units import PU
@@ -129,9 +129,47 @@ def test_the_flat_ids_of_the_cells_are_the_ids_of_the_perfusion(
             ids.ph(z),
         }
         assert expected <= flat, sorted(expected - flat)
-        # the proxies are merged with the elements of the submodel, not added
-        assert f"M{k:02}__f_alive" not in flat
-        assert f"M{k:02}__O2IM" not in flat
+        # the proxies are merged with the elements of the submodel, not added: no
+        # exposed state is in the flat model under its submodel prefix as well
+        cell_ids = {
+            *(f"{q}_cell" for q in ids.cell_quantities(definition.released)),
+            *(f"{q}_dead" for q in definition.released),
+            *reactions,
+            "f_alive",
+            "v_nec",
+            "Vbile",
+            "pH_ext",
+        }
+        left = {f"M{k:02}__{x}" for x in cell_ids} & flat
+        assert not left, sorted(left)
+
+
+def test_the_start_values_of_the_replaced_vascular_co2_and_the_cell_ph(
+    tmp_path: Path,
+) -> None:
+    """The composed model carries the start of `co2_vas_<z>` (the equilibrium of the
+    buffer, `h*hco3/Ka`) and of `pH_<z>` (`3 - log10(h/1 mM)`) of the fresh
+    perfusate: the expectation is computed from the composition of the definition
+    and its buffer, not copied from the builder. No simulation reads either: the
+    flat model starts the first by the initial assignment of the cell's `co2_ext`
+    and computes the second by the assignment rule of the cell's `pH_ext`."""
+    definition = liver_definition(3)
+    build(definition, tmp_path)
+    model = _model(tmp_path / "perfusion_liver.xml")
+    start = circuit.composition(definition.perfusate).concentrations(
+        definition.released
+    )
+    h, hco3 = start["h"], start["hco3"]
+    assert h is not None and hco3 is not None
+    co2 = h * hco3 / core.Buffer.default().ka.value
+    ph = 3 - math.log10(h)
+    assert co2 > 0 and 6.5 < ph < 8
+    for k in (1, 2, 3):
+        z = ids.zone_id(k)
+        assert model.getSpecies(ids.species("co2", z)).getInitialConcentration() == (
+            pytest.approx(co2, rel=1e-12)
+        )
+        assert model.getParameter(ids.ph(z)).getValue() == pytest.approx(ph, rel=1e-12)
 
 
 def test_an_element_the_liver_does_not_expose_is_addressed_through_its_submodel(
