@@ -68,39 +68,6 @@ if TYPE_CHECKING:
     import roadrunner
 
 
-IA_CACHE = (2, 11, 1)
-"""The first version of roadrunner with the cache of the initial value resolvers.
-
-Without it (sys-bio/roadrunner#1435) every initial assignment is inlined into
-each of its readers, so a model with the physiology over age
-(`PBPKDefinition.age`, hundreds of piecewise curves of `AGE`) takes over a
-minute to compile instead of five seconds. The tests which build such a model
-are skipped on an older roadrunner (`over_age`).
-"""
-
-
-def _roadrunner_version() -> tuple[int, ...]:
-    """The version of roadrunner as a tuple of its numbers."""
-    import roadrunner
-
-    parts = []
-    for piece in str(roadrunner.__version__).split("."):
-        digits = "".join(c for c in piece if c.isdigit())
-        parts.append(int(digits) if digits else 0)
-    return tuple(parts)
-
-
-over_age = pytest.mark.skipif(
-    _roadrunner_version() < IA_CACHE,
-    reason=(
-        "a model with the physiology over age needs the cache of the initial "
-        f"value resolvers of roadrunner {'.'.join(str(i) for i in IA_CACHE)} "
-        "(sys-bio/roadrunner#1435)"
-    ),
-)
-"""Skip a test which builds a model with the physiology over age."""
-
-
 def simple_drug() -> Substance:
     """Get the simple drug: Mr 300, fu 0.1 (albumin), Kp 2, merged tissue, urine."""
     return Substance(
