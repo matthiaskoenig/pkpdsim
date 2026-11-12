@@ -254,8 +254,10 @@ def test_importing_the_library_imports_no_simulator() -> None:
     """`import pkpdsim.pbpk` stays light, the base experiment is exported lazily.
 
     Of sbmlsim it imports only the modules without a simulator (`sbmlsim.distrib`,
-    the units of the package and the writer of the archive,
-    `sbmlsim.release.archive`), never roadrunner, COPASI or AMICI.
+    the units of the package, the writer of the archive,
+    `sbmlsim.release.archive`, and `sbmlsim.engine`, with which `import sbmlsim`
+    checks the installed libroadrunner since sbmlsim 0.22.0 and which imports
+    the standard library only), never roadrunner, COPASI or AMICI.
     """
     code = (
         "import sys, pkpdsim.pbpk; "
@@ -263,7 +265,7 @@ def test_importing_the_library_imports_no_simulator() -> None:
         "if m.split('.')[0] in {'roadrunner', 'COPASI', 'amici'} "
         "or (m.startswith('sbmlsim') "
         "and m not in {'sbmlsim', 'sbmlsim.distrib', 'sbmlsim.units', "
-        "'sbmlsim.release', 'sbmlsim.release.archive'}) "
+        "'sbmlsim.engine', 'sbmlsim.release', 'sbmlsim.release.archive'}) "
         "or m in {'pkpdsim.experiment', 'pkpdsim.pbpk.experiment'})); "
         "from pkpdsim.pbpk import REFERENCE_GFR, PBPKSimulationExperiment, "
         "ScaledRenalMap, healthy_gfr; "

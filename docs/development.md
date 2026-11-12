@@ -249,4 +249,4 @@ A release is made from `develop`. Since `develop` only accepts pull requests, th
     uv pip install pkpdsim
     ```
 
-9. once Zenodo has archived the release, update the citation information, i.e., `date-released` and `doi` in `CITATION.cff` and the version, date and DOI of the release in the citation of `README.md` and `docs/index.md`. `bump-my-version` only updates the version, not the date and the DOI, which are only known after the release. These changes go in through a pull request like everything else
+9. once Zenodo has archived the release, update the citation information, i.e., `date-released` and `doi` in `CITATION.cff` and the version, date and DOI of the release in the citation of `README.md` and `docs/index.md`. `bump-my-version` updates the version and `date-released`, the day of the bump, not the DOI, which is only known after the release. These changes go in through a pull request like everything else

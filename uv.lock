@@ -1679,7 +1679,7 @@ requires-dist = [
     { name = "python-libsbml", specifier = ">=5.21.2" },
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.3" },
-    { name = "sbmlsim", specifier = ">=0.21.0" },
+    { name = "sbmlsim", specifier = ">=0.22.0" },
     { name = "sbmlsim", extras = ["amici"], marker = "extra == 'amici'" },
     { name = "sbmlutils", specifier = ">=0.17.2" },
     { name = "scipy", specifier = ">=1.18.1" },
@@ -2291,7 +2291,7 @@ wheels = [
 
 [[package]]
 name = "sbmlsim"
-version = "0.21.0"
+version = "0.22.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -2303,6 +2303,7 @@ dependencies = [
     { name = "libroadrunner" },
     { name = "matplotlib" },
     { name = "numpy" },
+    { name = "packaging" },
     { name = "pandas" },
     { name = "petab" },
     { name = "pillow" },
@@ -2323,9 +2324,9 @@ dependencies = [
     { name = "typst" },
     { name = "xarray" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/26/d3/5629b828eb7212589c65455fe8f1741157d14f177c1b43be1eb1f7cc3782/sbmlsim-0.21.0.tar.gz", hash = "sha256:ca1e08fdf40abfa875f0770e7ab4e8f30e73943206e80b765591ef13832ab116", size = 5848565, upload-time = "2026-11-10T18:11:06.114Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/23/51/cdeece6c8493a716f97189aa67c19516292123b67ceaabf121ad012322f9/sbmlsim-0.22.0.tar.gz", hash = "sha256:673b69f2fd33fe53bed526478111fdda163a1e0b0e48b11ceff61585e02ace52", size = 5865736, upload-time = "2026-11-12T11:58:31.904Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cf/7c/271d6030b8e9bf42901086a5da2068818764bfc81a745caccba60a3e2d28/sbmlsim-0.21.0-py3-none-any.whl", hash = "sha256:acc9662d67df63799130e2d9ff8c6751c6479ff58a8d981e1a0c24666dd4e173", size = 1367571, upload-time = "2026-11-10T18:11:04.096Z" },
+    { url = "https://files.pythonhosted.org/packages/77/27/4a1426d35e984b6dfa176d1ab3590355387b7acdad2c50bed68b5fcbe71a/sbmlsim-0.22.0-py3-none-any.whl", hash = "sha256:665b29ae0fd125f204bda0dbd3cdc226cf7cce82a1cda0d7580ef19da6271c14", size = 1373128, upload-time = "2026-11-12T11:58:29.872Z" },
 ]
 
 [package.optional-dependencies]
