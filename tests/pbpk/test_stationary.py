@@ -676,6 +676,24 @@ def test_a_pinned_imbalance_warns(tmp_path: Path) -> None:
         build(_pinned(), tmp_path / "balanced")
 
 
+def test_the_model_of_a_pinned_build_is_in_the_cache_of_the_library(
+    tmp_path: Path,
+) -> None:
+    """`check_built` compiles the model through the cache, so the next load is free.
+
+    The check of the build reads the rates of the model it built; the
+    equilibration and the validity of the kidney outflow load the same file,
+    which costs seconds to compile, so the check takes it from the cache of
+    the library and leaves it there.
+    """
+    from pkpdsim.pbpk.flat_model import _loaded, loaded_model
+
+    result = build(_pinned(), tmp_path / "cached")
+    misses = _loaded.cache_info().misses
+    loaded_model(result.flat_path)
+    assert _loaded.cache_info().misses == misses
+
+
 # --- the refusals --------------------------------------------------------------------
 
 

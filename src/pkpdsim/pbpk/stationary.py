@@ -1142,6 +1142,13 @@ def check_built(plan: SteadyPlan, flat_path: Path) -> None:
     the model derives the rate which closes the balance (e.g. a supply) from
     the baseline (the formulas of `pkpdsim.pbpk.steady_state`).
 
+    The model is the one of the cache of the library (`loaded_model` of
+    `pkpdsim.pbpk.flat_model`), compiled at `O0` once per process: the build
+    has just written the flat model, so the check compiles it and the
+    equilibration and the validity of the kidney outflow take it from the
+    cache instead of compiling it a second time (a compile of a model of the
+    library takes seconds).
+
     Args:
         plan: the plan of the definition.
         flat_path: the flat model.
@@ -1151,13 +1158,11 @@ def check_built(plan: SteadyPlan, flat_path: Path) -> None:
     """
     if not plan.pinned:
         return
-    # a factory without pinned substances loads no simulator
-    import roadrunner
+    # a factory without pinned substances compiles no model, so roadrunner,
+    # which `flat_model` imports, is imported here
+    from pkpdsim.pbpk.flat_model import loaded_model
 
-    options = roadrunner.LoadSBMLOptions()
-    options.setLLVMBackend(roadrunner.LoadSBMLOptions.LLJIT)
-    options.setLLJitOptimizationLevel(roadrunner.LoadSBMLOptions.NONE)
-    r = roadrunner.RoadRunner(str(flat_path), options)
+    r = loaded_model(flat_path).r_loaded
     rates = list(r.getRatesOfChange())
     state = {r.model.getStateVectorId(i): rates[i] for i in range(len(rates))}
     for sid in sorted(plan.pinned):

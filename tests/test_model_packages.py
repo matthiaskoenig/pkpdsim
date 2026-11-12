@@ -17,7 +17,13 @@ from sbmlsim.plot import FigureSettings as SbmlsimFigureSettings
 from sbmlsim.project import CheckSettings, FigureOutputs, SimulatorSettings
 from sbmlsim.release.settings import Author
 
-from pkpdsim.model import ExtraAction, FigureSettings, PKPDModel, PKPDReleaseSettings
+from pkpdsim.model import (
+    DEFAULT_JIT_OPTIMIZATION,
+    ExtraAction,
+    FigureSettings,
+    PKPDModel,
+    PKPDReleaseSettings,
+)
 from pkpdsim.sex import Sex
 
 
@@ -179,8 +185,11 @@ def test_hctz(package: Path) -> None:
         "PD": "PD_20261031_014547__bed5d",
     }
     assert model.archive_path == package / "models" / "output" / "hctz_model.omex"
+    # the creation of a model writes the level of pkpdsim into its settings
     assert model.simulator == SimulatorSettings(
-        absolute_tolerance=1e-10, relative_tolerance=1e-10
+        absolute_tolerance=1e-10,
+        relative_tolerance=1e-10,
+        jit_optimization=DEFAULT_JIT_OPTIMIZATION,
     )
     assert model.figure_settings == SbmlsimFigureSettings(
         fig_dpi=300, legend_fontsize=10

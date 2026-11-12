@@ -15,7 +15,9 @@ from sbmlsim.project import (
 )
 
 from pkpdsim.model import (
+    DEFAULT_JIT_OPTIMIZATION,
     DEFAULT_SIMULATOR,
+    JIT_OPTIMIZATION_VARIABLE,
     RUN_WORKERS,
     ExtraAction,
     FigureSettings,
@@ -176,9 +178,13 @@ def test_a_model_without_figures_has_those_of_sbmlsim() -> None:
 
 def test_the_defaults_of_a_model() -> None:
     model = PKPDModel(**keywords())
-    assert model.simulator == DEFAULT_SIMULATOR
+    # the settings of the simulator with the level of pkpdsim, which the
+    # creation of a model writes into them
+    assert DEFAULT_SIMULATOR.jit_optimization is None
     assert model.simulator == SimulatorSettings(
-        absolute_tolerance=1e-10, relative_tolerance=1e-10
+        absolute_tolerance=1e-10,
+        relative_tolerance=1e-10,
+        jit_optimization=DEFAULT_JIT_OPTIMIZATION,
     )
     assert RUN_WORKERS == 1
     assert model.reduced_selections is True
@@ -343,11 +349,45 @@ def test_a_test_loads_the_model_at_its_level(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_the_fit_definitions_carry_the_level_of_the_model() -> None:
-    simulator = SimulatorSettings(jit_optimization="O0")
+    simulator = SimulatorSettings(jit_optimization="O2")
     definitions = MODEL.replace(simulator=simulator).load_fit_definitions()
-    assert {d.jit_optimization for d in definitions.values()} == {"O0"}
+    assert {d.jit_optimization for d in definitions.values()} == {"O2"}
+    # a model which names no level carries the level of pkpdsim
     levels = {d.jit_optimization for d in MODEL.load_fit_definitions().values()}
-    assert levels == {None}
+    assert levels == {DEFAULT_JIT_OPTIMIZATION}
+
+
+def test_a_model_which_names_no_level_is_compiled_at_the_level_of_pkpdsim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`DEFAULT_JIT_OPTIMIZATION`, which the environment variable of sbmlsim wins over."""
+    monkeypatch.delenv(JIT_OPTIMIZATION_VARIABLE, raising=False)
+    assert DEFAULT_JIT_OPTIMIZATION == "O0"
+    # the settings of a model which gives its own without a level keep their
+    # other values
+    tolerances = SimulatorSettings(absolute_tolerance=1e-9)
+    model = PKPDModel(**keywords(simulator=tolerances))
+    assert model.simulator.jit_optimization == DEFAULT_JIT_OPTIMIZATION
+    assert model.simulator.absolute_tolerance == 1e-9
+    # the level of a model is its own, also in a copy
+    named = PKPDModel(**keywords(simulator=SimulatorSettings(jit_optimization="O3")))
+    assert named.simulator.jit_optimization == "O3"
+    assert named.replace(save_results=True).simulator.jit_optimization == "O3"
+    # the level of the environment of the process is the level of sbmlsim, which
+    # resolves it when it loads a model, so the model names none
+    monkeypatch.setenv(JIT_OPTIMIZATION_VARIABLE, "O2")
+    assert PKPDModel(**keywords()).simulator.jit_optimization is None
+    assert (
+        PKPDModel(**keywords(simulator=tolerances)).simulator.jit_optimization is None
+    )
+    assert named.simulator.jit_optimization == "O3"
+
+
+def test_the_level_variable_is_the_one_of_sbmlsim() -> None:
+    """pkpdsim names the variable itself, so that a model does not import roadrunner."""
+    from sbmlsim.model.model_roadrunner import JIT_OPTIMIZATION_VARIABLE as variable
+
+    assert variable == JIT_OPTIMIZATION_VARIABLE
 
 
 def test_a_model_without_credibility() -> None:
