@@ -90,6 +90,16 @@ sampling profiler of python 3.15 and writes its flame graph and statistics
 into `profiling/<command>_<time>/` of the results of the model, see
 `sbmlsim.run.profiling`; the commands also run as
 `python -m pkpdsim.cli <command> <package> ...`.
+
+`--progress MODE` anywhere after the model package says how the progress of
+the runs of a command is shown: `auto` (the default: the bars of a terminal,
+a line of the log every 30 s otherwise), `bar`, `log` or `none`, see
+`sbmlsim.progress`. The option sets `SBMLSIM_PROGRESS`, so every run of the
+command and every process it starts reads it, and the events of the progress
+are written into the `progress.jsonl` of a run whatever is chosen: the
+experiments of a simulation, the points of a scan, the runs of a fit, the
+scans of an identifiability and the figures of a report then say where they
+are, how long they still take and what they use of the machine.
 """
 
 from __future__ import annotations
@@ -144,6 +154,8 @@ from sbmlsim.fit.project_fits import (
 from sbmlsim.fit.records import adopt_fit
 from sbmlsim.fit.result import FIT_ID, fit_id, fit_subset
 from sbmlsim.fit.sampling import SamplingType
+from sbmlsim.progress import ENV_NAME as PROGRESS_ENV
+from sbmlsim.progress import NAMES as PROGRESS_NAMES
 from sbmlsim.project import Project, collect_figure_files, load_project, resolve
 from sbmlsim.run import ConfigurationError, execute, list_analyses, plan
 from sbmlsim.run.context import SPEC_FILE
@@ -174,6 +186,11 @@ class Action(StrEnum):
     FACTORY = "factory"
     ALL = "all"
 
+
+#: the option of the progress of the runs of a command, which `main` takes out
+#: of the arguments and sets as `SBMLSIM_PROGRESS`, as `--profile` of
+#: `sbmlsim.run.profiling` is taken out of them
+PROGRESS_OPTION = "--progress"
 
 #: the attribute of the model object in its package
 MODEL_ATTRIBUTE = "MODEL"
@@ -2217,7 +2234,10 @@ def command_parser(command: Command) -> argparse.ArgumentParser:
     """
     p = argparse.ArgumentParser(
         prog=command.name,
-        usage=f"{command.name} PACKAGE [{PROFILE_OPTION}] [options]",
+        usage=(
+            f"{command.name} PACKAGE [{PROFILE_OPTION}] "
+            f"[{PROGRESS_OPTION} MODE] [options]"
+        ),
         description=command.description,
         epilog=f"`{command.name} PACKAGE --help` shows the options of the model.",
     )
@@ -2234,7 +2254,59 @@ def command_parser(command: Command) -> argparse.ArgumentParser:
         "write its flame graph and statistics into profiling/ of the results "
         "of the model (`sbmlsim.run.profiling`)",
     )
+    p.add_argument(
+        PROGRESS_OPTION,
+        metavar="MODE",
+        choices=PROGRESS_NAMES,
+        help="how the progress of the runs of the command is shown: auto (the "
+        "bars of a terminal, a line of the log otherwise), bar, log or none; "
+        "the events of the progress are written whatever is chosen "
+        "(`sbmlsim.progress`)",
+    )
     return p
+
+
+def _progress_setting(args: Sequence[str]) -> list[str]:
+    """Take the progress out of the arguments of a command and set it.
+
+    `--progress MODE` and `--progress=MODE` anywhere after the model package
+    set the environment variable `SBMLSIM_PROGRESS`, which every run of the
+    command and every process it starts reads, see `sbmlsim.progress.resolve`.
+    The option is taken out of the arguments, so the parser of the command
+    does not see it, as `--profile` is.
+
+    Args:
+        args: the arguments after the model package.
+
+    Returns:
+        The arguments without the option.
+
+    Raises:
+        ValueError: for a mode which is no rendering of the progress and for
+            the option without one.
+    """
+    rest: list[str] = []
+    args = list(args)
+    index = 0
+    while index < len(args):
+        argument = args[index]
+        if argument == PROGRESS_OPTION:
+            if index + 1 == len(args):
+                raise ValueError(f"{PROGRESS_OPTION} needs one of {PROGRESS_NAMES}")
+            value, index = args[index + 1], index + 2
+        elif argument.startswith(f"{PROGRESS_OPTION}="):
+            value, index = argument.split("=", 1)[1], index + 1
+        else:
+            rest.append(argument)
+            index += 1
+            continue
+        if value.strip().lower() not in PROGRESS_NAMES:
+            raise ValueError(
+                f"the progress '{value}' is none of {PROGRESS_NAMES} "
+                f"({PROGRESS_OPTION})"
+            )
+        os.environ[PROGRESS_ENV] = value.strip().lower()
+    return rest
 
 
 def main(name: str, argv: Sequence[str] | None = None) -> None:
@@ -2258,6 +2330,10 @@ def main(name: str, argv: Sequence[str] | None = None) -> None:
     if args[0].startswith("-"):
         p.error(f"the model package is the first argument, not '{args[0]}'")
     package, *rest = args
+    try:
+        rest = _progress_setting(rest)
+    except ValueError as err:
+        p.error(str(err))
     try:
         model = resolve_model(package)
     except ModelNotFoundError as err:
