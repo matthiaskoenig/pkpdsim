@@ -189,6 +189,23 @@ pkpd_release pkdb_models.models.hctz --version 0.8.0 --repo ../hctz-model
 
 `--repo` is the checkout of the release repository (by default a sibling of the monorepo named like the repository), which the build clones and only reads (the repository on GitHub is cloned when the checkout is missing) and which publishing fast-forwards to the release, `--out` the output of the build (by default `<repo>-release-<version>` next to the checkout, the release repository in its folder `repository`), `--pkpdsim-path` a local pkpdsim for a run with `--no-publish`, `--workers` the workers of the simulations. A refused check or a failed step ends the command with exit code 1 and the reason. The release metadata of a model, the one-time setup and the steps are in [Release of a model repository](release.md).
 
+## The progress of a command
+
+`--progress MODE` anywhere after the model package says how the progress of the runs of a command is shown, where `MODE` is `auto` (the default), `bar`, `log` or `none`:
+
+```bash
+run_fit pkdb_models.models.hctz --progress bar --subset PK
+run_simulation pkdb_models.models.hctz --progress log --action simulate --experiments all
+```
+
+`auto` draws the nested bars of [rich](https://rich.readthedocs.io) at a terminal and writes a line of the log every 30 s otherwise, so a command in a pipe, in a file or in a job says where it is without filling the output; `bar` and `log` choose one of them and `none` shows nothing. The option sets `SBMLSIM_PROGRESS`, which every run of the command and every process it starts reads (`sbmlsim.progress.resolve`), so the setting also reaches the units of a split run.
+
+What reports its progress is the work of sbmlsim (`sbmlsim.progress`): the experiments of a simulation, the points of a scan, the runs of a fit with the points of their jacobians, the points of the jacobian of a Fisher information, the scans of an identifiability and the figures of a report. An sbmlsim without that module ignores the option. Every mode writes a `progress` event into the `progress.jsonl` of the run, with the count, the estimate of the time which is left and the cores, the CPU and the memory the run uses, so a tool outside the command can follow it:
+
+```
+experiments 12/70 [00:01:20<00:00:07] cores 16/24 cpu 1480% mem 12.4 GB, machine 18.3/31.0 GB
+```
+
 ## Profiling a command
 
 `--profile` anywhere after the model package runs a command under the statistical sampling profiler of python 3.15 (`profiling.sampling`, [PEP 799](https://peps.python.org/pep-0799/)), which samples the stack of the command from a process of its own, so the command runs at nearly its normal speed:

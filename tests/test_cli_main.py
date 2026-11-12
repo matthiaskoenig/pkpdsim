@@ -1,5 +1,6 @@
 """The console scripts of the commands, which take the model package first."""
 
+import os
 from collections.abc import Callable, Sequence
 from importlib.metadata import distribution
 from pathlib import Path
@@ -8,6 +9,8 @@ import pytest
 
 from pkpdsim.cli import (
     COMMANDS,
+    PROGRESS_ENV,
+    PROGRESS_NAMES,
     ModelNotFoundError,
     main,
     resolve_model,
@@ -101,7 +104,9 @@ def test_the_help_without_a_model_names_the_package(
         MAINS[name](["--help"])
     assert exit_info.value.code == 0
     out = capsys.readouterr().out
-    assert out.startswith(f"usage: {name} PACKAGE [--profile] [options]")
+    assert out.startswith(
+        f"usage: {name} PACKAGE [--profile] [--progress MODE] [options]"
+    )
     assert f"{name} PACKAGE --help" in out
 
 
@@ -136,7 +141,9 @@ def test_a_command_without_a_model_is_a_usage_error(
         MAINS[name](args)
     assert exit_info.value.code == 2
     err = capsys.readouterr().err
-    assert err.startswith(f"usage: {name} PACKAGE [--profile] [options]")
+    assert err.startswith(
+        f"usage: {name} PACKAGE [--profile] [--progress MODE] [options]"
+    )
     assert message in err
 
 
@@ -217,3 +224,50 @@ def test_the_fit_commands_run_the_fit_and_its_reports(tmp_path: Path) -> None:
         ]
     )
     assert list((tmp_path / "identifiability").glob("**/identifiability.json"))
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["pkpdsim_toy", "--progress", "log", "--help"],
+        ["pkpdsim_toy", "--progress=log", "--help"],
+    ],
+)
+def test_the_progress_is_taken_out_of_the_arguments_and_set(
+    args: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`--progress MODE` sets the environment variable and reaches no parser."""
+    monkeypatch.delenv(PROGRESS_ENV, raising=False)
+    with pytest.raises(SystemExit) as exit_info:
+        MAINS["run_simulation"](args)
+    assert exit_info.value.code == 0
+    assert os.environ[PROGRESS_ENV] == "log"
+    assert "--progress" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (["pkpdsim_toy", "--progress", "quiet"], "the progress 'quiet' is none of"),
+        (["pkpdsim_toy", "--progress=quiet"], "the progress 'quiet' is none of"),
+        (["pkpdsim_toy", "--progress"], "--progress needs one of"),
+    ],
+)
+def test_a_progress_which_is_no_rendering_is_a_usage_error(
+    args: list[str], message: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        MAINS["run_simulation"](args)
+    assert exit_info.value.code == 2
+    assert message in capsys.readouterr().err
+
+
+def test_the_progress_names_are_the_ones_of_sbmlsim() -> None:
+    """The renderings of the option are those of sbmlsim, where it has them."""
+    progress = pytest.importorskip(
+        "sbmlsim.progress", reason="the sbmlsim release without the progress"
+    )
+    assert PROGRESS_NAMES == progress.NAMES
+    assert PROGRESS_ENV == progress.ENV_NAME
