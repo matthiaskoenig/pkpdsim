@@ -46,9 +46,7 @@ dependencies = [
     # `over_age` stop skipping (tests/pbpk/conftest.py)
     "libroadrunner>=2.11.0",
     # the simulation experiments, their figures and reports, and the fits
-    # 0.17 and 0.18 take over the generic modules of pkpdsim (the consolidation),
-    # until 0.18 is released pkpdsim follows the develop branch, see
-    # `[tool.uv.sources]`
+    # (0.17 and 0.18 took over the generic modules of pkpdsim, the consolidation)
     "sbmlsim>=0.18.0,<0.19",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`)
     "pkpdutils>=1.4.0",
