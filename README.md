@@ -117,7 +117,7 @@ If you use `pkpdsim` please cite the archived software on [Zenodo](https://doi.o
 
 ## Installation
 
-`pkpdsim` requires python >= 3.14, simulates with sbmlsim 0.18 (`sbmlsim>=0.18.0,<0.19`, installed with it) and is available from [pypi](https://pypi.org/project/pkpdsim/):
+`pkpdsim` requires python >= 3.14, simulates with sbmlsim 0.21 (`sbmlsim>=0.21.0`, installed with it) and is available from [pypi](https://pypi.org/project/pkpdsim/). sbmlsim needs a build of the `develop` branch of libroadrunner, which the package index [roadrunner-wheels](https://github.com/matthiaskoenig/roadrunner-wheels) serves, see [Installation](https://matthiaskoenig.github.io/pkpdsim/installation/):
 
 ```bash
 uv add pkpdsim
