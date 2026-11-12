@@ -495,7 +495,7 @@ def _inhibitor_site(
     )
 
 
-def has_turnover(protein: str, ctx: "OrganContext") -> bool:
+def has_turnover(protein: str, ctx: OrganContext) -> bool:
     """Check whether a protein has a turnover state.
 
     A protein has one when a substance of the definition inactivates it
@@ -543,7 +543,7 @@ def turnover_proteins(
     return regulated & used
 
 
-def _activity(protein: str | None, ctx: "OrganContext") -> str:
+def _activity(protein: str | None, ctx: OrganContext) -> str:
     """The factor of the protein on a rate: `f_<protein>`, times `E_<protein>`.
 
     In the liver times the factor of the impairment `fimp_<protein>` of a
@@ -581,7 +581,7 @@ class Inhibitors:
 
 def _inhibitors(
     process: Metabolism | Transport,
-    ctx: "OrganContext",
+    ctx: OrganContext,
     parts: Mapping[str, Parts],
     zone: str | None,
     apical: Apical | None = None,
@@ -597,7 +597,7 @@ def _inhibitors(
 
 def inhibitor_terms(
     process: Metabolism | Transport,
-    ctx: "OrganContext",
+    ctx: OrganContext,
     site: Callable[[Substance], tuple[str, str]],
 ) -> Inhibitors:
     """Get the competitive and the uncompetitive terms of the inhibitors of a process.
@@ -759,7 +759,7 @@ def formula_problems(
 
 def place(
     process: Metabolism | Transport | CustomReaction,
-    ctx: "OrganContext",
+    ctx: OrganContext,
     parts: Mapping[str, Parts],
     capacity: str | None = None,
     zone: str | None = None,
@@ -816,7 +816,7 @@ def place(
     return [_custom(process, ctx, parts, zone)]
 
 
-def _substance(ctx: "OrganContext", sid: str) -> Substance:
+def _substance(ctx: OrganContext, sid: str) -> Substance:
     """Get a substance of the context by id."""
     for s in ctx.substances:
         if s.sid == sid:
@@ -826,7 +826,7 @@ def _substance(ctx: "OrganContext", sid: str) -> Substance:
 
 def rate_law(
     process: Metabolism | Transport,
-    ctx: "OrganContext",
+    ctx: OrganContext,
     cu: str,
     capacity: str | None,
     inhibitors: Inhibitors,
@@ -1198,7 +1198,7 @@ def in_zone(text: str, zone: str | None) -> str:
 
 def _metabolism(
     process: Metabolism,
-    ctx: "OrganContext",
+    ctx: OrganContext,
     parts: Mapping[str, Parts],
     capacity: str | None,
     zone: str | None,
@@ -1276,7 +1276,7 @@ def _metabolism(
 
 def _transport(
     process: Transport,
-    ctx: "OrganContext",
+    ctx: OrganContext,
     parts: Mapping[str, Parts],
     capacity: str | None,
     zone: str | None,
@@ -1351,7 +1351,7 @@ def _transport(
 
 
 def zone_ids(
-    ctx: "OrganContext",
+    ctx: OrganContext,
     parts: Mapping[str, Parts],
     zone: str,
     extra: Iterable[str] = (),
@@ -1423,7 +1423,7 @@ def _in_zone(expression: str, mapping: Mapping[str, str]) -> str:
 
 def _custom(
     process: CustomReaction,
-    ctx: "OrganContext",
+    ctx: OrganContext,
     parts: Mapping[str, Parts],
     zone: str | None = None,
 ) -> Reaction:

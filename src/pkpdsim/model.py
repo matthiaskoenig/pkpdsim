@@ -47,12 +47,14 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self, override
 
 from pydantic import model_validator
+from sbmlsim.engine import JitOptimization
 from sbmlsim.plot import FigureSettings as SbmlsimFigureSettings
 from sbmlsim.project import (
     CredibilitySettings,
@@ -86,6 +88,28 @@ RUN_WORKERS = 1
 DEFAULT_SIMULATOR = SimulatorSettings(
     absolute_tolerance=1e-10, relative_tolerance=1e-10
 )
+
+#: the optimization level the JIT compiles the models of a model with which
+#: names none (`SimulatorSettings.jit_optimization` of sbmlsim, whose own
+#: default is `O2`): a model of the PBPK library has large initial
+#: assignments, which `O0` compiles four to five times faster (the reference
+#: models of the tests in 7 to 11 s instead of 28 to 57 s, libroadrunner 2.11
+#: on linux), while it integrates at most a few percent slower, so the
+#: optimization pays for itself only after tens of thousands of integrations
+#: of the model in the process which compiled it; a model whose fits simulate
+#: that much names `O2` or `O3` itself. `O0` gives the results of roadrunner's
+#: default JIT bitwise, the other levels differ from them in the last bits
+#: (`JitOptimization` of sbmlsim), so a run at another level moves the results
+#: of a model by about the tolerance of its integrator.
+DEFAULT_JIT_OPTIMIZATION: JitOptimization = JitOptimization.O0
+
+#: the environment variable of sbmlsim which names the level of a model loaded
+#: without one: it names the level of a model which names none, instead of
+#: `DEFAULT_JIT_OPTIMIZATION`. The name is `JIT_OPTIMIZATION_VARIABLE` of
+#: `sbmlsim.model.model_roadrunner`, written out so that this module does not
+#: import the module which resolves a level, as `PKPDModel.load_roadrunner`
+#: imports it where it is used; a test checks that the two agree
+JIT_OPTIMIZATION_VARIABLE = "SBMLSIM_JIT_OPTIMIZATION"
 
 #: the fields of the metadata of the fit mappings (`PKPDMappingMetaData`)
 #: which a domain of a context of use can claim
@@ -470,6 +494,34 @@ def _release(data: dict[str, Any]) -> None:
         data["release"] = dataclasses.replace(release, archive=relative)
 
 
+def _simulator(data: dict[str, Any]) -> None:
+    """Give the settings of the simulator of a model the level of pkpdsim.
+
+    The level of the settings (`SimulatorSettings.jit_optimization`) is the
+    level of everything which compiles a model of the model (the experiments
+    of a run, the problems of its fits and every worker of a pool, the tests
+    and `pkpdsim-verify`), so it is resolved once, when the model is created:
+    settings which name no level get `DEFAULT_JIT_OPTIMIZATION`, unless
+    `JIT_OPTIMIZATION_VARIABLE` names one, which sbmlsim reads whenever it
+    loads a model without a level.
+
+    Args:
+        data: the keywords of the model, changed in place.
+    """
+    if os.environ.get(JIT_OPTIMIZATION_VARIABLE):
+        return
+    # an explicit `simulator=None` is neither, so it is left to the validation
+    # of the field, which refuses it
+    settings = data.get("simulator", DEFAULT_SIMULATOR)
+    if isinstance(settings, SimulatorSettings):
+        if settings.jit_optimization is None:
+            data["simulator"] = settings.model_copy(
+                update={"jit_optimization": DEFAULT_JIT_OPTIMIZATION}
+            )
+    elif isinstance(settings, Mapping) and settings.get("jit_optimization") is None:
+        data["simulator"] = {**settings, "jit_optimization": DEFAULT_JIT_OPTIMIZATION}
+
+
 class PKPDModel(Project):
     """A PBPK/PD model: what the commands, the verification and the tests need.
 
@@ -500,6 +552,11 @@ class PKPDModel(Project):
     A keyword and its field are not given together. A model is a frozen
     pydantic model: `replace` gives a changed copy, by the names of the
     fields.
+
+    Everything which compiles a model of the model does it at the optimization
+    level of its simulator settings; a model which names no level is created
+    with `DEFAULT_JIT_OPTIMIZATION`, the level of pkpdsim, unless
+    `JIT_OPTIMIZATION_VARIABLE` names one.
 
     Attributes:
         archive_path: the COMBINE archive the factory creates, linked by the
@@ -606,6 +663,7 @@ class PKPDModel(Project):
         _directories(data)
         _actions(data)
         _release(data)
+        _simulator(data)
         return data
 
     @model_validator(mode="after")

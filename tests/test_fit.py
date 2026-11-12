@@ -35,6 +35,7 @@ from pkpdsim.metadata import (
     SamplingSite,
     Tissue,
 )
+from pkpdsim.model import DEFAULT_JIT_OPTIMIZATION
 from pkpdsim_toy import DATA_PATHS, MODEL, TOY_PATH
 from pkpdsim_toy.experiments.decay import ToyDecay
 
@@ -210,7 +211,7 @@ def test_a_worker_loads_the_models_at_the_level_of_the_model(
     assert levels == ("O0", None, "O0")
     # nothing of the level is left in the process
     assert JIT_VARIABLE not in os.environ
-    # a model without a level gives its definitions without one
-    plain = MODEL.load_fit_definitions()["DECAY"]
-    assert plain.jit_optimization is None
-    assert plain.problem(opid="default").jit_optimization == "O2"
+    # a model which names no level gives its definitions at the level of pkpdsim
+    plain = MODEL.replace(simulator=SimulatorSettings()).load_fit_definitions()["DECAY"]
+    assert plain.jit_optimization == DEFAULT_JIT_OPTIMIZATION
+    assert plain.problem(opid="default").jit_optimization == "O0"

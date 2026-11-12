@@ -296,16 +296,28 @@ def _release(study_folder: Path) -> tuple[date | None, str | None]:
     return _date(release.get("date")), None if pkdb_id is None else str(pkdb_id)
 
 
+#: the seconds a git command of a study folder may take, after which the folder
+#: counts as no checkout: a command which does not return (a lock of another
+#: process, a repository on a file system which does not answer) must not stop
+#: the collection of the studies
+GIT_TIMEOUT = 30.0
+
+
 def _git(folder: Path, *args: str) -> str | None:
-    """Get the output of a git command in a folder, `None` if it fails."""
+    """Get the output of a git command in a folder, `None` if it fails.
+
+    A command which fails, which is not found or which takes longer than
+    `GIT_TIMEOUT` gives `None`.
+    """
     try:
         result = subprocess.run(
             ["git", "-C", str(folder), *args],
             capture_output=True,
             text=True,
             check=False,
+            timeout=GIT_TIMEOUT,
         )
-    except OSError:
+    except OSError, subprocess.SubprocessError:
         return None
     return result.stdout.strip() if result.returncode == 0 else None
 

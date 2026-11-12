@@ -148,7 +148,7 @@ def _model(
     return build(d, tmp_path / sid).flat_path
 
 
-def _load(path: Path, **changes: float) -> "roadrunner.RoadRunner":
+def _load(path: Path, **changes: float) -> roadrunner.RoadRunner:
     """Load a model with changes before its initialization, tight tolerances."""
     r = individual(path, **changes)
     r.integrator.absolute_tolerance = 1e-12
@@ -156,17 +156,17 @@ def _load(path: Path, **changes: float) -> "roadrunner.RoadRunner":
     return r
 
 
-def _urine_rate(r: "roadrunner.RoadRunner") -> float:
+def _urine_rate(r: roadrunner.RoadRunner) -> float:
     """The rate of the urinary excretion (mmole/min), out of the collecting duct."""
     return r[_kidney(ids.tubule_reaction(S, "cd"))]
 
 
-def _kidney_plasma(r: "roadrunner.RoadRunner") -> float:
+def _kidney_plasma(r: roadrunner.RoadRunner) -> float:
     """The plasma concentration of the kidney (mM), `KI__Cpl_<s>`."""
     return r[f"[{_kidney(ids.species(Part.PLASMA, S))}]"]
 
 
-def _steady(r: "roadrunner.RoadRunner") -> None:
+def _steady(r: roadrunner.RoadRunner) -> None:
     """Run the infusion into its steady state."""
     r[ids.infusion_rate(S)] = INFUSION
     r.simulate(0, STEADY, 2)
@@ -319,7 +319,7 @@ def test_no_secretion_no_reabsorption_equals_fu_gfr(
     )
 
 
-def _effective_secretion(r: "roadrunner.RoadRunner", k: float) -> float:
+def _effective_secretion(r: roadrunner.RoadRunner, k: float) -> float:
     """The secretion clearance on the unbound plasma concentration of the kidney (l/min).
 
     At steady state the unbound drug passes from plasma to interstitium

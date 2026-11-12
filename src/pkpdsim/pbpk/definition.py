@@ -259,7 +259,7 @@ class PBPKDefinition:
         object.__setattr__(self, "turnover", FrozenMap(self.turnover))
 
     @classmethod
-    def combine(cls, *definitions: "PBPKDefinition", sid: str) -> "PBPKDefinition":
+    def combine(cls, *definitions: PBPKDefinition, sid: str) -> PBPKDefinition:
         """Couple the definitions of several packages into one physiology.
 
         The substances, the chemistry, the routes, the PD components, the
@@ -901,7 +901,7 @@ def _union[T](
     return list(result.values())
 
 
-def _creators(definitions: Iterable["PBPKDefinition"]) -> list[Creator]:
+def _creators(definitions: Iterable[PBPKDefinition]) -> list[Creator]:
     """The creators of several definitions, each person once, in order.
 
     A sbmlutils `Creator` compares and hashes by value: two creators are the
@@ -912,7 +912,7 @@ def _creators(definitions: Iterable["PBPKDefinition"]) -> list[Creator]:
 
 def _merge_variants(
     sid: str, variants: Sequence[Variants]
-) -> dict[Organ, "str | OrganComponent"]:
+) -> dict[Organ, str | OrganComponent]:
     """The organ variants of several definitions.
 
     Raises:

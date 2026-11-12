@@ -232,7 +232,7 @@ class Pregnancy:
             )
 
 
-def _check(definition: "PBPKDefinition") -> None:
+def _check(definition: PBPKDefinition) -> None:
     """Check that a definition may be pregnant.
 
     Raises:
@@ -266,7 +266,7 @@ def _check(definition: "PBPKDefinition") -> None:
         )
 
 
-def pregnancy_physiology_factors(definition: "PBPKDefinition") -> dict[str, str]:
+def pregnancy_physiology_factors(definition: PBPKDefinition) -> dict[str, str]:
     """The factors of the pregnancy on the quantities of the physiology.
 
     Args:
@@ -395,7 +395,7 @@ def _unit_objects() -> list[Sbase]:
     ]
 
 
-def _substance_objects(definition: "PBPKDefinition") -> list[Sbase]:
+def _substance_objects(definition: PBPKDefinition) -> list[Sbase]:
     """The species of the placenta and the fetus and their exchange."""
     objects: list[Sbase] = []
     plasma_flow = f"({ids.Q_PLACENTA} * (1 dimensionless - {ids.HCT}))"
@@ -503,7 +503,7 @@ def _substance_objects(definition: "PBPKDefinition") -> list[Sbase]:
     return objects
 
 
-def pregnancy_objects(definition: "PBPKDefinition") -> list[Sbase]:
+def pregnancy_objects(definition: PBPKDefinition) -> list[Sbase]:
     """The gestational age, the factors, the masses and the fetoplacental unit.
 
     Args:

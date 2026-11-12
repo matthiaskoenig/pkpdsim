@@ -4,7 +4,7 @@ This file provides guidance when working with code in this repository.
 
 ## Project
 
-`pkpdsim` is a library for physiologically based pharmacokinetic and pharmacodynamic (PBPK/PD) models in SBML: a standard physiology at its centre, the substances, chemistry, routes and observers of a model on top of it, and the simulation experiments, fits, scans, uncertainty and credibility of sbmlsim on top of those. The models of [pkdb_models](https://github.com/matthiaskoenig/pkdb_models) are being rebuilt from it, so that the folder of a model imports nothing but itself and released packages ([pkdb_models#95](https://github.com/matthiaskoenig/pkdb_models/issues/95)). A library with the console scripts `pkpdsim-verify`, `pkpd_release` and the five commands of the models, `run_simulation`, `run_fit`, `run_report`, `run_identifiability` and `run_credibility`, which take the dotted name of a model package first. Requires python >= 3.14 (tested on 3.14 and 3.15), packaged with hatchling (version is read from `src/pkpdsim/__init__.py`).
+`pkpdsim` is a python package with the building blocks shared by physiologically based pharmacokinetic and pharmacodynamic (PBPK/PD) models in SBML, i.e., the models of [pkdb_models](https://github.com/matthiaskoenig/pkdb_models): what these models share moves here, so that the folder of a model imports nothing but itself and released packages ([pkdb_models#95](https://github.com/matthiaskoenig/pkdb_models/issues/95)). The five model commands take the dotted name of a model package first.
 
 ## Commands
 
@@ -15,16 +15,10 @@ uv run pre-commit install
 uv lock                                  # after every change of a dependency in pyproject.toml
 
 # tests
-pytest                                   # all tests, in parallel with pytest-xdist
-pytest -n 0                              # in one process, e.g. for --pdb
-pytest tests/test_package.py             # single file
-pytest tests/test_package.py::test_version  # single test
 tox r -e py3.14                          # single tox env (py3.14, py3.15 available)
 tox run-parallel                         # full matrix + ty, from uv.lock (runner uv-venv-lock-runner of tox-uv, extra dev), run before opening a pull request
 
 # lint / format / types
-ruff check
-ruff format
 tox -e ty                       # ty type check (config in [tool.ty] in pyproject.toml)
 uv run ty check                 # same check, straight from the working tree
 
@@ -34,11 +28,11 @@ uv run python scripts/llms_txt.py
 uv run zensical serve
 ```
 
-`develop` is the default branch and takes every change through a pull request; direct pushes are rejected by the rulesets in `.github/rulesets/` (applied with `.github/rulesets/apply.sh`), which require the `tests`, `ruff`, `ty` and `docs` checks. Continuous integration is kept minimal: `tests` runs only `py3.14`, on linux, macos and windows, every workflow cancels a superseded run (`cancel-in-progress: true`), uv caches packages and interpreters, dependabot runs monthly. Python 3.15 runs only locally. `main` only tracks the latest release and is fast-forwarded by the `sync-main` job of the release workflow, never by hand.
+`develop` is the default branch and takes every change through a pull request; direct pushes are rejected by the rulesets in `.github/rulesets/`. Python 3.15 runs only locally. `main` only tracks the latest release and is fast-forwarded by the `sync-main` job of the release workflow, never by hand.
 
-Release steps are in `docs/development.md`: the release is prepared on a branch, `uvx bump-my-version bump [dev|major|minor|patch]` updates `src/pkpdsim/__init__.py`, `CITATION.cff` and `tests/test_package.py` and commits without tagging, and the tag (a plain version, `0.1.0`) is created on `develop` after the pull request was merged, which triggers the release job of `ci-cd.yml`: PyPI through the trusted publisher of the GitHub environment `pypi`, the GitHub release from `release-notes/<version>.md` (archived by Zenodo) and the fast-forward of `main`.
+Release steps are in `docs/development.md`: the release is prepared on a branch and the tag (a plain version, `0.1.0`) is created on `develop` only after the pull request was merged, which triggers the release job of `ci-cd.yml`.
 
-Documentation is [Zensical](https://zensical.org/): markdown sources in `docs/`, configured in `zensical.toml`, built into the gitignored `site/`. The API reference is rendered from the docstrings by mkdocstrings; a page in `docs/api/` is a `::: pkpdsim.<module>` directive per module, with a line of prose where a module is a shim which re-exports another one. `scripts/llms_txt.py` runs after the build and writes `llms.txt`, `llms-full.txt` and the markdown of every page into `site/`. The pages of the PBPK library (`docs/pbpk/`) have generated tables (`scripts/pbpk_tables.py`), tested equations and inline SVG diagrams, see `pbpk/` below.
+Documentation is [Zensical](https://zensical.org/) (`zensical.toml`, built into the gitignored `site/`); `scripts/llms_txt.py` runs after the build. A page in `docs/api/` is just `::: pkpdsim.<module>`. The pages of the PBPK library (`docs/pbpk/`) have generated tables, tested equations and inline SVG diagrams, see `pbpk/` below.
 
 ## Architecture
 
@@ -53,8 +47,7 @@ The module by module notes live next to this file; read the one that covers what
 
 ## Conventions
 
-- Type checking is done with [ty](https://docs.astral.sh/ty/). The optional extra `amici` (the extra `amici` of sbmlsim, built from source, not in the dev environment) is imported by sbmlsim only, pkpdsim never imports it. `[tool.ty.terminal] error-on-warning = true` means warnings fail the check, so the tree must stay at zero diagnostics. Suppress a diagnostic with a rule-specific `# ty: ignore[rule-name]`, never a blanket `# type: ignore`. ty also runs as a pre-commit hook (`--extra dev`).
-- Linting is ruff with the full rule set of the maintainer's packages including the annotations (`ANN`), see `.ruff.toml`; every module, class and function of the package carries full type annotations and a google style docstring (ruff `D`), `tests/` and `scripts/` are exempt from the docstring rules.
+- Type checking is done with [ty](https://docs.astral.sh/ty/). The optional extra `amici` (the extra `amici` of sbmlsim, built from source, not in the dev environment) is imported by sbmlsim only, pkpdsim never imports it. `[tool.ty.terminal] error-on-warning = true` means warnings fail the check, so the tree must stay at zero diagnostics. Suppress a diagnostic with a rule-specific `# ty: ignore[rule-name]`, never a blanket `# type: ignore`.
 - Modules get their logger with `logging.getLogger(__name__)` and the package never configures logging; the console output of `collect_tsv_files` is the exception, it reports the copies of a script, and its findings for the curation are `CollectionWarning`s (`warnings.warn`).
 - A dependency is only added for an import of the package; the floors in `pyproject.toml` are the releases the package was tested with. The exception is a floor of a security fix of a transitive dependency: `certifi>=2026.10.19` (GHSA-6q48-6c7w-9gw2, the CA bundle of requests, which sbmlutils and pymetadata use).
 - `tests/conftest.py` loads the registry of identifiers.org, which sbmlutils resolves annotations with, into the cache of pymetadata once in the controller of the session; without it the parallel workers download it at the same time and the replace of the cache file fails on Windows (matthiaskoenig/pymetadata#102).

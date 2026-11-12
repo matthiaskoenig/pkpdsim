@@ -22,7 +22,7 @@ from pkpdsim.pbpk.sex_differences import (
     sex_factor,
 )
 
-from .conftest import definition, individuals, over_age
+from .conftest import definition, individuals
 
 AGES = (0.0, 1.0, 5.0, 10.0, 12.0, 14.0, 15.0, 16.0, 18.0, 20.0, 35.0, 45.0)
 AGES += (50.0, 55.0, 60.0, 65.0, 80.0, 100.0)
@@ -113,7 +113,6 @@ def test_the_brain_of_the_women_takes_more_of_the_cardiac_output() -> None:
         )
 
 
-@over_age
 def test_the_model_computes_the_factors(builds: dict[Sex, Path]) -> None:
     """Every factor of the female build is its curve of python at every age, to 1e-12."""
     at = individuals(builds[Sex.FEMALE])
@@ -127,7 +126,6 @@ def test_the_model_computes_the_factors(builds: dict[Sex, Path]) -> None:
             assert r[pid] == pytest.approx(curve.value(age), rel=1e-12), (pid, age)
 
 
-@over_age
 def test_the_male_build_has_no_factor_of_the_sex(builds: dict[Sex, Path]) -> None:
     """No parameter `fsex_` is in the male build."""
     model = libsbml.readSBMLFromFile(str(builds[Sex.MALE])).getModel()
@@ -148,7 +146,6 @@ def _sizes(age: float) -> list[tuple[float, float]]:
     return sizes
 
 
-@over_age
 def test_women_and_men_of_the_same_size_have_the_same_cardiac_index(
     builds: dict[Sex, Path],
 ) -> None:
@@ -168,7 +165,6 @@ def test_women_and_men_of_the_same_size_have_the_same_cardiac_index(
             assert female / male == pytest.approx(1.0, abs=0.015), (age, bw, height)
 
 
-@over_age
 def test_the_women_empty_a_meal_slower(builds: dict[Sex, Path]) -> None:
     """The fed transit of the stomach of a woman of 35 years is 1.2 times; fasted alike."""
     women, men = individuals(builds[Sex.FEMALE]), individuals(builds[Sex.MALE])
@@ -196,7 +192,6 @@ def _rates(path: Path) -> list[str]:
     ]
 
 
-@over_age
 def test_the_colonic_transit_of_the_women_is_slower(builds: dict[Sex, Path]) -> None:
     """Every transit of a segment of the large intestine reads the factor of the sex."""
     pid = sex_factor(COLON_TRANSIT)

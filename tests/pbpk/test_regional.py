@@ -28,9 +28,7 @@ END, POINTS = 2 * 24 * 60.0, 2881
 """Two days at one point per minute: the AUC of the simple drug, fast enough for a test."""
 
 
-def _model(
-    tmp_path: Path, routes: list[Route] | None = None
-) -> "roadrunner.RoadRunner":
+def _model(tmp_path: Path, routes: list[Route] | None = None) -> roadrunner.RoadRunner:
     """The simple drug with an oral solution and a profile of the lower ileum and the colon."""
     d = definition(
         routes=routes or [Route.oral_solution(S)],

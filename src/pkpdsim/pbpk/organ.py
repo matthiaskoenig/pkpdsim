@@ -221,7 +221,7 @@ class GutComponent(OrganComponent, Protocol):
         """The organs the component replaces, the small intestine first."""
         ...
 
-    def body_objects(self, definition: "PBPKDefinition") -> list[Sbase]:
+    def body_objects(self, definition: PBPKDefinition) -> list[Sbase]:
         """Get the parameters of the top model which the component reads."""
         ...
 

@@ -334,7 +334,7 @@ CARBON = {"glc": 6, "glyc": 6, "pyr": 3, "lac": 3, "co2": 1, "hco3": 1}
 
 
 def _totals(
-    r: "roadrunner.RoadRunner", cells: float, vascular: float
+    r: roadrunner.RoadRunner, cells: float, vascular: float
 ) -> dict[str, float]:
     def c(q: str, site: str) -> float:
         sid = ids.species(q, site)

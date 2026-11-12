@@ -548,6 +548,9 @@ def test_the_fits_compile_at_the_level_of_the_model(
 
     The problem carries its level into the workers of a pool
     (`tests/test_fit.py::test_a_worker_loads_the_models_at_the_level_of_the_model`).
+    A model which names no level is created with the level of pkpdsim, unless
+    the variable of sbmlsim is set in the process which creates it: then the
+    model names none and sbmlsim resolves the variable when it loads it.
     """
     import sbmlsim.fit.cli
 
@@ -568,10 +571,12 @@ def test_the_fits_compile_at_the_level_of_the_model(
     with pytest.raises(_Stop):
         fit_command(model, ["--runs", "1", "--output_dir", str(tmp_path / "a")])
     assert seen == ["O0"]
-    # a model without a level takes the level of sbmlsim
-    as_model(MODEL)
+    # a model created with the variable set names no level, so the level of the
+    # environment is the one of its fits
+    plain = as_model(MODEL.replace(simulator=SimulatorSettings()))
+    assert plain.simulator.jit_optimization is None
     with pytest.raises(_Stop):
-        fit_command(MODEL, ["--runs", "1", "--output_dir", str(tmp_path / "b")])
+        fit_command(plain, ["--runs", "1", "--output_dir", str(tmp_path / "b")])
     assert seen == ["O0", "O3"]
 
 

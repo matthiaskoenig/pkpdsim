@@ -551,7 +551,7 @@ def _constant(
     ]
 
 
-def _composition(definition: "PBPKDefinition") -> list[Sbase]:
+def _composition(definition: PBPKDefinition) -> list[Sbase]:
     """The lean body weight, the fat mass, the waist and the two depots."""
     sex = definition.sex
     share = visceral_share(sex)
@@ -831,7 +831,7 @@ def _weight_change(adipose: Adipose) -> list[Sbase]:
     ]
 
 
-def _check(definition: "PBPKDefinition") -> None:
+def _check(definition: PBPKDefinition) -> None:
     """Check that a definition may have the adipose model.
 
     Raises:
@@ -846,7 +846,7 @@ def _check(definition: "PBPKDefinition") -> None:
         )
 
 
-def adipose_objects(definition: "PBPKDefinition") -> list[Sbase]:
+def adipose_objects(definition: PBPKDefinition) -> list[Sbase]:
     """The body composition and the change of the body weight of a definition.
 
     The factors of obesity are not here: they enter the products `fimp_<id>`
@@ -874,7 +874,7 @@ def adipose_objects(definition: "PBPKDefinition") -> list[Sbase]:
     return objects
 
 
-def adipose_dynamic(definition: "PBPKDefinition") -> tuple[str, ...]:
+def adipose_dynamic(definition: PBPKDefinition) -> tuple[str, ...]:
     """The ids which change during a simulation of a model whose weight changes.
 
     The body weight is a state (a rate rule), so every quantity of the

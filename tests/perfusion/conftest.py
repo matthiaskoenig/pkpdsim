@@ -150,7 +150,7 @@ def zone_model(
     return create_model(model, filepath=path, sbml_level=3, sbml_version=2)
 
 
-def load_zone(path: Path) -> "roadrunner.RoadRunner":
+def load_zone(path: Path) -> roadrunner.RoadRunner:
     """Load a written zone model at `O0` with tight integrator tolerances."""
     r = compiled(path)
     r.integrator.absolute_tolerance = 1e-14
@@ -233,6 +233,6 @@ def generic_definition(
     )
 
 
-def load_circuit(path: Path) -> "roadrunner.RoadRunner":
+def load_circuit(path: Path) -> roadrunner.RoadRunner:
     """Load a built circuit at `O0` with tight integrator tolerances."""
     return load_zone(path)

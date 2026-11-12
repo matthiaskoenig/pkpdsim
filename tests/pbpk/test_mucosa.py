@@ -87,7 +87,7 @@ def _definition(
     sid: str,
     k: float,
     *,
-    mucosa_ps: "Mapping[str, float] | None" = None,
+    mucosa_ps: Mapping[str, float] | None = None,
     per_volume: bool = False,
     single: bool = True,
 ) -> PBPKDefinition:
@@ -140,7 +140,7 @@ def _processes(segments: Sequence[str | None]) -> list[str]:
 
 
 def _qgut(
-    r: "roadrunner.RoadRunner", clperm: float, segments: Sequence[str | None]
+    r: roadrunner.RoadRunner, clperm: float, segments: Sequence[str | None]
 ) -> float:
     """The hybrid flow of the Qgut model from the model's physiology.
 
@@ -160,7 +160,7 @@ def _qgut(
 
 
 def _availability(
-    r: "roadrunner.RoadRunner", segments: Sequence[str | None], c: float = 1e-3
+    r: roadrunner.RoadRunner, segments: Sequence[str | None], c: float = 1e-3
 ) -> float:
     """The gut availability of the absorbed drug, from the fluxes of the mucosa.
 
@@ -178,7 +178,7 @@ def _availability(
 
 
 def _systemic_blood_clearance(
-    r: "roadrunner.RoadRunner", segments: Sequence[str | None], dose: float = 1.0
+    r: roadrunner.RoadRunner, segments: Sequence[str | None], dose: float = 1.0
 ) -> float:
     """The clearance of the gut on the arterial blood of an iv dose (l/hr).
 

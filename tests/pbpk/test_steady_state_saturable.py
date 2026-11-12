@@ -112,7 +112,7 @@ def _definition(s: Substance) -> PBPKDefinition:
     )
 
 
-def _drift(r: "roadrunner.RoadRunner") -> dict[str, float]:
+def _drift(r: roadrunner.RoadRunner) -> dict[str, float]:
     """The largest relative change of every species but the urine over a day."""
     sids = [s for s in r.model.getFloatingSpeciesIds() if s != ids.urine(S)]
     start = np.array([r[f"[{sid}]"] for sid in sids])

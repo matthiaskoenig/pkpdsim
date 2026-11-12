@@ -164,7 +164,7 @@ def _starts(s: Substance, variants: Variants) -> dict[str, Formula]:
     }
 
 
-def _drift(r: "roadrunner.RoadRunner") -> dict[str, float]:
+def _drift(r: roadrunner.RoadRunner) -> dict[str, float]:
     """The largest relative change of every species but the urine over a day."""
     sids = [s for s in r.model.getFloatingSpeciesIds() if s != ids.urine(S)]
     start = np.array([r[f"[{sid}]"] for sid in sids])
@@ -233,7 +233,7 @@ def test_the_arm_vein_of_the_steady_state_is_the_observer(tmp_path: Path) -> Non
         assert r[ids.arm(S)] == pytest.approx(_evaluate(r, formula), rel=1e-12)
 
 
-def _evaluate(r: "roadrunner.RoadRunner", formula: str) -> float:
+def _evaluate(r: roadrunner.RoadRunner, formula: str) -> float:
     """Evaluate a formula over the ids of a loaded model."""
     import libsbml
 

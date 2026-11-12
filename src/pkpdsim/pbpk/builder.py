@@ -344,7 +344,7 @@ def compose(definition: PBPKDefinition) -> Model:
     )
 
 
-def _delta_objects(definition: PBPKDefinition, top: "_Top") -> list[Sbase]:
+def _delta_objects(definition: PBPKDefinition, top: _Top) -> list[Sbase]:
     """The bases and the changes of the observers of `PBPKDefinition.deltas`.
 
     For every observer `<id>` (a parameter of the top model with an
@@ -460,7 +460,7 @@ def observer_problems(definition: PBPKDefinition) -> list[str]:
     )
 
 
-def _exposed_observers(definition: PBPKDefinition, top: "_Top") -> list[Observer]:
+def _exposed_observers(definition: PBPKDefinition, top: _Top) -> list[Observer]:
     """The observers of a definition which read the exposed elements of the organs.
 
     An element of an organ which an observer names by its flat id
@@ -479,7 +479,7 @@ def _observer_symbols(observers: Iterable[Observer]) -> dict[str, set[str]]:
     return {o.sid: formula_symbols(o.formula) for o in observers}
 
 
-def _constant_observers(observers: Sequence[Observer], top: "_Top") -> set[str]:
+def _constant_observers(observers: Sequence[Observer], top: _Top) -> set[str]:
     """The observers which read constants only, directly or through other observers.
 
     A state is what changes during a simulation: a species, the variable of
@@ -511,7 +511,7 @@ def _constant_observers(observers: Sequence[Observer], top: "_Top") -> set[str]:
 
 def _observer_problems(
     observers: Sequence[Observer],
-    top: "_Top",
+    top: _Top,
     model_definitions: list[ModelDefinition],
     submodels: list[Submodel],
 ) -> list[str]:
@@ -571,7 +571,7 @@ def _observer_problems(
 
 def _body(
     definition: PBPKDefinition,
-) -> tuple["_Top", list[ModelDefinition], list[Submodel], list[ReplacedElement]]:
+) -> tuple[_Top, list[ModelDefinition], list[Submodel], list[ReplacedElement]]:
     """Compose the body of a definition: everything but its own observers.
 
     Returns:
@@ -1147,7 +1147,7 @@ def _formula_cycles(objects: Iterable[Sbase]) -> list[str]:
 
 def _parameter_problems(
     definition: PBPKDefinition,
-    top: "_Top",
+    top: _Top,
     model_definitions: Iterable[ModelDefinition],
     organ_models: Iterable[ModelDefinition],
     submodels: Iterable[Submodel],

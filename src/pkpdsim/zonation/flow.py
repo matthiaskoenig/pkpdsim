@@ -563,7 +563,7 @@ def leaky_tube(
 
 
 def face_flows(
-    settings: "ZonationSettings", geo: SinusoidGeometry, mass: Q
+    settings: ZonationSettings, geo: SinusoidGeometry, mass: Q
 ) -> tuple[float, ...]:
     """Get the flow of the liver at every face of the zones of a pressure flow (l/min).
 
@@ -681,7 +681,7 @@ def assignment_rule(
 
 
 def flow_objects(
-    settings: "ZonationSettings", geo: SinusoidGeometry, mass: Q
+    settings: ZonationSettings, geo: SinusoidGeometry, mass: Q
 ) -> list[Parameter | InitialAssignment | AssignmentRule]:
     """Get the parameters and initial assignments of the flow of the liver.
 
@@ -765,7 +765,7 @@ def _imposed_flow_value(
 
 
 def _pressure_objects(
-    settings: "ZonationSettings",
+    settings: ZonationSettings,
     flow: PressureFlow,
     geo: SinusoidGeometry,
     mass: Q,

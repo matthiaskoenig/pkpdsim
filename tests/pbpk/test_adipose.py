@@ -31,7 +31,7 @@ from pkpdsim.pbpk.values import Formula
 from pkpdsim.sex import Sex
 from pkpdsim.species import Species
 
-from .conftest import definition, individuals, over_age, total_amount
+from .conftest import definition, individuals, total_amount
 
 FLOW_ORGANS = [o for o in Organ if o is not Organ.LUNG]
 """The organs whose flows sum to the cardiac output."""
@@ -500,7 +500,6 @@ def test_a_build_whose_weight_changes_logs_no_sbmlutils_warning(
     ] == []
 
 
-@over_age
 def test_the_visceral_share_of_a_build_over_age_is_a_curve_of_the_age(
     tmp_path: Path,
 ) -> None:
@@ -516,7 +515,6 @@ def test_the_visceral_share_of_a_build_over_age_is_a_curve_of_the_age(
         assert r.getValue(ids.F_VISCERAL) == pytest.approx(share.value(age), rel=1e-9)
 
 
-@over_age
 def test_the_waist_of_a_build_over_age_reads_the_age(tmp_path: Path) -> None:
     """The prediction of the waist carries the age term of a build over age."""
     path = build(

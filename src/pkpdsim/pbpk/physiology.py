@@ -431,7 +431,7 @@ class _Physiology:
         self,
         sex: Sex,
         factors: Mapping[str, str],
-        population: "Population",
+        population: Population,
         default: bool,
         over_age: bool = False,
     ) -> None:

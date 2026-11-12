@@ -97,7 +97,7 @@ def _value(experiment: PBPKSimulationExperiment, task: str, sid: str) -> float:
     return float(np.asarray(experiment.results[task].ds[sid]).ravel()[0])
 
 
-def _ml(gfr: "Quantity") -> float:
+def _ml(gfr: Quantity) -> float:
     """Get a GFR in ml/min."""
     return float(gfr.m_as("ml/min"))
 

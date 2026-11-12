@@ -199,7 +199,7 @@ class Circadian:
                 )
 
 
-def circadian_keys(definition: "PBPKDefinition") -> dict[str, Rhythm]:
+def circadian_keys(definition: PBPKDefinition) -> dict[str, Rhythm]:
     """The rhythms of a definition by the key of their factor.
 
     The rhythms of the physiology and of the proteins which a metabolism or
@@ -224,7 +224,7 @@ def circadian_keys(definition: "PBPKDefinition") -> dict[str, Rhythm]:
     return {k: r for k, r in found.items() if k in c.rhythms}
 
 
-def circadian_ids(definition: "PBPKDefinition") -> tuple[str, ...]:
+def circadian_ids(definition: PBPKDefinition) -> tuple[str, ...]:
     """The ids of the factors of a definition, which change during a simulation."""
     return tuple(circadian_factor(k) for k in circadian_keys(definition))
 
@@ -254,7 +254,7 @@ def _parameter(
     )
 
 
-def circadian_objects(definition: "PBPKDefinition") -> list[Sbase]:
+def circadian_objects(definition: PBPKDefinition) -> list[Sbase]:
     """The clock, the time of day and the factors of the rhythms of a definition.
 
     Args:

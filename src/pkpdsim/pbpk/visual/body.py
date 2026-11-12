@@ -336,7 +336,7 @@ class Body:
             every other individual, the cached `reference_body` of its sex.
     """
 
-    def __init__(self, individual: Individual, reference: "Body | None" = None) -> None:
+    def __init__(self, individual: Individual, reference: Body | None = None) -> None:
         """Compute the outline, the layers and the organs."""
         self.individual = individual
         self.sex = Sex(individual.sex).value
@@ -461,7 +461,7 @@ class Body:
             self.cavity_paths[cav] = _trace(m, self.origin)
             self.free[cav] = a_cav - self._covered(layout, scale)
 
-    def _shapes(self, layout: "_Layout", scale: float) -> dict[str, list[np.ndarray]]:
+    def _shapes(self, layout: _Layout, scale: float) -> dict[str, list[np.ndarray]]:
         """The organs of a cavity at a scale: every piece scaled about its centre and moved to its position."""
         return {
             k: [
@@ -471,13 +471,13 @@ class Body:
             for k, v in layout.pieces.items()
         }
 
-    def _covered(self, layout: "_Layout", scale: float) -> float:
+    def _covered(self, layout: _Layout, scale: float) -> float:
         """The area of a cavity which its organs cover at a scale [cm2]."""
         polys = [c for v in self._shapes(layout, scale).values() for c in v]
         im = raster(polys, self.shape, (self.origin[0], self.origin[1]), RES_CM)
         return float((im & layout.cavity).sum() * RES_CM**2)
 
-    def _solve(self, layout: "_Layout", target: float, lo: float, hi: float) -> float:
+    def _solve(self, layout: _Layout, target: float, lo: float, hi: float) -> float:
         """The scale at which the organs cover a target area (bisection on a log scale)."""
         for _ in range(30):
             mid = math.sqrt(lo * hi)

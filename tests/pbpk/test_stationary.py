@@ -164,7 +164,7 @@ def _definition(
     )
 
 
-def _load(d: PBPKDefinition, path: Path, **changes: float) -> "roadrunner.RoadRunner":
+def _load(d: PBPKDefinition, path: Path, **changes: float) -> roadrunner.RoadRunner:
     """Build and load a definition with changes before the simulation, tight tolerances."""
     r = individual(build(d, path).flat_path, **changes)
     r.integrator.absolute_tolerance = 1e-16
@@ -172,7 +172,7 @@ def _load(d: PBPKDefinition, path: Path, **changes: float) -> "roadrunner.RoadRu
     return r
 
 
-def _drift(r: "roadrunner.RoadRunner") -> dict[str, float]:
+def _drift(r: roadrunner.RoadRunner) -> dict[str, float]:
     """The largest relative change of every species but the sinks and of the arm vein over a day."""
     sids = [
         sid
@@ -194,7 +194,7 @@ def _drift(r: "roadrunner.RoadRunner") -> dict[str, float]:
     )
 
 
-def _assert_stationary(r: "roadrunner.RoadRunner") -> None:
+def _assert_stationary(r: roadrunner.RoadRunner) -> None:
     """Every species stays within 1e-12 of its start over a day."""
     moved = {sid: d for sid, d in _drift(r).items() if d > 1e-12}
     assert not moved, moved
@@ -674,6 +674,24 @@ def test_a_pinned_imbalance_warns(tmp_path: Path) -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("error", SteadyStateWarning)
         build(_pinned(), tmp_path / "balanced")
+
+
+def test_the_model_of_a_pinned_build_is_in_the_cache_of_the_library(
+    tmp_path: Path,
+) -> None:
+    """`check_built` compiles the model through the cache, so the next load is free.
+
+    The check of the build reads the rates of the model it built; the
+    equilibration and the validity of the kidney outflow load the same file,
+    which costs seconds to compile, so the check takes it from the cache of
+    the library and leaves it there.
+    """
+    from pkpdsim.pbpk.flat_model import _loaded, loaded_model
+
+    result = build(_pinned(), tmp_path / "cached")
+    misses = _loaded.cache_info().misses
+    loaded_model(result.flat_path)
+    assert _loaded.cache_info().misses == misses
 
 
 # --- the refusals --------------------------------------------------------------------

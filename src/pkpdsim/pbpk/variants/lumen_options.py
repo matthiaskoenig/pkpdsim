@@ -289,7 +289,7 @@ def converted(conversions: Sequence[LumenConversion], luminal: set[str]) -> set[
 
 
 def segment_factor_objects(
-    definition: "PBPKDefinition", profiles: Mapping[str, RegionalAbsorption]
+    definition: PBPKDefinition, profiles: Mapping[str, RegionalAbsorption]
 ) -> list[Sbase]:
     """The factors `f_ka_<seg>_<s>` of the segments of the profiles (not the groups).
 

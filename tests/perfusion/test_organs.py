@@ -50,7 +50,7 @@ def _zones(n: int) -> list[str]:
     return [ids.zone_id(k) for k in range(1, n + 1)]
 
 
-def _perfusate_volume(r: "roadrunner.RoadRunner", n: int) -> float:
+def _perfusate_volume(r: roadrunner.RoadRunner, n: int) -> float:
     """The perfusate in the reservoir, the tubing and the zones (l)."""
     sites = [ids.RESERVOIR, ids.INFLOW, *_zones(n), ids.OUTFLOW]
     return sum(r[ids.volume(s)] for s in sites)
@@ -172,7 +172,7 @@ def test_the_urine_of_a_filtered_marker_is_its_filtered_load(
     assert total + marker == pytest.approx(1.0 * 1.0, rel=1e-9)
 
 
-def _finite_and_positive(r: "roadrunner.RoadRunner", end: float) -> None:
+def _finite_and_positive(r: roadrunner.RoadRunner, end: float) -> None:
     """Simulate to `end` and check every value finite, no species below -1e-9."""
     species = r.model.getFloatingSpeciesIds()
     r.timeCourseSelections = [

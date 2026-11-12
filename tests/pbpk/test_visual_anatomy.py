@@ -9,7 +9,12 @@ from pkpdsim.pbpk import Route
 from pkpdsim.pbpk.visual import palette
 from pkpdsim.pbpk.visual.anatomy import TITLES, AnatomyFigure, anatomy_figure
 from pkpdsim.pbpk.visual.content import ModelContent
-from pkpdsim.pbpk.visual.interactive import CREDIT, ICON_CREDIT, interactive_figure
+from pkpdsim.pbpk.visual.interactive import (
+    CREDIT,
+    ICON_CREDIT,
+    html_page,
+    interactive_figure,
+)
 
 from .conftest import definition
 from .test_figure import seven_substances
@@ -106,6 +111,17 @@ def test_the_interactive_page_has_cards_and_the_credit(tmp_path: Path) -> None:
     assert legend.count("https://github.com/matthiaskoenig/pkpdsim") == 1
     assert legend.count("https://matthiaskoenig.github.io/pkpdsim/pbpk/") == 1
     assert CREDIT in legend
+
+
+def test_a_card_never_ends_the_script_of_the_page() -> None:
+    """The HTML and the line separators of a card are escapes in the script block."""
+    rows = ["</script><img src=x onerror=alert(1)>", "a\u2028b", "x & <b>y</b>"]
+    html = html_page("<svg/>", {"li": rows}, title="t", width=600, legend="l")
+    # the only end of a script element in the page is the end of its block
+    assert html.count("</script") == 1
+    match = re.search(r"const CARDS = (\{.*?\});\n", html, re.S)
+    assert match is not None
+    assert json.loads(match.group(1)) == {"li": rows}
 
 
 def test_the_interactive_schematic_has_process_cards(tmp_path: Path) -> None:

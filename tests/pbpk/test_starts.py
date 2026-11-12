@@ -97,7 +97,7 @@ STARTS: dict[str, object] = {
 """The steady state of the muscle."""
 
 
-def _drift(r: "roadrunner.RoadRunner", end: float = DAY) -> dict[str, float]:
+def _drift(r: roadrunner.RoadRunner, end: float = DAY) -> dict[str, float]:
     """The largest relative change of every floating species over `end` (min)."""
     sids = list(r.model.getFloatingSpeciesIds())
     start = np.array([r[f"[{sid}]"] for sid in sids])

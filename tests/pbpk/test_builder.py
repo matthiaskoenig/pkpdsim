@@ -75,12 +75,12 @@ def _closed(substance: Substance, sid: str = "closed") -> PBPKDefinition:
     )
 
 
-def _build(d: PBPKDefinition, path: Path) -> "roadrunner.RoadRunner":
+def _build(d: PBPKDefinition, path: Path) -> roadrunner.RoadRunner:
     """Build and load a definition."""
     return load(build(d, path))
 
 
-def _drift(r: "roadrunner.RoadRunner", sids: list[str], tend: float = DAY) -> float:
+def _drift(r: roadrunner.RoadRunner, sids: list[str], tend: float = DAY) -> float:
     """The relative change of the amount of substances (species, sinks, doses)."""
 
     def amount() -> float:

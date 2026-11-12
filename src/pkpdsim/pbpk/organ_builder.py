@@ -191,7 +191,7 @@ class OrganBuilder:
         outputs: the outputs of the organ, local id -> id in the body.
     """
 
-    def __init__(self, ctx: "OrganContext", name: str) -> None:
+    def __init__(self, ctx: OrganContext, name: str) -> None:
         """Start the collection of the elements of an organ.
 
         Args:
