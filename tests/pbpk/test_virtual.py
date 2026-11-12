@@ -16,7 +16,7 @@ from pkpdsim.pbpk import (
 )
 from pkpdsim.pbpk.populations import population
 
-from .conftest import definition, individuals, over_age
+from .conftest import definition, individuals
 
 
 def test_the_draws_are_reproducible() -> None:
@@ -103,7 +103,6 @@ def test_the_children_of_a_population_grow() -> None:
     assert mean(infants) < 90.0 < mean(children) < 150.0
 
 
-@over_age
 def test_the_dimension_of_a_sex(tmp_path: Path) -> None:
     """The dimension of a scan has the covariates of the individuals of the sex in the units of the model."""
     vp = virtual_population("white_american_nhanes", 20, ages="child", seed=3)

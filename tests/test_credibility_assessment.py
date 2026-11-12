@@ -81,6 +81,11 @@ SBMLSIM_TEXTS = {
     "assesses it by the pairs of its arms;": (
         "assesses it by the evidence extension of the pairing;"
     ),
+    # the correlation of a propagation comes from the posterior of a fit as well
+    # since sbmlsim 0.20, which added the Laplace posterior as a source
+    "with the correlation of the Fisher information": (
+        "with the correlation of their posterior or Fisher information"
+    ),
 }
 
 

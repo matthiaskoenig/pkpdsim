@@ -36,18 +36,21 @@ keywords = [
 ]
 dependencies = [
     # the factory, the metadata and the console of the models
-    "sbmlutils>=0.17.1",
+    "sbmlutils>=0.17.2",
     # the PBPKO terms of the annotations of a library model (`pkpdsim.pbpk.annotation`)
-    "pymetadata>=0.8.0",
-    # the simulator, the initial values are selections of a roadrunner model; a
-    # build with the physiology over age (`PBPKDefinition.age`) needs the cache
+    "pymetadata>=0.8.3",
+    # the simulator, the initial values are selections of a roadrunner model.
+    # sbmlsim simulates with a build of the branch `develop` of libroadrunner,
+    # which is not on PyPI, so every install names the index of its wheels, see
+    # `[tool.uv.sources]` and the installation page. The build carries the cache
     # of the initial value resolvers (sys-bio/roadrunner#1435), which 2.11.0
-    # lacks: raise the floor when a release carries it and the tests marked
-    # `over_age` stop skipping (tests/pbpk/conftest.py)
-    "libroadrunner>=2.11.0",
+    # lacks, so a build with the physiology over age (`PBPKDefinition.age`)
+    # compiles in seconds instead of minutes and the tests which build one run
+    # on every platform
+    "libroadrunner>=2.11.1.dev655",
     # the simulation experiments, their figures and reports, and the fits
     # (0.17 and 0.18 took over the generic modules of pkpdsim, the consolidation)
-    "sbmlsim>=0.18.0,<0.19",
+    "sbmlsim>=0.21.0",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`)
     "pkpdutils>=1.4.0",
     # the study folders of format 2 of PK-DB, read as `pkdb check` reads them (`pkpdsim.data`)
@@ -133,6 +136,22 @@ markers = [
     "slow: slow tests, deselect with -m \"not slow\"",
     "uncached_build: a test whose PBPK builds validate and flatten, without the cache of the flat models",
 ]
+
+[tool.uv.sources]
+# the development environment, its lock, the continuous integration and tox run
+# on the builds of the branch `develop` of libroadrunner, which sbmlsim requires
+# (`libroadrunner>=2.11.1.dev655`) and which are not on PyPI: a package index of
+# their wheels (matthiaskoenig/roadrunner-wheels, versions `<version>.dev<run>`).
+# A single table and not a list of sources, which tox-uv cannot read. The source
+# is not part of the built package, which carries the requirement above, so an
+# install of pkpdsim names the index as well (docs/installation.md).
+# `uv lock --upgrade-package libroadrunner` moves the lock to the latest build
+libroadrunner = { index = "roadrunner-dev" }
+
+[[tool.uv.index]]
+name = "roadrunner-dev"
+url = "https://matthiaskoenig.github.io/roadrunner-wheels/simple/"
+explicit = true
 
 [tool.ty.environment]
 # the package lives in the src layout, the scripts are a package at the root of
