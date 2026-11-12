@@ -28,6 +28,8 @@ A pull request can only be merged once the four required checks are green:
 
 Continuous integration is kept small: every workflow cancels its running build when a newer commit of the same branch or pull request arrives, uv caches the packages and the interpreters between runs, dependabot proposes its updates once a month, and the matrix tests only python 3.14. Python 3.15 is tested locally, see [Testing](#testing), before a pull request is opened.
 
+Every action of a workflow is pinned by the commit it was reviewed at, with its version in the comment next to it (`actions/checkout@3d3c42e...  # v7.0.1`), since a tag and a branch of an action move: the release job carries the identity of the trusted publisher of pypi (`id-token: write`) and may create a release (`contents: write`), which a tag moved under it would hand to whoever moved it. Dependabot updates the pins and their comments with the other actions once a month.
+
 Further rules of a pull request:
 
 - conversations have to be resolved before the merge

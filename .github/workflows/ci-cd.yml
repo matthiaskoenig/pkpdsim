@@ -36,7 +36,7 @@ jobs:
         shard: [1, 2, 3, 4]
 
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       with:
         persist-credentials: false
     - name: Set up uv and python
@@ -76,11 +76,11 @@ jobs:
       id-token: write  # trusted publishing to PyPI
       contents: write  # create the GitHub release
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       with:
         persist-credentials: false
     - name: Install uv
-      uses: astral-sh/setup-uv@v10.3.3
+      uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
       with:
         python-version: "3.14"
         # a release is built from a clean state, never from a restored cache
@@ -90,11 +90,11 @@ jobs:
     - name: Check the package
       run: uvx twine check dist/*
     - name: Publish to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
+      uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
       with:
         packages-dir: dist
     - name: Create GitHub release
-      uses: softprops/action-gh-release@v3
+      uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3  # v3.0.4
       with:
         body_path: "release-notes/${{ github.ref_name }}.md"
         draft: false
@@ -109,7 +109,7 @@ jobs:
     permissions:
       contents: write  # fast-forward main to the released commit
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       with:
         # a shallow clone cannot be pushed to another branch
         fetch-depth: 0

@@ -1,5 +1,6 @@
 # Keep the GitHub Actions used in the workflows and the locked python dependencies up to date,
-# monthly, since every update pull request runs the checks.
+# monthly, since every update pull request runs the checks. The actions are pinned by commit
+# (see docs/development.md), which dependabot updates together with the version in the comment.
 # See https://docs.github.com/code-security/dependabot/dependabot-version-updates
 version: 2
 updates:
