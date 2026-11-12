@@ -151,6 +151,31 @@ def cards(
     return out
 
 
+def _script_json(value: object) -> str:
+    """Serialize a value as the JSON of a `<script>` block of a page.
+
+    An HTML parser ends a script element at the first `</script`, wherever it
+    stands, also inside a JSON string, and a JavaScript string ends at a line
+    separator (U+2028, U+2029) which JSON writes raw: the characters which can
+    end the element or the string are written as their JSON escapes, so the
+    block holds the same value and no text of a card can leave it.
+
+    Args:
+        value: what the block assigns, e.g. the cards.
+
+    Returns:
+        The JSON, with `<`, `>`, `&`, U+2028 and U+2029 escaped.
+    """
+    return (
+        json.dumps(value, sort_keys=True)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
+
+
 def html_page(
     svg: str,
     cards: dict[str, list[str]],
@@ -195,7 +220,7 @@ path[data-k]:hover {{ filter:brightness(1.12) drop-shadow(0 0 2px #0006); }}
 </style></head><body><div class="wrap">{svg}</div>
 <p class="legend">{legend}<br>{credit}</p><div id="card" role="tooltip"></div>
 <script>
-const CARDS = {json.dumps(cards, sort_keys=True)};
+const CARDS = {_script_json(cards)};
 const card = document.getElementById('card');
 const esc = s => s.replace(/[&<>]/g, c => ({{'&':'&amp;','<':'&lt;','>':'&gt;'}})[c]);
 document.querySelectorAll('.wrap [data-k]').forEach(el => {{

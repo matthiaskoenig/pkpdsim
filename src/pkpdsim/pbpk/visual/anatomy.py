@@ -49,6 +49,11 @@ __all__ = [
     "anatomy_figure",
 ]
 
+#: the escapes of an attribute value of the SVG, which `escape` adds to the
+#: escapes of a text node: a value in double quotes ends at a double quote,
+#: so a text of the definition could leave its attribute
+_QUOTE = {'"': "&quot;"}
+
 FONT = "'DejaVu Sans', 'Noto Sans', sans-serif"
 MONO = "'DejaVu Sans Mono', monospace"
 _CW = 0.6  # the advance of a character of the monospace font, em
@@ -574,7 +579,7 @@ class AnatomyFigure:
             tw = max(len(p) for p in parts) * 10 * _CW
             bx = (xe - tw - 31) if right else x
             o.append(
-                f'<g data-k="txt:{escape(badge)}: {escape(text, {chr(34): "&quot;"})}">'
+                f'<g data-k="txt:{escape(badge, _QUOTE)}: {escape(text, _QUOTE)}">'
                 f'<rect x="{bx:.1f}" y="{y + h + 1:.1f}" width="26" height="12" rx="2" fill="{_BADGES.get(badge, "#777")}"/>'
                 f'<text x="{bx + 13:.1f}" y="{y + h + 10.2:.1f}" class="bd">{escape(badge)}</text>'
             )
