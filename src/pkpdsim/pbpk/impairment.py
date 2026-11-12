@@ -845,7 +845,7 @@ def _proteins() -> frozenset[str]:
 class _Impairment:
     """The SBML objects of the impairment of a definition."""
 
-    def __init__(self, definition: "PBPKDefinition") -> None:
+    def __init__(self, definition: PBPKDefinition) -> None:
         self.definition = definition
         self.data = _data()
         self.objects: list[Sbase] = []
@@ -1573,7 +1573,7 @@ class _Impairment:
             )
 
 
-def impairment_objects(definition: "PBPKDefinition") -> list[Sbase]:
+def impairment_objects(definition: PBPKDefinition) -> list[Sbase]:
     """Get the parameters of the impaired organ function of the top model.
 
     Args:

@@ -74,7 +74,7 @@ def _subclass(
     return cast("type[PBPKSimulationExperiment]", type(name, (base,), attributes))
 
 
-def _ml(gfr: "Quantity") -> float:
+def _ml(gfr: Quantity) -> float:
     """Get a GFR in ml/min, the unit of `healthy_gfr`."""
     assert str(gfr.units) == "milliliter / minute"
     return float(gfr.m_as("ml/min"))
@@ -226,7 +226,7 @@ def test_the_renal_map_is_lazy(
     calls: list[Path] = []
     original = pbpk_experiment.healthy_gfr
 
-    def counted(model_path: Path, **kwargs: float | None) -> "Quantity":
+    def counted(model_path: Path, **kwargs: float | None) -> Quantity:
         calls.append(model_path)
         return original(model_path, **kwargs)  # ty: ignore[invalid-argument-type]
 

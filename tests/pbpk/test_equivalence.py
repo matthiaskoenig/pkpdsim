@@ -119,7 +119,7 @@ def _model(
     return build(d, tmp_path).flat_path
 
 
-def _load(path: Path, **changes: float) -> "roadrunner.RoadRunner":
+def _load(path: Path, **changes: float) -> roadrunner.RoadRunner:
     """Load a model with changes before its initialization, tight tolerances."""
     r = individual(path, **changes)
     r.integrator.absolute_tolerance = 1e-12
@@ -127,7 +127,7 @@ def _load(path: Path, **changes: float) -> "roadrunner.RoadRunner":
     return r
 
 
-def _curve(r: "roadrunner.RoadRunner") -> np.ndarray:
+def _curve(r: roadrunner.RoadRunner) -> np.ndarray:
     """The venous plasma concentration (mM) after an IV bolus of 10 mg."""
     r[ids.iv_dose(S)] = 10.0
     cve = f"[{ids.pool_species(Pool.VENOUS, S)}]"
@@ -247,7 +247,7 @@ def test_erythrocytes_fast_kinetic_equals_equilibrium(tmp_path: Path) -> None:
     assert _deviation(equilibrium, kinetic) < 1e-3
 
 
-def _vss(r: "roadrunner.RoadRunner", kbc: float) -> float:
+def _vss(r: roadrunner.RoadRunner, kbc: float) -> float:
     """The volume of distribution (l) from the parameters of the model.
 
     `sum(Vpl + Vbc*Kbc + Vti*Kp_o)` over the organs, with
@@ -264,7 +264,7 @@ def _vss(r: "roadrunner.RoadRunner", kbc: float) -> float:
     return vss
 
 
-def _closed_vss(r: "roadrunner.RoadRunner") -> float:
+def _closed_vss(r: roadrunner.RoadRunner) -> float:
     """Amount / venous plasma concentration (l) at the equilibrium of a closed system.
 
     An IV infusion of 10 mg over 10 min without elimination, then the
@@ -319,7 +319,7 @@ def test_vss_exchange(tmp_path: Path, mode: Mode) -> None:
     assert _closed_vss(r) == pytest.approx(_vss(r, 3.0), rel=1e-9)
 
 
-def _steady_state(r: "roadrunner.RoadRunner") -> tuple[float, float]:
+def _steady_state(r: roadrunner.RoadRunner) -> tuple[float, float]:
     """The elimination rate (mmole/min) and `Car` (mM) at the steady state of the infusion.
 
     The steady state is checked: the liver metabolism eliminates what the
@@ -332,7 +332,7 @@ def _steady_state(r: "roadrunner.RoadRunner") -> tuple[float, float]:
     return rate, r[f"[{ids.pool_species(Pool.ARTERIAL, S)}]"]
 
 
-def _hepatic(r: "roadrunner.RoadRunner", clu: float) -> float:
+def _hepatic(r: roadrunner.RoadRunner, clu: float) -> float:
     """The plasma clearance (l/min) of the liver with the unbound clearance `clu`.
 
     `Qh*fu*CLu/(Qh + fu*CLu/BP)`, the well-stirred liver.
@@ -384,7 +384,7 @@ def test_well_stirred_hepatic_clearance(
     )
 
 
-def _unbound(r: "roadrunner.RoadRunner", part: Part, k: str) -> float:
+def _unbound(r: roadrunner.RoadRunner, part: Part, k: str) -> float:
     """The unbound concentration `fu/K*C` (mM) of a part of the liver."""
     c = r[f"[{_liver(ids.species(part, S))}]"]
     return r[ids.fu(S)] / r[_liver(k)] * c

@@ -103,7 +103,7 @@ def unit_label(unit: str | None) -> str:
     return short_unit(unit)
 
 
-def axis(label: str, unit: str | None, **kwargs: Any) -> "Axis":  # noqa: ANN401
+def axis(label: str, unit: str | None, **kwargs: Any) -> Axis:  # noqa: ANN401
     """An axis of sbmlsim in a unit, with the text of the unit on the figure.
 
     The unit stays what the data and the model are converted to

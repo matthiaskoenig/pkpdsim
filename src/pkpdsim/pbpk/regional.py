@@ -79,7 +79,7 @@ def _factor_id(substance: str, key: str) -> str:
     return ids.regional_absorption_factor(substance, key)
 
 
-def _check(r: "roadrunner.RoadRunner", names: Sequence[str]) -> None:
+def _check(r: roadrunner.RoadRunner, names: Sequence[str]) -> None:
     """Refuse a model without an element the derivation sets or reads.
 
     Raises:
@@ -98,7 +98,7 @@ def _check(r: "roadrunner.RoadRunner", names: Sequence[str]) -> None:
 
 @contextmanager
 def _condition(
-    r: "roadrunner.RoadRunner", changes: Mapping[str, float] | None
+    r: roadrunner.RoadRunner, changes: Mapping[str, float] | None
 ) -> Generator[None]:
     """Simulate in the condition of the study, then take it back.
 
@@ -126,7 +126,7 @@ def _condition(
 
 
 def _ratios(
-    r: "roadrunner.RoadRunner",
+    r: roadrunner.RoadRunner,
     substance: str,
     segments: Sequence[str],
     dose: float,
@@ -179,7 +179,7 @@ def _ratios(
 
 
 def release_auc_ratios(
-    r: "roadrunner.RoadRunner",
+    r: roadrunner.RoadRunner,
     substance: str,
     segments: Sequence[str],
     dose: float,
@@ -228,7 +228,7 @@ def release_auc_ratios(
 
 
 def derive_regional_absorption(
-    r: "roadrunner.RoadRunner",
+    r: roadrunner.RoadRunner,
     substance: str,
     targets: Mapping[str, float],
     dose: float,

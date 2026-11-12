@@ -249,17 +249,17 @@ class Route:
             )
 
     @classmethod
-    def iv(cls, s: str) -> "Route":
+    def iv(cls, s: str) -> Route:
         """Get the intravenous route of a substance: bolus and infusion."""
         return cls("iv", s)
 
     @classmethod
-    def oral(cls, s: str, formulation: Formulation | None = None) -> "Route":
+    def oral(cls, s: str, formulation: Formulation | None = None) -> Route:
         """Get the oral route of a substance as tablet, with a formulation."""
         return cls("oral", s, formulation)
 
     @classmethod
-    def oral_solution(cls, s: str) -> "Route":
+    def oral_solution(cls, s: str) -> Route:
         """Get the oral route of a substance given as solution."""
         return cls("oral_solution", s)
 
@@ -271,7 +271,7 @@ class Route:
         ka: Q | None = None,
         fraction: Q | None = None,
         application: Q | None = None,
-    ) -> "Route":
+    ) -> Route:
         """Get the intramuscular route of a substance, see `Depot`."""
         return cls("im", s, depot=_given(ka, fraction, None, application))
 
@@ -283,7 +283,7 @@ class Route:
         ka: Q | None = None,
         fraction: Q | None = None,
         application: Q | None = None,
-    ) -> "Route":
+    ) -> Route:
         """Get the subcutaneous route of a substance, see `Depot`."""
         return cls("sc", s, depot=_given(ka, fraction, None, application))
 
@@ -296,7 +296,7 @@ class Route:
         fraction: Q | None = None,
         portal: Q | None = None,
         application: Q | None = None,
-    ) -> "Route":
+    ) -> Route:
         """Get the rectal route of a substance, see `Depot`."""
         return cls("rectal", s, depot=_given(ka, fraction, portal, application))
 

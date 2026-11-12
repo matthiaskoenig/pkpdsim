@@ -79,12 +79,12 @@ def _definition(sid: str, s: Substance, **fields: Any) -> PBPKDefinition:  # noq
     return PBPKDefinition(sid=sid, substances=[s], **fields)
 
 
-def _species(r: "roadrunner.RoadRunner") -> list[str]:
+def _species(r: roadrunner.RoadRunner) -> list[str]:
     """The floating species of a loaded model."""
     return list(r.model.getFloatingSpeciesIds())
 
 
-def _drift(r: "roadrunner.RoadRunner") -> dict[str, float]:
+def _drift(r: roadrunner.RoadRunner) -> dict[str, float]:
     """Simulate 24 hr, the largest relative change of every species (absolute at 0)."""
     sids = _species(r)
     start = np.array([r[f"[{sid}]"] for sid in sids])
@@ -95,7 +95,7 @@ def _drift(r: "roadrunner.RoadRunner") -> dict[str, float]:
     return dict(zip(sids, change / scale, strict=True))
 
 
-def _assert_stationary(r: "roadrunner.RoadRunner") -> None:
+def _assert_stationary(r: roadrunner.RoadRunner) -> None:
     """Every species stays at its start over 24 hr, rtol 1e-6 (atol 1e-12 at 0)."""
     sids = _species(r)
     zero = {sid for sid in sids if r[f"[{sid}]"] == 0.0}
@@ -113,7 +113,7 @@ _ORGAN = {"GU": Organ.SMALL_INTESTINE.value}
 """The organ of the Kp of a submodel whose id is no organ token."""
 
 
-def _expected_starts(r: "roadrunner.RoadRunner") -> dict[str, float]:
+def _expected_starts(r: roadrunner.RoadRunner) -> dict[str, float]:
     """The start of every species from the kind of its part, by the coefficients of the model.
 
     Plasma (organs and pools) the baseline, blood cells `Kbc*B`, merged
@@ -157,7 +157,7 @@ def _expected_starts(r: "roadrunner.RoadRunner") -> dict[str, float]:
     return expected
 
 
-def _assert_starts(r: "roadrunner.RoadRunner") -> None:
+def _assert_starts(r: roadrunner.RoadRunner) -> None:
     """Every species starts at the equilibrium of its part with the baseline."""
     for sid, value in _expected_starts(r).items():
         assert r[f"[{sid}]"] == pytest.approx(value, rel=1e-12, abs=1e-15), sid

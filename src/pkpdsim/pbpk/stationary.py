@@ -69,6 +69,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import libsbml
+from sbmlutils.factory import UnitDefinition
 from sbmlutils.reaction_equation import ReactionEquation
 
 from pkpdsim.pbpk import ids
@@ -89,8 +90,6 @@ from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.values import Formula
 
 if TYPE_CHECKING:
-    from sbmlutils.factory import UnitDefinition
-
     from pkpdsim.pbpk.definition import PBPKDefinition
 
 __all__ = [
@@ -192,7 +191,7 @@ class SteadyValue:
 
     sid: str
     formula: str
-    unit: "UnitDefinition"
+    unit: UnitDefinition
     name: str
     kind: str
     notes: str
@@ -475,7 +474,7 @@ class _Collector:
         return result
 
 
-def steady_plan(definition: "PBPKDefinition") -> SteadyPlan:
+def steady_plan(definition: PBPKDefinition) -> SteadyPlan:
     """Get the generated steady state of a definition, refusing what has no closed form.
 
     Args:
@@ -649,7 +648,7 @@ def _declared(
     return problems
 
 
-def _library_processes(definition: "PBPKDefinition", generated: set[str]) -> list[str]:
+def _library_processes(definition: PBPKDefinition, generated: set[str]) -> list[str]:
     """Refuse a metabolism or transport of the library which moves a generated substance.
 
     The uptake from the lumen of the small intestine (an apical influx) is
@@ -721,7 +720,7 @@ def _turnover_problems(s: Substance, regulated: set[str]) -> list[str]:
 
 
 def _part_problems(
-    definition: "PBPKDefinition",
+    definition: PBPKDefinition,
     organs: Mapping[tuple[Organ, str], OrganSteady],
     by_sid: Mapping[str, Substance],
 ) -> list[str]:
@@ -848,7 +847,7 @@ def _filtered(s: Substance) -> str:
     return f"{ids.fu(s.sid)} * {ids.GFR} * ({ONE} - {ids.fraction_reabsorbed(s.sid)})"
 
 
-def _or_zero(formula: str, unit: "UnitDefinition") -> str:
+def _or_zero(formula: str, unit: UnitDefinition) -> str:
     """A formula, `0` with its unit for none."""
     return f"0 {getattr(unit, 'sid', unit)}" if formula == "0" else formula
 

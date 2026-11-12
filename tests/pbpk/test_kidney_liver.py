@@ -90,8 +90,8 @@ def _renal(tmp_path: Path, fraction_reabsorbed: float = 0.0, fu: float = 0.5) ->
 
 
 def _load(
-    model: "Path | Callable[..., roadrunner.RoadRunner]", **changes: float
-) -> "roadrunner.RoadRunner":
+    model: Path | Callable[..., roadrunner.RoadRunner], **changes: float
+) -> roadrunner.RoadRunner:
     """Load a model with changes before its initialization, tight tolerances.
 
     The model is a file or the `individuals` of one, loaded once for a test.
@@ -102,22 +102,22 @@ def _load(
     return r
 
 
-def _kidney_plasma(r: "roadrunner.RoadRunner") -> float:
+def _kidney_plasma(r: roadrunner.RoadRunner) -> float:
     """The plasma concentration of the kidney (mM), `KI__Cpl_<s>`."""
     return r[f"[{ids.flat(Organ.KIDNEY, ids.species(Part.PLASMA, S))}]"]
 
 
-def _filtration(r: "roadrunner.RoadRunner") -> float:
+def _filtration(r: roadrunner.RoadRunner) -> float:
     """The rate of the filtration into the urine (mmole/min)."""
     return r[ids.flat(Organ.KIDNEY, ids.filtration_reaction(S))]
 
 
-def _arterial(r: "roadrunner.RoadRunner") -> float:
+def _arterial(r: roadrunner.RoadRunner) -> float:
     """The arterial plasma concentration (mM), the afferent plasma of the kidney."""
     return r[f"[{ids.pool_species(Pool.ARTERIAL, S)}]"]
 
 
-def _kidney_outflow(r: "roadrunner.RoadRunner") -> float:
+def _kidney_outflow(r: roadrunner.RoadRunner) -> float:
     """The plasma concentration of the blood leaving the kidney (mM), every form."""
     return r[ids.organ_outflow(Organ.KIDNEY, S)]
 

@@ -432,7 +432,7 @@ def test_zones_add_up_to_the_organ(tmp_path: Path, n: int) -> None:
     zones = [ids.zone_id(k) for k in range(1, n + 1)]
 
     def total(
-        r: "roadrunner.RoadRunner", make: Callable[[str], str], zs: list[str]
+        r: roadrunner.RoadRunner, make: Callable[[str], str], zs: list[str]
     ) -> float:
         return sum(r[make(z)] for z in zs)
 

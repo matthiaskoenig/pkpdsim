@@ -120,18 +120,18 @@ def _definition(sid: str, **overrides: object) -> PBPKDefinition:
     return definition(**fields)
 
 
-def _build(tmp_path: Path, d: PBPKDefinition) -> "roadrunner.RoadRunner":
+def _build(tmp_path: Path, d: PBPKDefinition) -> roadrunner.RoadRunner:
     """Build a definition and load its flat model."""
     return load(build(d, tmp_path))
 
 
-def _flat_species(r: "roadrunner.RoadRunner") -> set[str]:
+def _flat_species(r: roadrunner.RoadRunner) -> set[str]:
     """The species ids of the flat model."""
     return set(r.model.getFloatingSpeciesIds()) | set(r.model.getBoundarySpeciesIds())
 
 
 def _lumen_amount(
-    r: "roadrunner.RoadRunner", sid: str, segments: tuple[str, ...]
+    r: roadrunner.RoadRunner, sid: str, segments: tuple[str, ...]
 ) -> float:
     """The dissolved and undissolved amount (mmole) of a substance in lumen segments."""
     species = _flat_species(r)
@@ -143,7 +143,7 @@ def _lumen_amount(
     return total
 
 
-def _fraction_absorbed(r: "roadrunner.RoadRunner", dose_mg: float) -> float:
+def _fraction_absorbed(r: roadrunner.RoadRunner, dose_mg: float) -> float:
     """The fraction of an oral solution absorbed after a day: 1 - (lumen + feces)/dose."""
     r[ids.sol_dose(S)] = dose_mg
     r.simulate(0, DAY, 50)
@@ -384,7 +384,7 @@ def test_fed_slows_gastric_emptying(tmp_path: Path) -> None:
     assert left[1.0] > 1.5 * left[0.0]
 
 
-def _with_transit_factors(path: Path, factor: float) -> "roadrunner.RoadRunner":
+def _with_transit_factors(path: Path, factor: float) -> roadrunner.RoadRunner:
     """Load a flat model with the CKD factors of the transit times set to a value.
 
     The factors are initial assignments of the impairment (1 in every stage
@@ -482,7 +482,7 @@ def test_dose_dependent_dissolution(tmp_path: Path) -> None:
     assert fraction[500.0] < fraction[1.0]
 
 
-def _tablet_flux(r: "roadrunner.RoadRunner", fed: float = 0.0, **sets: float) -> float:
+def _tablet_flux(r: roadrunner.RoadRunner, fed: float = 0.0, **sets: float) -> float:
     """The dissolution flux (mmole/min) of a tablet of 10 mg at its start."""
     r.resetAll()
     r[ids.FED] = fed
@@ -854,7 +854,7 @@ def _sbml_ids(path: Path) -> set[str]:
     }
 
 
-def _absorbed(r: "roadrunner.RoadRunner", dose_mg: float, end: float) -> float:
+def _absorbed(r: roadrunner.RoadRunner, dose_mg: float, end: float) -> float:
     """The amount (mmole) of an oral solution absorbed until `end`: dose - lumen - feces."""
     r[ids.sol_dose(S)] = dose_mg
     r.simulate(0, end, 20)
@@ -1030,9 +1030,9 @@ def test_segmented_fabs_and_colon(mucosa: bool, tmp_path: Path) -> None:
 def _two_oral(
     sid: str,
     *,
-    ka: "PerSubstance | None" = None,
-    fabs: "PerSubstance | None" = None,
-    f_ka_colon: "PerSubstance | None" = None,
+    ka: PerSubstance | None = None,
+    fabs: PerSubstance | None = None,
+    f_ka_colon: PerSubstance | None = None,
     intestine: str = "segmented",
 ) -> PBPKDefinition:
     """The drug and its metabolite, both with an oral solution, in the intestine variant."""

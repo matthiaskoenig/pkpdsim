@@ -122,7 +122,7 @@ def _liver(part: Part, s: str) -> str:
     return f"[{ids.flat(Organ.LIVER, ids.species(part, s))}]"
 
 
-def _state(r: "roadrunner.RoadRunner", c: float, i: float) -> tuple[float, float]:
+def _state(r: roadrunner.RoadRunner, c: float, i: float) -> tuple[float, float]:
     """Set the liver tissue of substrate and inhibitor, get their unbound concentrations."""
     r[_liver(Part.TISSUE, S)] = c
     r[_liver(Part.TISSUE, INH)] = i
@@ -333,7 +333,7 @@ def test_activity_base_factor(tmp_path: Path) -> None:
 
 def _turnover_run(
     tmp_path: Path, inhibitor: Substance, days: float = 30.0
-) -> tuple["roadrunner.RoadRunner", np.ndarray]:
+) -> tuple[roadrunner.RoadRunner, np.ndarray]:
     """Dose the (not eliminated) inhibitor and follow the liver CYP3A4 state."""
     r = load(_build(tmp_path, inhibitor))
     r[ids.iv_dose(INH)] = 100.0
@@ -662,7 +662,7 @@ def test_a_protein_turnover_value_carries_its_source(
 
 
 def _enzyme_run(
-    r: "roadrunner.RoadRunner", start: float, end: float
+    r: roadrunner.RoadRunner, start: float, end: float
 ) -> tuple[np.ndarray, np.ndarray]:
     """Follow the liver CYP2C19 state and the unbound inhibitor in the liver tissue."""
     e = ids.flat(Organ.LIVER, ids.enzyme("CYP2C19"))

@@ -631,7 +631,7 @@ def _site(preset: str, key: str) -> Organ | Pool:
     )
 
 
-def observer_objects(definition: "PBPKDefinition") -> list[Sbase]:
+def observer_objects(definition: PBPKDefinition) -> list[Sbase]:
     """Get the observers of a definition.
 
     Args:

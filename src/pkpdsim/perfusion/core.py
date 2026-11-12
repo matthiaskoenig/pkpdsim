@@ -422,7 +422,7 @@ class CoreParameters:
     starts: FrozenMap[Value]
 
     @classmethod
-    def default(cls, organ: str = "liver_rat") -> "CoreParameters":
+    def default(cls, organ: str = "liver_rat") -> CoreParameters:
         """Get the constants of an organ from the parameter database.
 
         Args:
@@ -519,7 +519,7 @@ class Buffer:
     k_hydration: Value
 
     @classmethod
-    def default(cls) -> "Buffer":
+    def default(cls) -> Buffer:
         """Get the constants of the perfusion table (`acid_base`)."""
         pk = entry(_TABLE, "acid_base", "pK")
         return cls(
@@ -559,7 +559,7 @@ class Composition:
     ph: Value
 
     @classmethod
-    def default(cls) -> "Composition":
+    def default(cls) -> Composition:
         """Get the perfusate of the perfusion table (`perfusate`)."""
         return cls(
             glc=_value("perfusate", "glucose"),
@@ -890,7 +890,7 @@ class CoreNames:
 
 
 def core_objects(
-    names: "CoreNames",
+    names: CoreNames,
     cells: str,
     vascular: str,
     params: CoreParameters,

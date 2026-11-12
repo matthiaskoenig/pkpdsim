@@ -118,7 +118,7 @@ def _law(path: Path, rid: str) -> str:
 # --- the conversion in the lumen --------------------------------------------
 
 
-def _converted(r: "roadrunner.RoadRunner", route: str, dose_mg: float) -> float:
+def _converted(r: roadrunner.RoadRunner, route: str, dose_mg: float) -> float:
     """The fraction of an oral dose of the drug converted, with no absorption.
 
     Neither substance is absorbed (`ka = 0`), so after a week both are in
@@ -320,7 +320,7 @@ def test_a_substrate_which_reaches_the_lumen_by_the_bile_converts(
     ],
 )
 def test_an_invalid_conversion_is_refused(
-    conversions: "Callable[[], list[LumenConversion]]",
+    conversions: Callable[[], list[LumenConversion]],
     message: str,
     tmp_path: Path,
 ) -> None:
@@ -333,7 +333,7 @@ def test_an_invalid_conversion_is_refused(
 # --- the regional absorption ------------------------------------------------
 
 
-def _absorption_rate(r: "roadrunner.RoadRunner", sid: str, seg: str) -> float:
+def _absorption_rate(r: roadrunner.RoadRunner, sid: str, seg: str) -> float:
     """`ka/60*f_area*V*C` of a segment without factors."""
     return (
         r[ids.absorption(sid)]
@@ -437,7 +437,7 @@ def test_a_profile_and_the_colon_factor_multiply_outside_the_colon(
     ],
 )
 def test_an_invalid_profile_is_refused(
-    make: "Callable[[], RegionalAbsorption]", message: str
+    make: Callable[[], RegionalAbsorption], message: str
 ) -> None:
     """A segment which does not absorb or is unknown, no segment, a negative factor or a unit."""
     with pytest.raises(ValueError, match=message):
@@ -583,7 +583,7 @@ def test_the_single_lumen_refuses_the_options_of_the_segments(
         SingleLumen(**fields)  # ty: ignore[invalid-argument-type]
 
 
-def _absorbed_from(r: "roadrunner.RoadRunner", amount: float) -> float:
+def _absorbed_from(r: roadrunner.RoadRunner, amount: float) -> float:
     """The absorbed part of an amount (mmole) in the lumen after two weeks."""
     r.simulate(0, 14 * DAY, 100)
     left = r[ids.feces(S)] + sum(

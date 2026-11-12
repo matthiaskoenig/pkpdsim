@@ -125,9 +125,7 @@ class _FlatModelCache:
     errors fails in every test.
     """
 
-    def __init__(
-        self, folder: Path, flat_model: "Callable[[Path, Path], None]"
-    ) -> None:
+    def __init__(self, folder: Path, flat_model: Callable[[Path, Path], None]) -> None:
         self.folder = folder
         self.flat_model = flat_model
         #: off in a test marked `uncached_build`
@@ -158,7 +156,7 @@ class _FlatModelCache:
 @pytest.fixture(scope="session", autouse=True)
 def flat_model_cache(
     pytestconfig: pytest.Config, tmp_path_factory: pytest.TempPathFactory
-) -> "Iterator[_FlatModelCache | None]":
+) -> Iterator[_FlatModelCache | None]:
     """Take the flat models of the PBPK builds from the cache of the session.
 
     Session-scoped, so the builds of the fixtures of a module are cached as
@@ -185,7 +183,7 @@ def flat_model_cache(
 def uncached_build(
     request: pytest.FixtureRequest,
     monkeypatch: pytest.MonkeyPatch,
-    flat_model_cache: "_FlatModelCache | None",
+    flat_model_cache: _FlatModelCache | None,
 ) -> None:
     """Validate and flatten every build of a test marked `uncached_build`."""
     if flat_model_cache is not None and request.node.get_closest_marker(
@@ -195,7 +193,7 @@ def uncached_build(
 
 
 @pytest.fixture
-def as_model(monkeypatch: pytest.MonkeyPatch) -> "Callable[[PKPDModel], PKPDModel]":
+def as_model(monkeypatch: pytest.MonkeyPatch) -> Callable[[PKPDModel], PKPDModel]:
     """Make a model the model object `MODEL` of its package for a test.
 
     The commands run the model object of a package, which the run layer of

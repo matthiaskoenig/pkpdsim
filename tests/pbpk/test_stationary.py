@@ -164,7 +164,7 @@ def _definition(
     )
 
 
-def _load(d: PBPKDefinition, path: Path, **changes: float) -> "roadrunner.RoadRunner":
+def _load(d: PBPKDefinition, path: Path, **changes: float) -> roadrunner.RoadRunner:
     """Build and load a definition with changes before the simulation, tight tolerances."""
     r = individual(build(d, path).flat_path, **changes)
     r.integrator.absolute_tolerance = 1e-16
@@ -172,7 +172,7 @@ def _load(d: PBPKDefinition, path: Path, **changes: float) -> "roadrunner.RoadRu
     return r
 
 
-def _drift(r: "roadrunner.RoadRunner") -> dict[str, float]:
+def _drift(r: roadrunner.RoadRunner) -> dict[str, float]:
     """The largest relative change of every species but the sinks and of the arm vein over a day."""
     sids = [
         sid
@@ -194,7 +194,7 @@ def _drift(r: "roadrunner.RoadRunner") -> dict[str, float]:
     )
 
 
-def _assert_stationary(r: "roadrunner.RoadRunner") -> None:
+def _assert_stationary(r: roadrunner.RoadRunner) -> None:
     """Every species stays within 1e-12 of its start over a day."""
     moved = {sid: d for sid, d in _drift(r).items() if d > 1e-12}
     assert not moved, moved

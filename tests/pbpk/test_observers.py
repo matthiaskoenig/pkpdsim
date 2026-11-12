@@ -57,7 +57,7 @@ DEFAULT = arm_vein_weights("pksim_default")
 
 
 def _run(
-    model: "Path | Callable[..., roadrunner.RoadRunner]",
+    model: Path | Callable[..., roadrunner.RoadRunner],
     cols: list[str],
     **changes: float,
 ) -> np.ndarray:
@@ -79,7 +79,7 @@ def _build(tmp_path: Path, **overrides: object) -> Path:
     return build(d, tmp_path).flat_path
 
 
-def _rr(path: Path) -> "roadrunner.RoadRunner":
+def _rr(path: Path) -> roadrunner.RoadRunner:
     """Load a model without changes."""
     return individual(path)
 

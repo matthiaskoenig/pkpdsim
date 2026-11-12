@@ -120,7 +120,7 @@ class ModelContent:
     pd: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...]
 
     @classmethod
-    def of(cls, definition: PBPKDefinition) -> "ModelContent":
+    def of(cls, definition: PBPKDefinition) -> ModelContent:
         """Read the content of a definition through the readers of the schematic."""
         f = _Figure(definition, (definition.sex,))
         organs = {}

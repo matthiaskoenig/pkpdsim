@@ -119,12 +119,12 @@ type PerSubstance = Q | Mapping[str, Q]
 """One value for every oral substance, or a mapping from substance id to value."""
 
 
-def _oral(routes: "Sequence[Route]") -> frozenset[str]:
+def _oral(routes: Sequence[Route]) -> frozenset[str]:
     """The substances with an oral route (tablet or solution)."""
     return frozenset(r.substance for r in routes if r.kind in ORAL)
 
 
-def _freeze(spec: "PerSubstance | None") -> "PerSubstance | None":
+def _freeze(spec: PerSubstance | None) -> PerSubstance | None:
     """Store a mapping as a hashable read-only mapping."""
     if isinstance(spec, Mapping):
         return FrozenMap(spec)
@@ -140,7 +140,7 @@ def _per_substance(spec: PerSubstance, sid: str, default: Q) -> Q:
 
 def _check_keys(
     attribute: str,
-    spec: "PerSubstance | RegionalAbsorption | Mapping[str, RegionalAbsorption] | None",
+    spec: PerSubstance | RegionalAbsorption | Mapping[str, RegionalAbsorption] | None,
     known: frozenset[str],
     allowed: frozenset[str] | None,
 ) -> None:
@@ -165,9 +165,7 @@ def _check_keys(
             )
 
 
-def _mucosa_map(
-    spec: "Mapping[str, Q] | None", per_volume: bool
-) -> "FrozenMap[Q] | None":
+def _mucosa_map(spec: Mapping[str, Q] | None, per_volume: bool) -> FrozenMap[Q] | None:
     """Store `mucosa_ps` as a hashable read-only mapping, its values checked.
 
     The values are checked as the `ps` of an organ is
@@ -225,9 +223,9 @@ def _mucosa_map(
 
 
 def _check_mucosa_ps(
-    spec: "Mapping[str, Q] | None",
-    substances: "Sequence[Substance]",
-    chemistry: "Sequence[Metabolism | Transport | CustomReaction]",
+    spec: Mapping[str, Q] | None,
+    substances: Sequence[Substance],
+    chemistry: Sequence[Metabolism | Transport | CustomReaction],
 ) -> dict[str, Q]:
     """Check `mucosa_ps` against the substances with a mucosa.
 
@@ -260,7 +258,7 @@ def _check_mucosa_ps(
     return dict(spec)
 
 
-def _only(spec: "PerSubstance | None", oral: frozenset[str]) -> frozenset[str]:
+def _only(spec: PerSubstance | None, oral: frozenset[str]) -> frozenset[str]:
     """The substances which get the parameter: the oral ones, the keys of a mapping among them."""
     if spec is None:
         return frozenset()
@@ -270,7 +268,7 @@ def _only(spec: "PerSubstance | None", oral: frozenset[str]) -> frozenset[str]:
 
 
 def _fabs_objects(
-    definition: "PBPKDefinition",
+    definition: PBPKDefinition,
     fabs: PerSubstance,
     substances: frozenset[str] | None = None,
     default: Q = 1.0,
@@ -316,9 +314,7 @@ def _colon_text(q: Q) -> str:
     return f"{text}; a model fits it."
 
 
-def _colon_objects(
-    definition: "PBPKDefinition", values: Mapping[str, Q]
-) -> list[Sbase]:
+def _colon_objects(definition: PBPKDefinition, values: Mapping[str, Q]) -> list[Sbase]:
     """The factor of the absorption in the large intestine `f_ka_colon_<s>` of the substances.
 
     The values by substance: of `f_ka_colon` or of the group `colon` of a
@@ -343,9 +339,7 @@ def _colon_objects(
     ]
 
 
-def _ka_value(
-    ka: "PerSubstance | None", sid: str, oral: frozenset[str], table: str
-) -> Q:
+def _ka_value(ka: PerSubstance | None, sid: str, oral: frozenset[str], table: str) -> Q:
     """The `ka` of a substance: its entry or the scalar, else the default (0 without oral route).
 
     The default is the one of the data file of the intestine of the species.
@@ -359,7 +353,7 @@ def _ka_value(
 
 
 def absorbed_substances(
-    definition: "PBPKDefinition", ka: "PerSubstance | None"
+    definition: PBPKDefinition, ka: PerSubstance | None
 ) -> list[str]:
     """Get the substances which the intestine absorbs, `ka_<s>` of the definition.
 
@@ -379,7 +373,7 @@ def absorbed_substances(
     return [s.sid for s in definition.substances if s.sid in oral or s.sid in named]
 
 
-def _ka_objects(definition: "PBPKDefinition", ka: "PerSubstance | None") -> list[Sbase]:
+def _ka_objects(definition: PBPKDefinition, ka: PerSubstance | None) -> list[Sbase]:
     """The absorption `ka_<s>` of every substance.
 
     A scalar `ka` is the value of every oral substance; a mapping gives its
@@ -500,12 +494,12 @@ class SegmentedIntestine:
     """
 
     name: str = "segmented"
-    ka: "PerSubstance | None" = None
-    fabs: "PerSubstance | None" = None
-    f_ka_colon: "PerSubstance | None" = None
-    regional: "RegionalAbsorption | Mapping[str, RegionalAbsorption] | None" = None
+    ka: PerSubstance | None = None
+    fabs: PerSubstance | None = None
+    f_ka_colon: PerSubstance | None = None
+    regional: RegionalAbsorption | Mapping[str, RegionalAbsorption] | None = None
     conversions: Sequence[LumenConversion] = ()
-    mucosa_ps: "Mapping[str, Q] | None" = None
+    mucosa_ps: Mapping[str, Q] | None = None
     mucosa_ps_per_volume: bool = True
 
     def __post_init__(self) -> None:
@@ -528,9 +522,9 @@ class SegmentedIntestine:
 
     def _resolve(
         self,
-        substances: "Sequence[Substance]",
-        routes: "Sequence[Route]",
-        chemistry: "Sequence[Metabolism | Transport | CustomReaction]",
+        substances: Sequence[Substance],
+        routes: Sequence[Route],
+        chemistry: Sequence[Metabolism | Transport | CustomReaction],
     ) -> _Absorption:
         """The factors of the absorption by substance, and the mucosa, checked.
 
@@ -584,7 +578,7 @@ class SegmentedIntestine:
             _check_mucosa_ps(self.mucosa_ps, substances, chemistry),
         )
 
-    def absorption(self, definition: "PBPKDefinition") -> dict[str, tuple[str, ...]]:
+    def absorption(self, definition: PBPKDefinition) -> dict[str, tuple[str, ...]]:
         """Get the absorbed substances with the options of their absorption.
 
         The substances of `absorbed_substances` with what the model gives
@@ -616,7 +610,7 @@ class SegmentedIntestine:
             result[sid] = tuple(options)
         return result
 
-    def body_objects(self, definition: "PBPKDefinition") -> list[Sbase]:
+    def body_objects(self, definition: PBPKDefinition) -> list[Sbase]:
         """Get `ka_<s>`, `fabs_<s>`, `f_ka_colon_<s>`, the regional factors, the conversion rates, `FED`."""
         a = self._resolve(
             definition.substances, definition.routes, definition.chemistry
@@ -718,11 +712,11 @@ class SingleLumen:
     """
 
     name: str = "single_lumen"
-    ka: "PerSubstance | None" = None
-    fabs: "PerSubstance | None" = None
-    regional: "RegionalAbsorption | Mapping[str, RegionalAbsorption] | None" = None
+    ka: PerSubstance | None = None
+    fabs: PerSubstance | None = None
+    regional: RegionalAbsorption | Mapping[str, RegionalAbsorption] | None = None
     conversions: Sequence[LumenConversion] = ()
-    mucosa_ps: "Mapping[str, Q] | None" = None
+    mucosa_ps: Mapping[str, Q] | None = None
     mucosa_ps_per_volume: bool = True
 
     def __post_init__(self) -> None:
@@ -751,8 +745,8 @@ class SingleLumen:
 
     def _check(
         self,
-        substances: "Sequence[Substance]",
-        chemistry: "Sequence[Metabolism | Transport | CustomReaction]",
+        substances: Sequence[Substance],
+        chemistry: Sequence[Metabolism | Transport | CustomReaction],
     ) -> dict[str, Q]:
         """Check the keys of the mappings (any substance has `fabs_<s>`).
 
@@ -768,7 +762,7 @@ class SingleLumen:
         _check_keys("fabs", self.fabs, known, None)
         return _check_mucosa_ps(self.mucosa_ps, substances, chemistry)
 
-    def absorption(self, definition: "PBPKDefinition") -> dict[str, tuple[str, ...]]:
+    def absorption(self, definition: PBPKDefinition) -> dict[str, tuple[str, ...]]:
         """Get the absorbed substances with the options of their absorption.
 
         The substances of `absorbed_substances`, `fraction absorbed` for a
@@ -792,7 +786,7 @@ class SingleLumen:
             for sid in absorbed_substances(definition, self.ka)
         }
 
-    def body_objects(self, definition: "PBPKDefinition") -> list[Sbase]:
+    def body_objects(self, definition: PBPKDefinition) -> list[Sbase]:
         """Get `ka_<s>` and `fabs_<s>` of every substance."""
         self._check(definition.substances, definition.chemistry)
         return [

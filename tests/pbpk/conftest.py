@@ -232,9 +232,7 @@ def jit_optimization(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def compiled(
-    path: Path, optimization: str = JIT_OPTIMIZATION
-) -> "roadrunner.RoadRunner":
+def compiled(path: Path, optimization: str = JIT_OPTIMIZATION) -> roadrunner.RoadRunner:
     """Load a model into roadrunner as it is, compiled at `optimization`.
 
     `load_roadrunner` of sbmlsim: LLJIT, always compiled. roadrunner's own
@@ -248,7 +246,7 @@ def compiled(
 
 def load(
     result: BuildResult, optimization: str = JIT_OPTIMIZATION
-) -> "roadrunner.RoadRunner":
+) -> roadrunner.RoadRunner:
     """Load the flat model of a build as sbmlsim does, with tight integrator tolerances.
 
     `load_roadrunner` of sbmlsim is the production path: LLJIT, always
@@ -260,7 +258,7 @@ def load(
     return r
 
 
-def individual(path: Path, **changes: float) -> "roadrunner.RoadRunner":
+def individual(path: Path, **changes: float) -> roadrunner.RoadRunner:
     """Load a model with changes before its initialization, as an experiment does.
 
     The changes are the pre-initialization assignments of sbmlsim
@@ -277,7 +275,7 @@ def individual(path: Path, **changes: float) -> "roadrunner.RoadRunner":
     return individuals(path)(**changes)
 
 
-def individuals(path: Path) -> "Callable[..., roadrunner.RoadRunner]":
+def individuals(path: Path) -> Callable[..., roadrunner.RoadRunner]:
     """Load a model once and initialize it for one individual after the other.
 
     The returned function is `individual` of the one loaded model: every call
@@ -302,7 +300,7 @@ def individuals(path: Path) -> "Callable[..., roadrunner.RoadRunner]":
     assert not model.symbols.events, "a model with events is loaded per individual"
     first = True
 
-    def initialized(**changes: float) -> "roadrunner.RoadRunner":
+    def initialized(**changes: float) -> roadrunner.RoadRunner:
         nonlocal first
         if not first:
             # a test may have simulated the instance: reset it as after a
@@ -319,8 +317,8 @@ def individuals(path: Path) -> "Callable[..., roadrunner.RoadRunner]":
 
 
 def initialized(
-    model: "Path | Callable[..., roadrunner.RoadRunner]", **changes: float
-) -> "roadrunner.RoadRunner":
+    model: Path | Callable[..., roadrunner.RoadRunner], **changes: float
+) -> roadrunner.RoadRunner:
     """Get an individual of a model file (`individual`) or of `individuals` of one.
 
     Args:
@@ -333,7 +331,7 @@ def initialized(
     return individual(model, **changes) if isinstance(model, Path) else model(**changes)
 
 
-def total_amount(r: "roadrunner.RoadRunner", sid: str) -> float:
+def total_amount(r: roadrunner.RoadRunner, sid: str) -> float:
     """Get the total amount (mmole) of a substance: all species and the sinks.
 
     The amount of a species is decided from the SBML: a species with
@@ -369,7 +367,7 @@ def total_amount(r: "roadrunner.RoadRunner", sid: str) -> float:
     return total
 
 
-def dose_amount(r: "roadrunner.RoadRunner", sid: str) -> float:
+def dose_amount(r: roadrunner.RoadRunner, sid: str) -> float:
     """Get the amount (mmole) of a substance in its dose states, not yet applied."""
     doses = (
         ids.iv_dose(sid),

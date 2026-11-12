@@ -108,7 +108,7 @@ def _fraction(c: float, fu: float = FU) -> float:
     return 1.0 / (1.0 + (fu * c / THRESHOLD) ** N) ** (1.0 / N)
 
 
-def _load(path: Path, **changes: float) -> "roadrunner.RoadRunner":
+def _load(path: Path, **changes: float) -> roadrunner.RoadRunner:
     """Load a model with changes before its initialization, tight tolerances."""
     r = individual(path, **changes)
     r.integrator.absolute_tolerance = 1e-14
@@ -368,7 +368,7 @@ def _endogenous(variants: Variants = STANDARD) -> PBPKDefinition:
     )
 
 
-def _drift(r: "roadrunner.RoadRunner") -> dict[str, float]:
+def _drift(r: roadrunner.RoadRunner) -> dict[str, float]:
     """The largest relative change of every species but the urine over a day."""
     sids = [s for s in r.model.getFloatingSpeciesIds() if s != ids.urine(S)]
     start = np.array([r[f"[{sid}]"] for sid in sids])

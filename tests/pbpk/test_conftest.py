@@ -42,7 +42,7 @@ def test_total_amount() -> None:
 def test_a_cached_flat_model_is_the_flattened_one(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    flat_model_cache: "_FlatModelCache",
+    flat_model_cache: _FlatModelCache,
 ) -> None:
     """A build of a comp model which was flattened before takes its flat model.
 

@@ -43,7 +43,7 @@ class SbmlObjects:
     rate_rules: list[RateRule] = field(default_factory=list)
     assignments: list[InitialAssignment] = field(default_factory=list)
 
-    def __add__(self, other: "SbmlObjects") -> "SbmlObjects":
+    def __add__(self, other: SbmlObjects) -> SbmlObjects:
         """Get the objects of both."""
         return SbmlObjects(
             *(

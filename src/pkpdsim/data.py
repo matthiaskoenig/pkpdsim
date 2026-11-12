@@ -317,7 +317,7 @@ def _git(folder: Path, *args: str) -> str | None:
             check=False,
             timeout=GIT_TIMEOUT,
         )
-    except (OSError, subprocess.SubprocessError):
+    except OSError, subprocess.SubprocessError:
         return None
     return result.stdout.strip() if result.returncode == 0 else None
 

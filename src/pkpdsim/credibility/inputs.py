@@ -331,7 +331,7 @@ def _number(value: object) -> float | None:
     """Get a finite number of a cell, `None` for an empty or other one."""
     try:
         number = float(value)  # ty: ignore[invalid-argument-type]
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     return number if math.isfinite(number) else None
 
@@ -613,7 +613,7 @@ def _magnitude(value: object, unit: str) -> float | None:
     if isinstance(value, pint.Quantity):
         try:
             return float(value.to(unit).magnitude)
-        except (DimensionalityError, UndefinedUnitError):
+        except DimensionalityError, UndefinedUnitError:
             return None
     return _number(value)
 
@@ -665,7 +665,7 @@ def _check(
     fit, experiment, mapping = key
     try:
         unit = f"{ureg.Unit(unit):~}"
-    except (UndefinedUnitError, ValueError, TypeError):
+    except UndefinedUnitError, ValueError, TypeError:
         logger.debug("The unit '%s' has no symbol", unit)
     return InputCheck(
         fit=fit,
@@ -714,7 +714,7 @@ def _mapping_checks(
         else:
             try:
                 simulated, source = model.loaded_value(target), "model"
-            except (KeyError, AttributeError):
+            except KeyError, AttributeError:
                 continue
         if simulated is None:
             continue

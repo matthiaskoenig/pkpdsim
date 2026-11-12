@@ -156,7 +156,7 @@ class Perfusate:
         check_literals(self)
 
     @classmethod
-    def default(cls) -> "Perfusate":
+    def default(cls) -> Perfusate:
         """Get the perfusate of the perfusion table (`[perfusate]`)."""
         return cls(
             glucose=table_value("perfusate", "glucose"),
@@ -232,7 +232,7 @@ class Circuit:
     pco2_gas: Value | None = None
 
     @classmethod
-    def default(cls) -> "Circuit":
+    def default(cls) -> Circuit:
         """Get the circuit of the perfusion table (`[circuit]`).
 
         The pCO2 of the gas is that of the fresh perfusate (`None`): the
@@ -402,7 +402,7 @@ class _Zonated(ABC):
             KeyError: if the table has no section of the organ and species.
         """
 
-    def resolved(self, species: Species) -> "Self":
+    def resolved(self, species: Species) -> Self:
         """Get the organ with the constants of the table where it has none.
 
         Args:
@@ -504,7 +504,7 @@ class LiverOrgan(_Zonated):
         zones: int = 1,
         profiles: Mapping[str, Sequence[float] | _ProfileLike] | None = None,
         species: Species = Species.RAT,
-    ) -> "LiverOrgan":
+    ) -> LiverOrgan:
         """Get the reference liver of a species (`[liver_<species>]`)."""
         return cls(
             mass=table_value(f"liver_{species}", "mass"),
@@ -579,7 +579,7 @@ class KidneyOrgan(_Zonated):
         zones: int = 1,
         profiles: Mapping[str, Sequence[float] | _ProfileLike] | None = None,
         species: Species = Species.RAT,
-    ) -> "KidneyOrgan":
+    ) -> KidneyOrgan:
         """Get the reference kidney of a species (`[kidney_<species>]`)."""
         return cls(
             mass=table_value(f"kidney_{species}", "mass"),
@@ -651,7 +651,7 @@ class GenericOrgan(_Zonated):
     profiles: Mapping[str, Sequence[float] | _ProfileLike] = field(default_factory=dict)
 
     @classmethod
-    def default(cls, key: str, species: Species = Species.RAT) -> "GenericOrgan":
+    def default(cls, key: str, species: Species = Species.RAT) -> GenericOrgan:
         """Get an organ of the physiology table with its mass and fractions.
 
         Args:

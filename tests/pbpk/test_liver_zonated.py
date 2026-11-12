@@ -188,8 +188,8 @@ def _model(
 
 
 def _load(
-    model: "Path | Callable[..., roadrunner.RoadRunner]", **changes: float
-) -> "roadrunner.RoadRunner":
+    model: Path | Callable[..., roadrunner.RoadRunner], **changes: float
+) -> roadrunner.RoadRunner:
     """Load a model with changes before its initialization, tight tolerances.
 
     The model is a file or the `individuals` of one, loaded once for a test.
@@ -200,7 +200,7 @@ def _load(
     return r
 
 
-def _curves(r: "roadrunner.RoadRunner") -> np.ndarray:
+def _curves(r: roadrunner.RoadRunner) -> np.ndarray:
     """The venous plasma and the liver outflow concentrations (mM) after an IV bolus of 10 mg."""
     r[ids.iv_dose(S)] = 10.0
     cols = [f"[{ids.pool_species(Pool.VENOUS, S)}]", ids.organ_outflow(Organ.LIVER, S)]
@@ -212,7 +212,7 @@ def _deviation(a: np.ndarray, b: np.ndarray, times: np.ndarray = MIXED) -> float
     return float(np.max(np.abs(b[times] - a[times]) / a[times]))
 
 
-def _extraction(r: "roadrunner.RoadRunner") -> float:
+def _extraction(r: roadrunner.RoadRunner) -> float:
     """The extraction of the liver at the steady state of the infusion.
 
     `1 - Cout/Cin` with the plasma concentration of the inflow, the mix of
@@ -232,7 +232,7 @@ def _extraction(r: "roadrunner.RoadRunner") -> float:
     return 1.0 - r[ids.organ_outflow(Organ.LIVER, S)] / cin
 
 
-def _x(r: "roadrunner.RoadRunner", clint: float) -> float:
+def _x(r: roadrunner.RoadRunner, clint: float) -> float:
     """The dimensionless clearance `x` of the liver of the merged tissue.
 
     A zone exchanges `PS/n*fu*(Cpl - Cti/Kp)` and metabolizes
@@ -561,7 +561,7 @@ def test_the_zone_tokens_are_those_of_the_engine() -> None:
     assert [ids.zone(k) for k in range(1, 11)] == [zids.zone(k) for k in range(1, 11)]
 
 
-def _sinusoid_elements(liver: ZonatedLiver, ctx: OrganContext) -> dict[str, "Sbase"]:
+def _sinusoid_elements(liver: ZonatedLiver, ctx: OrganContext) -> dict[str, Sbase]:
     """The parameters and reactions of a liver by id."""
     md, _ = liver.build(ctx)
     elements = [*md.parameters, *md.reactions, *md.compartments, *md.species]
@@ -603,7 +603,7 @@ def test_a_molecule_no_fenestra_passes_is_refused_and_told_the_well_stirred_geom
     ZonatedLiver(n_zones=3).build(ctx)
 
 
-def _reference_velocity(ctx: OrganContext, geo: "SinusoidGeometry") -> float:
+def _reference_velocity(ctx: OrganContext, geo: SinusoidGeometry) -> float:
     """The velocity of the blood in the sinusoid of the reference male (m/s).
 
     One individual: the liver mass of the geometry table of the engine is
