@@ -200,7 +200,7 @@ run_simulation pkdb_models.models.hctz --progress log --action simulate --experi
 
 `auto` draws the nested bars of [rich](https://rich.readthedocs.io) at a terminal and writes a line of the log every 30 s otherwise, so a command in a pipe, in a file or in a job says where it is without filling the output; `bar` and `log` choose one of them and `none` shows nothing. The option sets `SBMLSIM_PROGRESS`, which every run of the command and every process it starts reads (`sbmlsim.progress.resolve`), so the setting also reaches the units of a split run.
 
-What reports its progress is the work of sbmlsim (`sbmlsim.progress`): the experiments of a simulation, the points of a scan, the runs of a fit with the points of their jacobians, the scans of an identifiability and the figures of a report. Every mode writes a `progress` event into the `progress.jsonl` of the run, with the count, the estimate of the time which is left and the cores, the CPU and the memory the run uses, so a tool outside the command can follow it:
+What reports its progress is the work of sbmlsim (`sbmlsim.progress`): the experiments of a simulation, the points of a scan, the runs of a fit with the points of their jacobians, the points of the jacobian of a Fisher information, the scans of an identifiability and the figures of a report. An sbmlsim without that module ignores the option. Every mode writes a `progress` event into the `progress.jsonl` of the run, with the count, the estimate of the time which is left and the cores, the CPU and the memory the run uses, so a tool outside the command can follow it:
 
 ```
 experiments 12/70 [00:01:20<00:00:07] cores 16/24 cpu 1480% mem 12.4 GB, machine 18.3/31.0 GB

@@ -10,6 +10,7 @@ import pytest
 from pkpdsim.cli import (
     COMMANDS,
     PROGRESS_ENV,
+    PROGRESS_NAMES,
     ModelNotFoundError,
     main,
     resolve_model,
@@ -261,3 +262,12 @@ def test_a_progress_which_is_no_rendering_is_a_usage_error(
         MAINS["run_simulation"](args)
     assert exit_info.value.code == 2
     assert message in capsys.readouterr().err
+
+
+def test_the_progress_names_are_the_ones_of_sbmlsim() -> None:
+    """The renderings of the option are those of sbmlsim, where it has them."""
+    progress = pytest.importorskip(
+        "sbmlsim.progress", reason="the sbmlsim release without the progress"
+    )
+    assert PROGRESS_NAMES == progress.NAMES
+    assert PROGRESS_ENV == progress.ENV_NAME

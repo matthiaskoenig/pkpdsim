@@ -154,8 +154,6 @@ from sbmlsim.fit.project_fits import (
 from sbmlsim.fit.records import adopt_fit
 from sbmlsim.fit.result import FIT_ID, fit_id, fit_subset
 from sbmlsim.fit.sampling import SamplingType
-from sbmlsim.progress import ENV_NAME as PROGRESS_ENV
-from sbmlsim.progress import NAMES as PROGRESS_NAMES
 from sbmlsim.project import Project, collect_figure_files, load_project, resolve
 from sbmlsim.run import ConfigurationError, execute, list_analyses, plan
 from sbmlsim.run.context import SPEC_FILE
@@ -191,6 +189,13 @@ class Action(StrEnum):
 #: of the arguments and sets as `SBMLSIM_PROGRESS`, as `--profile` of
 #: `sbmlsim.run.profiling` is taken out of them
 PROGRESS_OPTION = "--progress"
+
+#: the renderings of the progress and the variable they are set in, the `NAMES`
+#: and the `ENV_NAME` of `sbmlsim.progress`; named here, so that a command runs
+#: on an sbmlsim without that module, where the option has no effect
+#: (`test_the_progress_names_are_the_ones_of_sbmlsim` holds them together)
+PROGRESS_NAMES = ("auto", "bar", "log", "none")
+PROGRESS_ENV = "SBMLSIM_PROGRESS"
 
 #: the attribute of the model object in its package
 MODEL_ATTRIBUTE = "MODEL"
