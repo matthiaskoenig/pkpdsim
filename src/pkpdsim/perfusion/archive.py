@@ -14,14 +14,21 @@ the cell model of its zones, so the archive ships the three SBML files the
 build writes: the comp model, the cell model, which stays loadable alone (it is
 the model a mesh or another architecture couples to), and the flat model, the
 master entry, which is the model that is simulated. The model of an organ
-without zones is its own flat model and the only entry.
+without zones is its own flat model and the only entry. The interactive panels
+of the model (`sbmlsim.panel.Panel`, `create_archive(..., panels=...)`) are an
+annotation of that model, written before its ODEs, its antimony and the
+archive are.
 """
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from sbmlsim.panel import Panel
+from sbmlsim.panel_sbml import write_panels
 from sbmlsim.release.archive import ArchiveModel, write_archive
 
+from pkpdsim.pbpk.archive import check_panels
 from pkpdsim.perfusion.anatomy import circuit_anatomy_figure
 from pkpdsim.perfusion.builder import PerfusionExtension, build, zone_cell_model
 from pkpdsim.perfusion.definition import PerfusionDefinition
@@ -38,6 +45,7 @@ def create_archive(
     copyright: str,
     readme: Path | None = None,
     extension: PerfusionExtension | None = None,
+    panels: Sequence[Panel] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Build a definition and write its files and the COMBINE archive.
 
@@ -56,7 +64,10 @@ def create_archive(
     file of the archive lies below the parent of `model_output_dir` and is
     located at its path relative to it (`./models/<sid>.xml` for the
     directory `models` of a model package, the licenses `./mit.txt`); the
-    README alone is placed as `./README.md`.
+    README alone is placed as `./README.md`. With `panels` the interactive
+    panels of the model are written into the flat model, the master entry
+    (`sbmlsim.panel_sbml.write_panels`), before its markdown, its antimony and
+    the archive are written.
 
     Args:
         definition: the definition of the circuit.
@@ -68,6 +79,8 @@ def create_archive(
             `None`.
         extension: a mechanism of a package, in the cell model of the zones
             and in the composed model (`pkpdsim.perfusion.PerfusionExtension`).
+        panels: the interactive panels of the model, the annotation of its
+            flat model; `None` or none annotates nothing.
 
     Returns:
         The files with their entries in the COMBINE archive, by the keys of a
@@ -80,10 +93,18 @@ def create_archive(
         `<sid>_anatomy_svg` of the anatomical figure.
 
     Raises:
-        ValueError: for a definition which does not build (`build`).
+        ValueError: for a definition which does not build (`build`), for panels
+            which repeat an id (before anything is written) and for panels
+            which do not read back from the flat model as they were declared
+            (`write_panels`).
+        TypeError: for panels which are no `sbmlsim.panel.Panel` (before
+            anything is written).
     """
+    annotation = check_panels(panels or (), f"the model '{definition.sid}'")
     model_output_dir.mkdir(parents=True, exist_ok=True)
     path = build(definition, model_output_dir, extension)
+    if annotation:
+        write_panels(path, path, annotation)
     sid = definition.sid
     cell = zone_cell_model(definition, extension)
     # the flat model is the master entry: the comp model of a liver carries it

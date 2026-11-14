@@ -16,13 +16,21 @@ sex is the definition with that sex and the id `<sid>_<sex>`, e.g.
 holds both (`PKPDModel(model_path=..., female_model_path=...)`); its `model_path`
 is the male build, so a model with builds per sex keeps its definition male
 (the default), whose build is the master entry.
+
+The interactive panels of a model (`sbmlsim.panel.Panel`) are an annotation
+of the flat model of a build (`sbmlsim.panel_sbml.write_panels`):
+`create_archive(..., panels=...)` writes them into the flat model of every
+build before the ODEs, the antimony and the archive are written, so the
+archive is written once and holds the annotated models.
 """
 
 import dataclasses
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from sbmlsim.panel import Panel
+from sbmlsim.panel_sbml import write_panels
 from sbmlsim.release.archive import ArchiveModel, write_archive
 
 from pkpdsim.pbpk.builder import build
@@ -52,6 +60,89 @@ def sex_definition(definition: PBPKDefinition, sex: Sex) -> PBPKDefinition:
     )
 
 
+#: the panels of the builds of an archive: one sequence for every build or the
+#: panels of each build by its sex (a `Sex` or its text, `"female"`)
+BuildPanels = Sequence[Panel] | Mapping[Sex | str, Sequence[Panel]]
+
+
+def check_panels(panels: Sequence[Panel], owner: str) -> tuple[Panel, ...]:
+    """Check the panels of a model before they are written into it.
+
+    Args:
+        panels: the panels of the model, in the order they are written.
+        owner: the model the panels are of, for the messages, e.g. `the male
+            build of 'hctz'`.
+
+    Returns:
+        The panels.
+
+    Raises:
+        TypeError: for panels which are no `sbmlsim.panel.Panel`.
+        ValueError: if the panels repeat an id, which the annotation would
+            keep the first of only (`sbmlsim.panel_sbml.panels_from_sbml`).
+    """
+    values = tuple(panels)
+    wrong = sorted({type(p).__name__ for p in values if not isinstance(p, Panel)})
+    if wrong:
+        raise TypeError(
+            f"The panels of {owner} are no panels (`sbmlsim.panel.Panel`): {wrong}."
+        )
+    ids = [p.id for p in values]
+    repeated = sorted({i for i in ids if ids.count(i) > 1})
+    if repeated:
+        raise ValueError(f"The panels of {owner} repeat the ids {repeated}.")
+    return values
+
+
+def _build_panels(
+    panels: BuildPanels | None, sexes: Sequence[Sex], sid: str
+) -> dict[Sex, tuple[Panel, ...]]:
+    """Get the panels of every build of an archive.
+
+    Args:
+        panels: the panels of the archive, a sequence for every build or a
+            mapping of the sex of a build to its panels; `None` for none.
+        sexes: the sexes which are built.
+        sid: the id of the definition, for the messages.
+
+    Returns:
+        The panels of every built sex which has panels; a sex without panels,
+        or with an empty sequence of them, is left out.
+
+    Raises:
+        ValueError: if a key of the mapping is no sex or a sex which is not
+            built, or if the panels of a build repeat an id (`check_panels`).
+        TypeError: for panels which are no `sbmlsim.panel.Panel`.
+    """
+    if panels is None:
+        return {}
+    if not isinstance(panels, Mapping):
+        given: dict[Sex, Sequence[Panel]] = dict.fromkeys(sexes, panels)
+    else:
+        given = {}
+        for key, value in panels.items():
+            try:
+                sex = Sex(key)
+            except ValueError:
+                raise ValueError(
+                    f"The panels of the archive of '{sid}' are given for "
+                    f"'{key}', which is no sex: the keys are the sexes of the "
+                    f"builds, {[str(s) for s in Sex]}."
+                ) from None
+            if sex not in sexes:
+                raise ValueError(
+                    f"The panels of the archive of '{sid}' are given for the "
+                    f"sex '{sex}', which is not built (sexes "
+                    f"{[str(s) for s in sexes]})."
+                )
+            given[sex] = value
+    checked = {
+        sex: check_panels(value, f"the {sex} build of '{sid}'")
+        for sex, value in given.items()
+    }
+    return {sex: values for sex, values in checked.items() if values}
+
+
 def create_archive(
     definition: PBPKDefinition,
     model_output_dir: Path,
@@ -63,6 +154,7 @@ def create_archive(
     extra_files: Sequence[Path] = (),
     sexes: Sequence[Sex] | None = None,
     figure: bool = True,
+    panels: BuildPanels | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Build a definition and write its files and the COMBINE archive.
 
@@ -79,7 +171,10 @@ def create_archive(
     substances and processes) is written into `model_output_dir` as
     `<sid>.svg` and the anatomical figure of the male and the female build
     (`anatomy_figure` of `pkpdsim.pbpk.visual.anatomy`) as `<sid>_body.svg`,
-    both entries of the archive.
+    both entries of the archive. With `panels` the interactive panels of a
+    build are written into its flat model (`sbmlsim.panel_sbml.write_panels`)
+    before its markdown, its antimony and the archive are written, so the
+    flat models of the archive are the annotated ones.
 
     Args:
         definition: the definition of the model.
@@ -104,6 +199,11 @@ def create_archive(
             all sexes, which have the same organs, substances and processes,
             its title names the builds; and the anatomical figure
             `<sid>_body.svg` (the key `<sid>_body_svg`, the second extra file).
+        panels: the interactive panels of the builds, the annotation of their
+            flat models: a sequence of panels for every build, or the panels
+            of each build by its sex, e.g. `{Sex.MALE: [...]}`, a sex without
+            panels (or with none) gets no annotation; `None` annotates no
+            build.
 
     Every file of the archive has one location rule: it is below the parent
     of `model_output_dir`, and its location in the archive is its path
@@ -116,11 +216,16 @@ def create_archive(
 
     Raises:
         ValueError: if `sexes` leaves out the sex of the definition or names
-            a sex twice (before anything is written), or, after the builds and
-            before the archive is written, if the stem of an extra model or the
+            a sex twice, if a key of `panels` is no sex or a sex which is not
+            built or the panels of a build repeat an id (before anything is
+            written), if the panels of a build do not read back from its flat
+            model as they were declared (`write_panels`), or, after the builds
+            and before the archive is written, if the stem of an extra model or the
             key of an extra file is the key of another entry, if an extra model
             or file is not below the parent of `model_output_dir` or the suffix
             of an extra file has no format.
+        TypeError: for panels which are no `sbmlsim.panel.Panel` (before
+            anything is written).
 
     Returns:
         The files with their entries in the COMBINE archive, by the keys of a
@@ -143,11 +248,14 @@ def create_archive(
         raise ValueError(
             f"The archive of '{definition.sid}' builds the sexes {repeated} twice."
         )
+    annotations = _build_panels(panels, sexes, definition.sid)
     model_output_dir.mkdir(parents=True, exist_ok=True)
     # the build of the sex of the definition first, the master entry
     models = []
     for sex in (definition.sex, *(s for s in sexes if s is not definition.sex)):
         built = build(sex_definition(definition, sex), model_output_dir)
+        if sex in annotations:
+            write_panels(built.flat_path, built.flat_path, annotations[sex])
         models.append(ArchiveModel(built.comp_path, flat=built.flat_path))
     figures = []
     if figure:
