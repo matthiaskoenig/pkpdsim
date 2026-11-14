@@ -1,14 +1,17 @@
 """Tests of `create_archive`, the factory of a library model in one call."""
 
 import zipfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 import pytest
 from pymetadata.omex import EntryFormat
 from sbmlsim.licenses import License, license_text
+from sbmlsim.panel import Panel, PanelCurve, PanelSimulation
+from sbmlsim.panel_sbml import PANEL_NS, panels_from_sbml
 
-from pkpdsim.pbpk import create_archive
+from pkpdsim.pbpk import Sex, build, create_archive, sex_definition
 
 from .conftest import definition
 
@@ -257,3 +260,185 @@ def test_the_built_files_have_the_location_rule_of_the_extra_files(
     }
     with zipfile.ZipFile(tmp_path / "simple_model.omex") as z:
         assert "sbml/simple_flat.xml" in z.namelist()
+
+
+def _panel(pid: str) -> Panel:
+    """Get a panel of the simple model."""
+    return Panel(
+        id=pid,
+        title=f"panel {pid}",
+        curves=(PanelCurve(id="[Cve_drg]", label="drug in venous blood"),),
+        simulation=PanelSimulation(end=10.0),
+    )
+
+
+A, B, C = _panel("a"), _panel("b"), _panel("c")
+
+#: the panels of the archives with builds per sex, by the name of the case
+PANEL_CASES: dict[str, Sequence[Panel] | Mapping[Sex | str, Sequence[Panel]] | None] = {
+    "none": None,
+    "one sex": {Sex.MALE: [A, B]},
+    "both sexes": {"male": [A], Sex.FEMALE: [C, A]},
+    "every build": [A],
+}
+
+#: the panels of the flat model of every build, by case and key of the build
+EXPECTED_PANELS: dict[str, dict[str, list[Panel]]] = {
+    "none": {"simple_flat": [], "simple_female_flat": []},
+    "one sex": {"simple_flat": [A, B], "simple_female_flat": []},
+    "both sexes": {"simple_flat": [A], "simple_female_flat": [C, A]},
+    "every build": {"simple_flat": [A], "simple_female_flat": [A]},
+}
+
+
+@pytest.fixture(scope="module")
+def panel_archives(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> dict[str, tuple[Path, dict[str, dict[str, Any]]]]:
+    """The archives of the male and female build of every case of `PANEL_CASES`.
+
+    Each with its directory, the parent of the models, and the files of
+    `create_archive`.
+    """
+    archives = {}
+    for case, panels in PANEL_CASES.items():
+        root = tmp_path_factory.mktemp("panels")
+        files = create_archive(
+            definition(),
+            root / "models",
+            model="simple",
+            copyright=COPYRIGHT,
+            sexes=(Sex.MALE, Sex.FEMALE),
+            figure=False,
+            panels=panels,
+        )
+        archives[case] = (root, files)
+    return archives
+
+
+def _members(root: Path) -> dict[str, bytes]:
+    """Get the members of the archive below `root` by their name."""
+    with zipfile.ZipFile(root / "simple_model.omex") as z:
+        return {name: z.read(name) for name in z.namelist()}
+
+
+@pytest.mark.parametrize("case", list(PANEL_CASES))
+def test_the_flat_models_of_the_archive_carry_the_panels_of_their_build(
+    panel_archives: dict[str, tuple[Path, dict[str, dict[str, Any]]]], case: str
+) -> None:
+    """The flat model of a build in the archive has exactly the panels of its build.
+
+    A sex without panels has no annotation of panels, and neither has a comp
+    model.
+    """
+    root, files = panel_archives[case]
+    members = _members(root)
+    for key, expected in EXPECTED_PANELS[case].items():
+        entry = files[key]["entry"].location.removeprefix("./")
+        panels, problems = panels_from_sbml(members[entry].decode("utf-8"))
+        assert problems == ()
+        assert list(panels.values()) == expected
+    for key in ("simple", "simple_female"):
+        assert PANEL_NS.encode() not in files[key]["path"].read_bytes()
+
+
+@pytest.mark.parametrize("case", list(PANEL_CASES))
+def test_the_archive_is_written_once_from_the_annotated_files(
+    panel_archives: dict[str, tuple[Path, dict[str, dict[str, Any]]]], case: str
+) -> None:
+    """Every entry of the archive is the file on disk, the annotated flat models among them."""
+    root, files = panel_archives[case]
+    members = _members(root)
+    for info in files.values():
+        entry = info["entry"].location.removeprefix("./")
+        assert members[entry] == info["path"].read_bytes(), entry
+
+
+@pytest.mark.parametrize("case", [c for c in PANEL_CASES if c != "none"])
+def test_the_panels_change_only_the_annotated_flat_models(
+    panel_archives: dict[str, tuple[Path, dict[str, dict[str, Any]]]], case: str
+) -> None:
+    """An archive with panels is the archive without them but for its annotated flat models.
+
+    The comp models, the ODEs and the antimony of every build, the licenses
+    and the flat model of a build without panels are the bytes of the archive
+    without panels, so `panels=None` (the default) is the archive as before
+    the keyword; the manifest and the metadata, which carry the dates of the
+    archive, are left out of the comparison.
+    """
+    none = _members(panel_archives["none"][0])
+    root, files = panel_archives[case]
+    members = _members(root)
+    assert set(members) == set(none)
+    annotated = {
+        files[key]["entry"].location.removeprefix("./")
+        for key, expected in EXPECTED_PANELS[case].items()
+        if expected
+    }
+    dated = {"manifest.xml", "metadata.rdf"}
+    for name in set(members) - annotated - dated:
+        assert members[name] == none[name], name
+    for name in annotated:
+        assert members[name] != none[name]
+
+
+def test_without_panels_the_built_models_are_the_build(
+    panel_archives: dict[str, tuple[Path, dict[str, dict[str, Any]]]],
+    tmp_path: Path,
+) -> None:
+    """`panels=None` writes no annotation: the models are the bytes of `build`."""
+    members = _members(panel_archives["none"][0])
+    for sex in (Sex.MALE, Sex.FEMALE):
+        built = build(sex_definition(definition(), sex), tmp_path)
+        for path in (built.comp_path, built.flat_path):
+            assert members[f"models/{path.name}"] == path.read_bytes()
+            assert PANEL_NS.encode() not in path.read_bytes()
+
+
+@pytest.mark.parametrize(
+    ("panels", "sexes", "error", "match"),
+    [
+        ({"cp": [_panel("a")]}, None, ValueError, "'cp', which is no sex"),
+        ({Sex.FEMALE: [_panel("a")]}, None, ValueError, "'female', which is not built"),
+        ([_panel("a"), _panel("a")], None, ValueError, r"repeat the ids \['a'\]"),
+        ([object()], None, TypeError, r"no panels .*\['object'\]"),
+        (
+            {Sex.FEMALE: [_panel("b"), _panel("b")]},
+            (Sex.MALE, Sex.FEMALE),
+            ValueError,
+            "female build of 'simple' repeat",
+        ),
+    ],
+    ids=["no sex", "not built", "repeated id", "no panel", "repeated in a build"],
+)
+def test_the_panels_are_checked_before_anything_is_written(
+    tmp_path: Path,
+    panels: Any,  # noqa: ANN401
+    sexes: tuple[Sex, ...] | None,
+    error: type[Exception],
+    match: str,
+) -> None:
+    """A key of no built sex, a repeated id or no panel raises before a file is written."""
+    with pytest.raises(error, match=match):
+        create_archive(
+            definition(),
+            tmp_path / "models",
+            model="simple",
+            copyright=COPYRIGHT,
+            sexes=sexes,
+            panels=panels,
+        )
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_an_empty_sequence_of_panels_annotates_nothing(tmp_path: Path) -> None:
+    """A build whose panels are empty is written as without panels."""
+    files = create_archive(
+        definition(),
+        tmp_path / "models",
+        model="simple",
+        copyright=COPYRIGHT,
+        figure=False,
+        panels={Sex.MALE: []},
+    )
+    assert PANEL_NS.encode() not in files["simple_flat"]["path"].read_bytes()
