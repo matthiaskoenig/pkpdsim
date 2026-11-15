@@ -51,7 +51,7 @@ dependencies = [
     # the simulation experiments, their figures and reports, and the fits
     # (0.17 and 0.18 took over the generic modules of pkpdsim, the consolidation;
     # 0.24.0 has the interactive panels a factory annotates its models with)
-    "sbmlsim>=0.24.0",
+    "sbmlsim>=0.25.0",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`)
     "pkpdutils>=1.4.0",
     # the study folders of format 2 of PK-DB, read as `pkdb check` reads them (`pkpdsim.data`)
