@@ -75,6 +75,7 @@ if TYPE_CHECKING:
     from sbmlsim.credibility import Credibility
     from sbmlsim.experiment import SimulationExperiment
     from sbmlsim.experiment.draws import UncertaintySettings
+    from sbmlsim.panel import App, Panel
 
 #: the actions of the `run` command of a model, see `pkpdsim.cli`
 RUN_ACTIONS: tuple[str, ...] = ("simulate", "list_experiments", "factory", "all")
@@ -607,6 +608,25 @@ class PKPDModel(Project):
             pydantic.ValidationError: for invalid keywords or fields.
         """
         super().__init__(**data)
+
+    @override
+    def default_app(self, sbml: Path) -> tuple[dict[str, Panel], App | None]:
+        """Get the default web app of the model: its doses, diseases and scans.
+
+        See `pkpdsim.webapp`: pages of small panels of the readouts its
+        experiments compare with data, under the knobs of its doses and dosing
+        protocols, of the diseases it is studied in and of its other scans,
+        and the variants of the model.
+
+        Args:
+            sbml: the SBML of the default variant, which the factory just wrote.
+
+        Returns:
+            The panels by their id and the app.
+        """
+        from pkpdsim.webapp import default_app
+
+        return default_app(self, sbml)
 
     @override
     def replace(self, **changes: Any) -> Self:
