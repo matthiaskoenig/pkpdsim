@@ -1,8 +1,8 @@
 # Figures
 
-The figures of a model are generated from its definition, never drawn by hand: the anatomical figure of the male and the female build, the schematic of the circulation, the one-page figure of a publication which combines both, an interactive page of each for the web, and the bodies of individuals of the library. They read the definition through the same rules as the build (`parts_for`, `luminal_substances`, `bile_substances`, the absorption of the intestine variant), so a figure shows what the model has. Every figure is SVG, pure python and deterministic: the same definition gives the same bytes.
+The figures of a model are generated from its definition, never drawn by hand: the anatomical figure of the male and the female build, the schematic of the circulation, the one-page figure of a publication which combines both, an interactive page and an interactive snippet of each for the web, and the bodies of individuals of the library. They read the definition through the same rules as the build (`parts_for`, `luminal_substances`, `bile_substances`, the absorption of the intestine variant), so a figure shows what the model has. Every figure is SVG, pure python and deterministic: the same definition gives the same bytes.
 
-The figures on this page are those of the glimepiride-like model of the [tutorial](tutorial.md), given orally and intravenously; `scripts/visual/docs_figures.py` writes them and `tests/docs/test_docs_figures.py` fails while one is out of date. The docs show the anatomical figure (A) and the schematic (B) as interactive pages only, and every page of the PBPK library which creates a model shows its two figures after the snippet which creates it: the script runs the snippets of the page up to the definition, writes its figures into `img/figures/models/` and the frames which show them into a generated region of the page (`<!-- generated: figures-<page>-<snippet> ... -->`). A frame takes the height its page posts (`docs/javascripts/figures.js`).
+The figures on this page are those of the glimepiride-like model of the [tutorial](tutorial.md), given orally and intravenously; `scripts/visual/docs_figures.py` writes them and `tests/docs/test_docs_figures.py` fails while one is out of date. The docs show the anatomical figure (A) and the schematic (B) as interactive pages only, and every page of the PBPK library which creates a model shows its two figures after the fence which creates it: the script runs the fences of the page up to the definition, writes its figures into `img/figures/models/` and the frames which show them into a generated region of the page (`<!-- generated: figures-<page>-<snippet> ... -->`). A frame takes the height its page posts (`docs/javascripts/figures.js`).
 
 | Figure | Function | Written by `create_archive` |
 | --- | --- | --- |
@@ -10,8 +10,11 @@ The figures on this page are those of the glimepiride-like model of the [tutoria
 | Bodies without annotations | `anatomy_figure(definition, path, annotations=False)` | no |
 | Schematic | `model_figure(definition, path)` | `<sid>.svg` (key `<sid>_svg`) |
 | Interactive page | `interactive_figure(definition, path, figure="anatomy" or "schematic")` | no |
+| Interactive snippet | `interactive_figure(definition, path, figure=..., snippet=True)` | `<sid>.html`, `<sid>_body.html` |
 | Publication figure | `publication_figure(definition, path, pdf=False)` | no |
 | Bodies of individuals | `body_strip(individuals)` of `pkpdsim.pbpk.visual.body` | no |
+
+An interactive figure comes in two forms. `interactive_figure(definition, path)` writes a whole page, which a page of the docs embeds in a frame (the page posts its height, `docs/javascripts/figures.js`), and `interactive_figure(definition, path, snippet=True)` writes a snippet, one `<div>` which a page of markdown or HTML embeds as it is: the style sheet of the snippet, the style sheet and the ids of its SVG and its script are scoped to that `<div>` (its id is `pkf-<sid>-<figure>`), so the two snippets of a model stand on one page without touching it or each other, and the snippet brings its own light background, so it reads in a dark theme as well. `create_archive` writes the snippet of each figure beside its SVG, `<sid>.html` and `<sid>_body.html`, which are no entry of the archive (it carries the figures as SVG); the release of a model repository embeds them on the index of its site, while the README, which GitHub shows without scripts, shows the SVG.
 
 ## The anatomical figure
 

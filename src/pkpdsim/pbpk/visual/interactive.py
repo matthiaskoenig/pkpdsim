@@ -1,4 +1,4 @@
-"""The interactive pages of the figures: hover cards on the static SVG.
+"""The interactive figures: hover cards on the static SVG.
 
 One self-contained HTML file per figure (no external script or style), for the
 docs and GitHub Pages: hovering an element with a `data-k` key shows its card,
@@ -8,10 +8,20 @@ blood sample, the lumen or the urine; a key `txt:<text>` shows its own text
 (a process line). The credit (pkpdsim, the anatomy or the organ icons and the
 license of the anatomograms, `CREDIT`, `ICON_CREDIT`) sits in
 the legend below the figure, never in a card.
+
+The file is a whole page (`html_page`), which a docs page embeds in a frame,
+or a snippet (`html_snippet`, `interactive_figure(..., snippet=True)`), one
+`<div>` which a page of markdown or HTML embeds as it is: everything of the
+snippet, its style and the ids of its SVG, is scoped to that `<div>`, so two
+snippets of one model stand on one page without touching it or each other.
+The factory of a model writes the snippets beside its SVG figures
+(`pkpdsim.pbpk.create_archive`) and the release of a model repository shows
+them on its index page.
 """
 
 import json
-from collections.abc import Mapping
+import re
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -23,6 +33,7 @@ from pkpdsim.pbpk.visual.animal import figure_of, reference_volumes
 from pkpdsim.pbpk.visual.body import reference_body
 from pkpdsim.pbpk.visual.content import ModelContent
 from pkpdsim.pbpk.visual.resources import anatomy
+from pkpdsim.sex import Sex
 
 __all__ = [
     "CREDIT",
@@ -32,6 +43,7 @@ __all__ = [
     "cards",
     "figure_credit",
     "html_page",
+    "html_snippet",
     "interactive_figure",
 ]
 
@@ -176,6 +188,25 @@ def _script_json(value: object) -> str:
     )
 
 
+#: the script of the hover cards, the elements with a `data-k` key of
+#: `{query}` and the element `card` which shows the rows of a key
+_CARDS_JS = """\
+const esc = s => s.replace(/[&<>]/g, c => ({{'&':'&amp;','<':'&lt;','>':'&gt;'}})[c]);
+{query}.forEach(el => {{
+  el.addEventListener('mousemove', ev => {{
+    const k = el.dataset.k;
+    const rows = k.startsWith('txt:') ? [esc(k.slice(4))] : CARDS[k];
+    if (!rows) return;
+    ev.stopPropagation();
+    card.innerHTML = rows.map(r => `<div>${{r}}</div>`).join('');
+    card.style.display = 'block';
+    card.style.left = Math.min(ev.clientX + 14, window.innerWidth - card.offsetWidth - 8) + 'px';
+    card.style.top = Math.min(ev.clientY + 14, window.innerHeight - card.offsetHeight - 8) + 'px';
+  }});
+  el.addEventListener('mouseleave', () => card.style.display = 'none');
+}});"""
+
+
 def html_page(
     svg: str,
     cards: dict[str, list[str]],
@@ -222,20 +253,7 @@ path[data-k]:hover {{ filter:brightness(1.12) drop-shadow(0 0 2px #0006); }}
 <script>
 const CARDS = {_script_json(cards)};
 const card = document.getElementById('card');
-const esc = s => s.replace(/[&<>]/g, c => ({{'&':'&amp;','<':'&lt;','>':'&gt;'}})[c]);
-document.querySelectorAll('.wrap [data-k]').forEach(el => {{
-  el.addEventListener('mousemove', ev => {{
-    const k = el.dataset.k;
-    const rows = k.startsWith('txt:') ? [esc(k.slice(4))] : CARDS[k];
-    if (!rows) return;
-    ev.stopPropagation();
-    card.innerHTML = rows.map(r => `<div>${{r}}</div>`).join('');
-    card.style.display = 'block';
-    card.style.left = Math.min(ev.clientX + 14, window.innerWidth - card.offsetWidth - 8) + 'px';
-    card.style.top = Math.min(ev.clientY + 14, window.innerHeight - card.offsetHeight - 8) + 'px';
-  }});
-  el.addEventListener('mouseleave', () => card.style.display = 'none');
-}});
+{_CARDS_JS.format(query="document.querySelectorAll('.wrap [data-k]')")}
 // the height of the page for the frame which embeds it (the docs size their frames by it)
 // (of its content: the scroll height of the document is at least the height of the frame)
 const height = () => parent !== window && parent.postMessage(
@@ -246,19 +264,170 @@ addEventListener('resize', height);
 """
 
 
+_STYLE = re.compile(r"(<style[^>]*>)(.*?)(</style>)", re.S)
+_ID = re.compile(r'\bid="([^"]+)"')
+
+
+def _scoped_css(css: str, scope: str) -> str:
+    """Prefix every selector of a style sheet with the id of its container.
+
+    The style sheets of the figures are generated and simple: class and type
+    selectors, no at-rule, no comment and no nesting, so a rule is scoped by
+    its selectors alone.
+
+    Args:
+        css: the style sheet.
+        scope: the id of the element the rules are scoped to.
+
+    Returns:
+        The rules, each selector prefixed, on one line.
+
+    Raises:
+        ValueError: if the style sheet has an at-rule or a comment, which the
+            scope cannot be written into.
+    """
+    if "@" in css or "/*" in css:
+        raise ValueError(
+            "The style sheet of the figure has an at-rule or a comment, which "
+            f"the snippet cannot scope to '{scope}'."
+        )
+    rules = []
+    for rule in css.split("}"):
+        selectors, brace, body = rule.partition("{")
+        if not brace:
+            continue
+        scoped = ",".join(f"#{scope} {s.strip()}" for s in selectors.split(","))
+        rules.append(f"{scoped}{{{body.strip()}}}")
+    return "".join(rules)
+
+
+def _scoped_svg(svg: str, scope: str) -> str:
+    """Scope the ids and the style sheet of an SVG to its container.
+
+    An SVG in a page of HTML shares the ids and the style sheet of the page,
+    so a snippet prefixes every id of the figure with the id of its container
+    (`id`, `url(#...)`, `href`, `aria-labelledby`) and scopes every rule of its
+    style sheet (`_scoped_css`).
+
+    Args:
+        svg: the figure.
+        scope: the id of the container.
+
+    Returns:
+        The SVG, scoped.
+    """
+    for sid in sorted(set(_ID.findall(svg)), key=len, reverse=True):
+        for text in (f'id="{sid}"', f"url(#{sid})", f'href="#{sid}"'):
+            svg = svg.replace(text, text.replace(sid, f"{scope}-{sid}"))
+        svg = svg.replace(
+            f'aria-labelledby="{sid}"', f'aria-labelledby="{scope}-{sid}"'
+        )
+    return _STYLE.sub(
+        lambda m: m[1] + _scoped_css(m[2], scope) + m[3],
+        svg,
+    )
+
+
+def html_snippet(
+    svg: str,
+    cards: dict[str, list[str]],
+    scope: str,
+    width: int,
+    legend: str,
+    credit: str = CREDIT,
+) -> str:
+    """A snippet of a figure with hover cards and its legend, for a page.
+
+    One `<div>` with the figure, its legend, its cards and its script, which a
+    page of markdown or HTML embeds as it is, e.g. the index of a model
+    repository. Everything of the snippet is scoped to the `<div>`: the style
+    sheets of the snippet and of the SVG are written under its id and the ids
+    of the SVG carry it (`_scoped_svg`), so a page shows two snippets without
+    their styles meeting, and the script is a closure over the `<div>`. The
+    snippet brings its own light background, so it reads in a dark theme as
+    well, and it has no blank line, which would end it in markdown.
+
+    Args:
+        svg: the figure, whose elements carry `data-k` keys.
+        cards: the cards by key.
+        scope: the id of the `<div>`, unique on a page, e.g.
+            `pkf-<model>-anatomy`.
+        width: the width of the figure [px], the maximal width of the snippet.
+        legend: the legend below the figure (HTML), the credit appended.
+        credit: the credit (HTML), `CREDIT` of an anatomical figure,
+            `ICON_CREDIT` of a schematic.
+
+    Returns:
+        The HTML of the snippet, deterministic.
+
+    Raises:
+        ValueError: if the style sheet of the SVG cannot be scoped
+            (`_scoped_css`) or the snippet has a blank line.
+    """
+    style = (
+        f"#{scope}{{display:block;max-width:{width}px;margin:1.2em auto;padding:8px;"
+        "background:#fff;color:#1f2a2e;border-radius:8px;"
+        "font:14px/1.45 system-ui, sans-serif}"
+        f"#{scope} svg{{width:100%;height:auto;display:block}}"
+        f"#{scope} [data-k]{{cursor:help}}"
+        f"#{scope} path[data-k]:hover{{filter:brightness(1.12) drop-shadow(0 0 2px #0006)}}"
+        f"#{scope} .pkf-legend{{margin:4px 0 0;font-size:12.5px;color:#555}}"
+        f"#{scope} .pkf-legend a{{color:#00796b}}"
+        f"#{scope} .pkf-card{{position:fixed;pointer-events:none;max-width:380px;"
+        "background:#fff;color:#1f2a2e;border:1px solid #d5dde0;border-radius:8px;"
+        "box-shadow:0 6px 24px #0002;padding:8px 10px;font-size:12.5px;"
+        "display:none;z-index:10}"
+        f"#{scope} .pkf-card div{{margin:2px 0}}"
+        f"#{scope} .pkf-card code{{font-size:11.5px;color:#666}}"
+        f"#{scope} .pkf-card .b{{display:inline-block;font:700 10px monospace;"
+        "color:#fff;background:#6d6d6d;border-radius:3px;padding:0 4px}"
+    )
+    script = _CARDS_JS.format(query="root.querySelectorAll('svg [data-k]')")
+    snippet = f"""<div id="{scope}" class="pkf-figure">
+<style>{style}</style>
+{_scoped_svg(svg.strip(), scope)}
+<p class="pkf-legend">{legend}<br>{credit}</p><div class="pkf-card" role="tooltip"></div>
+<script>
+(() => {{
+const root = document.getElementById('{scope}');
+const CARDS = {_script_json(cards)};
+const card = root.querySelector('.pkf-card');
+{script}
+}})();
+</script>
+</div>
+"""
+    if any(not line.strip() for line in snippet.splitlines()):
+        raise ValueError(
+            f"The snippet '{scope}' has a blank line, which ends it in markdown."
+        )
+    return snippet
+
+
 def interactive_figure(
-    definition: PBPKDefinition, path: Path, *, figure: str = "anatomy"
+    definition: PBPKDefinition,
+    path: Path,
+    *,
+    figure: str = "anatomy",
+    snippet: bool = False,
+    sexes: Sequence[Sex] | None = None,
 ) -> Path:
-    """Write the interactive page of a figure of a definition.
+    """Write the interactive page or snippet of a figure of a definition.
 
     Args:
         definition: the definition.
         path: the HTML file to write.
         figure: `anatomy` (the anatomical figure of both builds) or
             `schematic` (the figure of `pkpdsim.pbpk.figure`).
+        snippet: write the snippet of the figure (`html_snippet`), the `<div>`
+            which a page embeds, under the id `pkf-<sid>-<figure>`, instead of
+            a whole page (`html_page`).
+        sexes: the sexes which are built (`create_archive(..., sexes=...)`),
+            which the figure names as the static figures do; `None` is the sex
+            of the definition only.
 
     Returns:
-        The path of the page.
+        The path of the file.
 
     Raises:
         ValueError: for another figure.
@@ -274,12 +443,12 @@ def interactive_figure(
         volumes = {f"reference {species}": reference_volumes(species)}
     if figure == "anatomy":
         fig = figure_of(definition, content)
-        svg = fig.svg(tags=True)
+        svg = fig.svg(tags=True, sexes=sexes)
         width = fig.size[0]
         legend = "Hover the organs, labels, substances and symbols for details."
         credit = CREDIT
     elif figure == "schematic":
-        svg = schematic_svg(definition, (definition.sex,))
+        svg = schematic_svg(definition, sexes or (definition.sex,))
         width = int(float(svg.split('width="', 1)[1].split('"', 1)[0]))
         legend = "Hover the organ rows, substance chips and process lines for details."
         credit = ICON_CREDIT
@@ -287,14 +456,13 @@ def interactive_figure(
         raise ValueError(
             f"No interactive figure '{figure}'; the figures are 'anatomy' and 'schematic'."
         )
-    page = html_page(
-        svg,
-        cards(content, volumes),
-        f"{content.name} ({figure})",
-        width,
-        legend,
-        credit,
-    )
+    rows = cards(content, volumes)
+    if snippet:
+        text = html_snippet(
+            svg, rows, f"pkf-{definition.sid}-{figure}", width, legend, credit
+        )
+    else:
+        text = html_page(svg, rows, f"{content.name} ({figure})", width, legend, credit)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(page, encoding="utf-8")
+    path.write_text(text, encoding="utf-8")
     return path

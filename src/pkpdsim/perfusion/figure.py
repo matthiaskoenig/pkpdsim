@@ -1003,14 +1003,19 @@ def circuit_cards(definition: PerfusionDefinition) -> dict[str, list[str]]:
 
 
 def interactive_circuit(
-    definition: PerfusionDefinition, path: Path, *, figure: str = "anatomy"
+    definition: PerfusionDefinition,
+    path: Path,
+    *,
+    figure: str = "anatomy",
+    snippet: bool = False,
 ) -> Path:
-    """Write the interactive page of a figure of a definition.
+    """Write the interactive page or snippet of a figure of a definition.
 
     A figure with its hover cards, one self-contained HTML file
     (`pkpdsim.pbpk.visual.interactive.html_page`), which posts its height to
-    the docs page which embeds it; the keyword and its default are those of
-    `pkpdsim.pbpk.visual.interactive.interactive_figure`.
+    the docs page which embeds it, or the snippet which a page embeds as it is
+    (`pkpdsim.pbpk.visual.interactive.html_snippet`); the keywords and their
+    defaults are those of `pkpdsim.pbpk.visual.interactive.interactive_figure`.
 
     Args:
         definition: the definition of the circuit.
@@ -1018,15 +1023,17 @@ def interactive_circuit(
         figure: `anatomy` (panel A, the organ in its circuit,
             `pkpdsim.perfusion.anatomy.circuit_anatomy_svg`, the default) or
             `schematic` (panel B, `circuit_svg`).
+        snippet: write the snippet of the figure, the `<div>` which a page
+            embeds, under the id `pkf-<sid>-<figure>`, instead of a whole page.
 
     Returns:
-        The path of the page.
+        The path of the file.
 
     Raises:
         ValueError: for another figure or an invalid definition
             (`PerfusionDefinition.validate`).
     """
-    from pkpdsim.pbpk.visual.interactive import html_page
+    from pkpdsim.pbpk.visual.interactive import html_page, html_snippet
     from pkpdsim.perfusion.anatomy import anatomy_cards, circuit_anatomy_svg
 
     if figure == "anatomy":
@@ -1051,7 +1058,14 @@ def interactive_circuit(
             "'schematic'."
         )
     width = int(float(svg.split('width="', 1)[1].split('"', 1)[0]))
-    page = html_page(svg, cards, f"{definition.name} ({figure})", width, legend, credit)
+    if snippet:
+        text = html_snippet(
+            svg, cards, f"pkf-{definition.sid}-{figure}", width, legend, credit
+        )
+    else:
+        text = html_page(
+            svg, cards, f"{definition.name} ({figure})", width, legend, credit
+        )
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(page, encoding="utf-8")
+    path.write_text(text, encoding="utf-8")
     return path

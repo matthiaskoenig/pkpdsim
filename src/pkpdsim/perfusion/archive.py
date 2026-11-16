@@ -32,7 +32,7 @@ from pkpdsim.pbpk.archive import check_panels
 from pkpdsim.perfusion.anatomy import circuit_anatomy_figure
 from pkpdsim.perfusion.builder import PerfusionExtension, build, zone_cell_model
 from pkpdsim.perfusion.definition import PerfusionDefinition
-from pkpdsim.perfusion.figure import circuit_figure
+from pkpdsim.perfusion.figure import circuit_figure, interactive_circuit
 
 __all__ = ["create_archive"]
 
@@ -60,7 +60,11 @@ def create_archive(
     there, with the README, the licenses, every model the build writes (the
     flat model the master entry, and for a liver the comp model and the cell
     model, which stays loadable alone), the
-    markdown, the antimony and the two figures (the schematic first). Every
+    markdown, the antimony and the two figures (the schematic first). The
+    interactive snippet of each figure is written beside it, `<sid>.html` and
+    `<sid>_anatomy.html` (`pkpdsim.perfusion.figure.interactive_circuit`),
+    which a page of the documentation of the model embeds; the snippets are no
+    entry of the archive, which carries the figures as SVG. Every
     file of the archive lies below the parent of `model_output_dir` and is
     located at its path relative to it (`./models/<sid>.xml` for the
     directory `models` of a model package, the licenses `./mit.txt`); the
@@ -119,6 +123,11 @@ def create_archive(
         circuit_figure(definition, model_output_dir / f"{sid}.svg"),
         circuit_anatomy_figure(definition, model_output_dir / f"{sid}_anatomy.svg"),
     ]
+    # the interactive snippets beside the figures, for the documentation
+    for svg, kind in zip(figures, ("schematic", "anatomy"), strict=True):
+        interactive_circuit(
+            definition, svg.with_suffix(".html"), figure=kind, snippet=True
+        )
     return write_archive(
         models,
         model_output_dir.parent,

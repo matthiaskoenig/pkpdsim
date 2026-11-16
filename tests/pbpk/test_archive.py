@@ -83,6 +83,17 @@ def test_the_archive_has_the_flat_model_as_master(tmp_path: Path) -> None:
     } <= names
 
 
+def test_the_snippets_lie_beside_the_figures(tmp_path: Path) -> None:
+    """The interactive snippet of every figure, for the docs, not in the archive."""
+    results = _create(tmp_path)
+    for stem, kind in (("simple", "schematic"), ("simple_body", "anatomy")):
+        snippet = (tmp_path / "models" / f"{stem}.html").read_text(encoding="utf-8")
+        assert snippet.startswith(f'<div id="pkf-simple-{kind}"')
+    assert not [key for key in results if key.endswith("_html")]
+    with zipfile.ZipFile(tmp_path / "simple_model.omex") as z:
+        assert not [name for name in z.namelist() if name.endswith(".html")]
+
+
 def test_the_archive_carries_the_extra_models(tmp_path: Path) -> None:
     """An extra SBML file is an entry by its stem, after the models.
 
