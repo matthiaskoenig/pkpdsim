@@ -1,9 +1,11 @@
-"""Tests of the anatomical figure of a model and of the interactive pages."""
+"""Tests of the anatomical figure of a model and of its interactive figures."""
 
 import json
 import re
 from pathlib import Path
 from xml.etree import ElementTree
+
+import pytest
 
 from pkpdsim.pbpk import Route
 from pkpdsim.pbpk.visual import palette
@@ -13,6 +15,7 @@ from pkpdsim.pbpk.visual.interactive import (
     CREDIT,
     ICON_CREDIT,
     html_page,
+    html_snippet,
     interactive_figure,
 )
 
@@ -122,6 +125,52 @@ def test_a_card_never_ends_the_script_of_the_page() -> None:
     match = re.search(r"const CARDS = (\{.*?\});\n", html, re.S)
     assert match is not None
     assert json.loads(match.group(1)) == {"li": rows}
+
+
+def test_the_snippets_of_a_model_are_scoped_to_their_div(tmp_path: Path) -> None:
+    """A snippet is one `<div>`: its styles, its ids and its script stay inside it."""
+    d = seven_substances()
+    snippets = {
+        kind: interactive_figure(
+            d, tmp_path / f"{kind}.html", figure=kind, snippet=True
+        ).read_text()
+        for kind in ("anatomy", "schematic")
+    }
+    ids: dict[str, set[str]] = {}
+    for kind, html in snippets.items():
+        scope = f"pkf-{d.sid}-{kind}"
+        assert html.startswith(f'<div id="{scope}" class="pkf-figure">')
+        assert html.rstrip().endswith("</div>")
+        assert "<html" not in html and "<body" not in html
+        # a blank line would end the snippet in a page of markdown
+        assert all(line.strip() for line in html.splitlines())
+        for style in re.findall(r"<style>(.*?)</style>", html, re.S):
+            selectors = [r.split("{", 1)[0] for r in style.split("}") if "{" in r]
+            assert selectors
+            assert all(
+                s.strip() == f"#{scope}" or s.strip().startswith(f"#{scope} ")
+                for selector in selectors
+                for s in selector.split(",")
+            )
+        ids[kind] = set(re.findall(r'\bid="([^"]+)"', html))
+        assert ids[kind] and all(i.startswith(scope) for i in ids[kind])
+        # the script is a closure over the div, not one of the page
+        assert f"document.getElementById('{scope}')" in html
+    # the two snippets of a model stand on one page
+    assert not ids["anatomy"] & ids["schematic"]
+    match = re.search(r"const CARDS = (\{.*?\});\n", snippets["anatomy"], re.S)
+    assert match is not None
+    assert any("UBERON:0002107" in row for row in json.loads(match.group(1))["li"])
+    assert CREDIT in snippets["anatomy"]
+    assert ICON_CREDIT in snippets["schematic"]
+
+
+def test_a_style_sheet_which_cannot_be_scoped_is_refused() -> None:
+    """A snippet never leaves a rule of its figure unscoped."""
+    with pytest.raises(ValueError, match="at-rule or a comment"):
+        html_snippet(
+            "<svg><style>@media print{.a{fill:#000}}</style></svg>", {}, "s", 10, "l"
+        )
 
 
 def test_the_interactive_schematic_has_process_cards(tmp_path: Path) -> None:

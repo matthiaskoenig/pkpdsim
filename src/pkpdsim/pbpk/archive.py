@@ -171,7 +171,11 @@ def create_archive(
     substances and processes) is written into `model_output_dir` as
     `<sid>.svg` and the anatomical figure of the male and the female build
     (`anatomy_figure` of `pkpdsim.pbpk.visual.anatomy`) as `<sid>_body.svg`,
-    both entries of the archive. With `panels` the interactive panels of a
+    both entries of the archive, and the interactive snippet of each beside it
+    as `<sid>.html` and `<sid>_body.html`
+    (`pkpdsim.pbpk.visual.interactive.interactive_figure`), which a page of the
+    documentation of the model embeds; the snippets are no entry of the
+    archive, which carries the figures as SVG. With `panels` the interactive panels of a
     build are written into its flat model (`sbmlsim.panel_sbml.write_panels`)
     before its markdown, its antimony and the archive are written, so the
     flat models of the archive are the annotated ones.
@@ -198,7 +202,9 @@ def create_archive(
             `<sid>_svg`, the first extra file of the archive); one figure for
             all sexes, which have the same organs, substances and processes,
             its title names the builds; and the anatomical figure
-            `<sid>_body.svg` (the key `<sid>_body_svg`, the second extra file).
+            `<sid>_body.svg` (the key `<sid>_body_svg`, the second extra file);
+            and the interactive snippet of each, `<sid>.html` and
+            `<sid>_body.html`, which are no entry of the archive.
         panels: the interactive panels of the builds, the annotation of their
             flat models: a sequence of panels for every build, or the panels
             of each build by its sex, e.g. `{Sex.MALE: [...]}`, a sex without
@@ -260,11 +266,21 @@ def create_archive(
     figures = []
     if figure:
         from pkpdsim.pbpk.visual.anatomy import anatomy_figure
+        from pkpdsim.pbpk.visual.interactive import interactive_figure
 
         path = model_output_dir / f"{definition.sid}.svg"
         figures.append(model_figure(definition, path, sexes))
         body = model_output_dir / f"{definition.sid}_body.svg"
         figures.append(anatomy_figure(definition, body, sexes=sexes))
+        # the interactive snippets beside the figures, for the documentation
+        for svg, kind in ((path, "schematic"), (body, "anatomy")):
+            interactive_figure(
+                definition,
+                svg.with_suffix(".html"),
+                figure=kind,
+                snippet=True,
+                sexes=sexes,
+            )
     return write_archive(
         models,
         model_output_dir.parent,

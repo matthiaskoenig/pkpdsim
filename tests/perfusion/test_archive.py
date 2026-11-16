@@ -68,6 +68,14 @@ def test_the_archive_has_the_model_its_files_and_the_figure(tmp_path: Path) -> N
     # the schematic first, then the anatomical figure
     keys = list(results)
     assert keys.index("kidney_circuit_svg") < keys.index("kidney_circuit_anatomy_svg")
+    # the interactive snippet of every figure lies beside it, no entry of the archive
+    for stem, kind in (
+        ("kidney_circuit", "schematic"),
+        ("kidney_circuit_anatomy", "anatomy"),
+    ):
+        snippet = (models / f"{stem}.html").read_text(encoding="utf-8")
+        assert snippet.startswith(f'<div id="pkf-kidney_circuit-{kind}"')
+    assert not [key for key in results if key.endswith("_html")]
     assert (tmp_path / "mit.txt").is_file() and (
         tmp_path / "cc-by-sa-4.0.txt"
     ).is_file()
