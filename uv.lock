@@ -1679,7 +1679,7 @@ requires-dist = [
     { name = "python-libsbml", specifier = ">=5.21.2" },
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.3" },
-    { name = "sbmlsim", specifier = ">=0.26.0" },
+    { name = "sbmlsim", specifier = ">=0.27.1" },
     { name = "sbmlsim", extras = ["amici"], marker = "extra == 'amici'" },
     { name = "sbmlutils", specifier = ">=0.17.2" },
     { name = "scipy", specifier = ">=1.18.1" },
@@ -2291,7 +2291,7 @@ wheels = [
 
 [[package]]
 name = "sbmlsim"
-version = "0.26.0"
+version = "0.27.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -2317,6 +2317,7 @@ dependencies = [
     { name = "salib" },
     { name = "sbmlmath" },
     { name = "sbmlode" },
+    { name = "sbmlsim-core" },
     { name = "sbmlutils" },
     { name = "scipy" },
     { name = "seaborn" },
@@ -2324,15 +2325,30 @@ dependencies = [
     { name = "typst" },
     { name = "xarray" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/35/e8/6a8bcc2ffab80a0e8d9e74a553ad0f2b6114c75aab7a07c20894db2feb53/sbmlsim-0.26.0.tar.gz", hash = "sha256:59a3da64cd3a22f7ff2cb1d84d5c62c8d0d63d76bc5e0f6f3dc7eeb12e3567b8", size = 6102931, upload-time = "2026-11-16T10:44:50.783Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f3/9a/b890f3a64f95ed5b4d609c067827b486dda5363e6cfd2c6f919b29a7effd/sbmlsim-0.27.1.tar.gz", hash = "sha256:de0d5a7940804b65939fb4387b3e7b1d40fdcab6a0ba411e2b9c0585f3859983", size = 6180944, upload-time = "2026-11-16T13:13:52.176Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/06/d8/390a38e7172b8ffff88f9d3d05cccb90d06c07bb9a8d87994bbbd2d0082c/sbmlsim-0.26.0-py3-none-any.whl", hash = "sha256:1a07f19e41d32f6caf1ab274cc5d30dfc3a742373da41cd579e74001d192fb71", size = 1493004, upload-time = "2026-11-16T10:44:48.491Z" },
+    { url = "https://files.pythonhosted.org/packages/14/ca/dc9938b5b41c1a57c6c92929d46bd992a20346ba1dfd9760c647eb3a9f1b/sbmlsim-0.27.1-py3-none-any.whl", hash = "sha256:8b9d2c631f524170f2745a3e1c960e0229ecdbff0a639ffd96fb502ca0e57953", size = 1562737, upload-time = "2026-11-16T13:13:49.846Z" },
 ]
 
 [package.optional-dependencies]
 amici = [
     { name = "amici" },
     { name = "ninja" },
+]
+
+[[package]]
+name = "sbmlsim-core"
+version = "0.5.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/58/66/ba8bb50288e87749e4ceed12d4176e2645eef1b83e855f420298da26e4cd/sbmlsim_core-0.5.0-cp314-abi3-macosx_10_12_x86_64.whl", hash = "sha256:48695922eec4f61ae36dbac8d235fed1ad205c95245101844a05594926c837bf", size = 5537188, upload-time = "2026-11-16T11:00:40.036Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/ba/2f4aee856868066c5fa5e35f8094634b77b8009a1f60b4a190b69b777197/sbmlsim_core-0.5.0-cp314-abi3-macosx_11_0_arm64.whl", hash = "sha256:b46fbf47e37ab7799881fc0d0d7e48e5fa9126a2eb549224e0e78980892b0ed3", size = 4880570, upload-time = "2026-11-16T11:00:42.187Z" },
+    { url = "https://files.pythonhosted.org/packages/77/e0/5d1167d0a459e6ba51ddc740ccbfa88f636867ae81798eb6a7242dd2e155/sbmlsim_core-0.5.0-cp314-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:f80337b4c2942d30d898edcd0a3b2999e081d20b5191dd0e7febbd7694de48f2", size = 4516848, upload-time = "2026-11-16T11:00:44.362Z" },
+    { url = "https://files.pythonhosted.org/packages/50/f9/75763e6bab0e339cfcf67ce422b2c5c374cb2b9f30a69f93353f154d3301/sbmlsim_core-0.5.0-cp314-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:69130e50b1ba7006f9c4f26ed08f7670abb0c59d66eb634bb2311bd862e31873", size = 5294198, upload-time = "2026-11-16T11:00:46.947Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/4b/ff5cdfd13902f9ef86b43715981186ee3de6e0b6e0c2176f10502d429d12/sbmlsim_core-0.5.0-cp314-abi3-win_amd64.whl", hash = "sha256:0db8beea9333b0e88f600325f147846a1dc24c250c0214a96508ba11b54728fa", size = 5143879, upload-time = "2026-11-16T11:00:48.856Z" },
 ]
 
 [[package]]
