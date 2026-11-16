@@ -303,7 +303,8 @@ def test_the_assessment_gives_the_verdicts_of_pkpdsim_0_19(
     assert list(battery) == list(PK_BATTERY.order)
     # the toy has no substance with a molecular weight and does not start at
     # its steady state; the generic non-negativity runs on every model, and the
-    # dose states need neither a substance nor a simulation
+    # dose states need neither a substance nor a simulation; the cross simulator
+    # compares with the engine core, which every install of sbmlsim brings
     assert battery == {
         "dose_states": "passed",
         "mass_balance": "not_applicable",
@@ -311,7 +312,7 @@ def test_the_assessment_gives_the_verdicts_of_pkpdsim_0_19(
         "zero_dose": "not_applicable",
         "steady_state": "not_applicable",
         "superposition": "not_applicable",
-        "cross_simulator": "not_applicable",
+        "cross_simulator": "passed",
         "plausibility": "passed",
         "rebuild": "passed",
     }

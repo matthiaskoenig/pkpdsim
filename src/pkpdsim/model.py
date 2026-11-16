@@ -629,6 +629,27 @@ class PKPDModel(Project):
         return default_app(self, sbml)
 
     @override
+    def default_variant_panels(
+        self, panels: Mapping[str, Panel], variants: Mapping[str, Path]
+    ) -> dict[str, dict[str, Panel]]:
+        """Get the default panels of the builds of the other sexes.
+
+        See `pkpdsim.webapp.default_variant_panels`: the classes of a renal
+        impairment at the healthy GFR of the build of each sex.
+
+        Args:
+            panels: the panels of `default_app` by their id.
+            variants: the SBML file of every variant, the default first.
+
+        Returns:
+            The panels of a variant by its name and the id of the panel, only
+            the panels which differ.
+        """
+        from pkpdsim.webapp import default_variant_panels
+
+        return default_variant_panels(self, panels, variants)
+
+    @override
     def replace(self, **changes: Any) -> Self:
         """Get a copy of the model with other fields, validated again.
 
