@@ -55,6 +55,7 @@ nav = [
     { "Timecourses in parts" = "timecourse.md" },
     { "Licenses" = "licenses.md" },
     { "Release of a model repository" = "release.md" },
+    { "Web app of a model" = "webapp.md" },
   ] },
   { "API reference" = [
     { "Overview" = "api/index.md" },
@@ -89,6 +90,7 @@ nav = [
     { "pbpk figures" = "api/pbpk_visual.md" },
     { "zonation" = "api/zonation.md" },
     { "perfusion" = "api/perfusion.md" },
+    { "webapp" = "api/webapp.md" },
   ] },
   { "Contributing" = "development.md" },
 ]
