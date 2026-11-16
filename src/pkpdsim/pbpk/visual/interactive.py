@@ -368,7 +368,8 @@ def html_snippet(
         f"#{scope}{{display:block;max-width:{width}px;margin:1.2em auto;padding:8px;"
         "background:#fff;color:#1f2a2e;border-radius:8px;"
         "font:14px/1.45 system-ui, sans-serif}"
-        f"#{scope} svg{{width:100%;height:auto;display:block}}"
+        # the figure alone: a nested SVG (an icon) keeps the size of its attributes
+        f"#{scope} > svg{{width:100%;height:auto;display:block}}"
         f"#{scope} [data-k]{{cursor:help}}"
         f"#{scope} path[data-k]:hover{{filter:brightness(1.12) drop-shadow(0 0 2px #0006)}}"
         f"#{scope} .pkf-legend{{margin:4px 0 0;font-size:12.5px;color:#555}}"
