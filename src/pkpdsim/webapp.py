@@ -207,9 +207,9 @@ def default_app(model: PKPDModel, sbml: Path) -> tuple[dict[str, Panel], App | N
             model.name,
         )
         return model.default_panels(sbml), None
-    units = _units(model, readouts)
+    units = _units(sbml, readouts)
     labels = {r: _label(sbml, r) for r in readouts}
-    time_unit = _time_unit(model)
+    time_unit = _time_unit(sbml)
     dose_knobs = _dose_knobs(
         studied.doses,
         ids,
@@ -302,7 +302,11 @@ def _studied(model: PKPDModel, ids: set[str]) -> _Studied:
 
     from pkpdsim.experiment import PKPDSimulationExperiment
 
-    classes = list(model.experiment_classes())
+    try:
+        classes = list(model.experiment_classes())
+    except ValueError:
+        # a model without simulation experiments
+        classes = []
     base = next((c for c in classes if issubclass(c, PKPDSimulationExperiment)), None)
     scans = tuple(
         spec
@@ -390,11 +394,11 @@ def _hours(end: float, unit: object) -> float:
         return float(end) / 60.0
 
 
-def _time_unit(model: PKPDModel) -> str:
-    """The time unit of the model, from its default variant."""
+def _time_unit(sbml: Path) -> str:
+    """The time unit of a model, from the SBML the factory wrote."""
     from sbmlsim.units import UnitsInformation
 
-    uinfo = UnitsInformation.from_sbml(model.variant_path(None))
+    uinfo = UnitsInformation.from_sbml(sbml)
     return str(uinfo.get("time") or "min")
 
 
@@ -406,11 +410,11 @@ def _end(ends: Sequence[float], time_unit: str) -> float:
     return min(end, MAX_END)
 
 
-def _units(model: PKPDModel, readouts: Sequence[str]) -> dict[str, str | None]:
+def _units(sbml: Path, readouts: Sequence[str]) -> dict[str, str | None]:
     """The units the readouts are drawn in: uM for a concentration, umol for an amount."""
     from sbmlsim.units import UnitsInformation
 
-    uinfo = UnitsInformation.from_sbml(model.variant_path(None))
+    uinfo = UnitsInformation.from_sbml(sbml)
     units: dict[str, str | None] = {}
     for readout in readouts:
         unit = uinfo.get(readout)
