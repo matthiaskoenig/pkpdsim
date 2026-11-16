@@ -13,6 +13,7 @@ with the PK battery the same checks.
 """
 
 import dataclasses
+import importlib.util
 import json
 import math
 import re
@@ -35,6 +36,9 @@ from pkpdsim.credibility import DOSE_STATES, EXTENSIONS, PK_BATTERY
 from pkpdsim.credibility.ratios import section_pairs
 from pkpdsim.data import StudyRecord, study_record_path, table_digests
 from pkpdsim.model import PKPDModel
+
+#: whether AMICI, the second engine of the PK battery, is installed
+AMICI = importlib.util.find_spec("amici") is not None
 
 DATA = Path(__file__).parent / "data" / "credibility"
 
@@ -303,7 +307,8 @@ def test_the_assessment_gives_the_verdicts_of_pkpdsim_0_19(
     assert list(battery) == list(PK_BATTERY.order)
     # the toy has no substance with a molecular weight and does not start at
     # its steady state; the generic non-negativity runs on every model, and the
-    # dose states need neither a substance nor a simulation
+    # dose states need neither a substance nor a simulation; the cross simulator
+    # of the PK battery is AMICI, which an environment of the extra `amici` has
     assert battery == {
         "dose_states": "passed",
         "mass_balance": "not_applicable",
@@ -311,7 +316,7 @@ def test_the_assessment_gives_the_verdicts_of_pkpdsim_0_19(
         "zero_dose": "not_applicable",
         "steady_state": "not_applicable",
         "superposition": "not_applicable",
-        "cross_simulator": "not_applicable",
+        "cross_simulator": "passed" if AMICI else "not_applicable",
         "plausibility": "passed",
         "rebuild": "passed",
     }

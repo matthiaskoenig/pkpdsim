@@ -38,6 +38,7 @@ of the model (the builds of the sexes), which a reader switches between.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import math
 import re
@@ -63,6 +64,8 @@ from sbmlsim.panel import (
     PanelSimulation,
 )
 from sbmlsim.units import Quantity, ureg
+
+from pkpdsim.sex import Sex
 
 if TYPE_CHECKING:
     from sbmlsim.experiment import SimulationExperiment
@@ -222,6 +225,7 @@ def default_app(model: PKPDModel, sbml: Path) -> tuple[dict[str, Panel], App | N
         if DOSE_TARGETS.fullmatch(target)
         and target not in {k.target for k in dose_knobs}
     }
+    sex = _sex(next(iter(model.variants), ""))
     end = _end(studied.ends, time_unit)
     single = PanelSimulation(end=end, points=POINTS, x_unit="hr", preinit=zero)
 
@@ -235,7 +239,7 @@ def default_app(model: PKPDModel, sbml: Path) -> tuple[dict[str, Panel], App | N
         target = next((t for t in disease.targets if t in ids), None)
         if target is None or not _studies(studied, disease, target):
             continue
-        knob = _disease_knob(disease, target, studied.base)
+        knob = _disease_knob(disease, target, studied.base, sex)
         if knob is not None:
             covered.add(target)
             pages.append((disease.key, disease.title, (knob, *first), single))
@@ -284,6 +288,54 @@ def default_app(model: PKPDModel, sbml: Path) -> tuple[dict[str, Panel], App | N
     return panels, app
 
 
+def default_variant_panels(
+    model: PKPDModel, panels: Mapping[str, Panel], variants: Mapping[str, Path]
+) -> dict[str, dict[str, Panel]]:
+    """Get the default panels of the builds of the other sexes, see the module.
+
+    The panels of `default_app` are the ones of the default build. The classes
+    of a renal impairment are the renal functions at the healthy GFR of a
+    build (`ScaledRenalMap`), so the build of another sex gets the panels of
+    the page of the disease with the classes at its own healthy GFR; every
+    other panel is the same in every build.
+
+    Args:
+        model: the model.
+        panels: the panels of `default_app` by their id.
+        variants: the SBML file of every variant, the default first.
+
+    Returns:
+        The panels of a variant by its name and the id of the panel, only the
+        panels which differ from the ones of the default build.
+    """
+    names = list(variants)
+    if len(names) < 2:
+        return {}
+    base = _base(_classes(model))
+    default = _sex(names[0])
+    keys = {disease.key: disease for disease in DISEASES}
+    shown: dict[str, dict[str, Panel]] = {}
+    for name in names[1:]:
+        sex = _sex(name)
+        if sex is None or sex == default:
+            continue
+        changed: dict[str, Panel] = {}
+        for panel_id, panel in panels.items():
+            knobs = list(panel.knobs)
+            for k, knob in enumerate(knobs):
+                disease = keys.get(knob.id)
+                if disease is None or knob.kind != "choice" or knob.target is None:
+                    continue
+                other = _disease_knob(disease, knob.target, base, sex)
+                if other is not None and other != knob:
+                    knobs[k] = other
+            if knobs != list(panel.knobs):
+                changed[panel_id] = panel.model_copy(update={"knobs": tuple(knobs)})
+        if changed:
+            shown[name] = changed
+    return shown
+
+
 def _entities(sbml: Path) -> set[str]:
     """Get the ids a panel sets or selects in a model: its entities and `[S]`."""
     doc: libsbml.SBMLDocument = libsbml.readSBMLFromFile(str(sbml))
@@ -296,18 +348,36 @@ def _entities(sbml: Path) -> set[str]:
     return ids
 
 
+def _classes(model: PKPDModel) -> list[type[SimulationExperiment]]:
+    """Get the classes of the experiments of a model, none for a model without."""
+    try:
+        return list(model.experiment_classes())
+    except ValueError:
+        # a model without simulation experiments
+        return []
+
+
+def _base(classes: Iterable[type]) -> type | None:
+    """Get the base of the experiments of a model, whose maps give the classes."""
+    from pkpdsim.experiment import PKPDSimulationExperiment
+
+    return next((c for c in classes if issubclass(c, PKPDSimulationExperiment)), None)
+
+
+def _sex(variant: str) -> Sex | None:
+    """Get the sex of the build of a variant, `None` for a variant of no sex."""
+    try:
+        return Sex(variant)
+    except ValueError:
+        return None
+
+
 def _studied(model: PKPDModel, ids: set[str]) -> _Studied:
     """Collect what the experiments with data of a model state, see `_Studied`."""
     from sbmlsim.fit.helpers import FitMappings
 
-    from pkpdsim.experiment import PKPDSimulationExperiment
-
-    try:
-        classes = list(model.experiment_classes())
-    except ValueError:
-        # a model without simulation experiments
-        classes = []
-    base = next((c for c in classes if issubclass(c, PKPDSimulationExperiment)), None)
+    classes = _classes(model)
+    base = _base(classes)
     scans = tuple(
         spec
         for c in classes
@@ -568,15 +638,24 @@ def _studies(studied: _Studied, disease: _Disease, target: str) -> bool:
     )
 
 
-def _disease_knob(disease: _Disease, target: str, base: type | None) -> Knob | None:
+def _disease_knob(
+    disease: _Disease, target: str, base: type | None, sex: Sex | None
+) -> Knob | None:
     """The choice knob of the classes of a disease, the first class its default.
 
     The classes are the map of the base of the experiments of the model
     (`PKPDSimulationExperiment.renal_map` and its siblings), the classes its
     experiments simulate, e.g. the renal functions of the classes of the GFR at
-    the healthy GFR of the model; two classes of one value are one choice.
+    the healthy GFR of the model; two classes of one value are one choice. A
+    map of the classes of a sex (`ScaledRenalMap.of_sex`) gives the classes of
+    the build of `sex`, at its own healthy GFR.
     """
     classes = getattr(base, disease.map, None) if base is not None else None
+    of_sex = getattr(classes, "of_sex", None)
+    if sex is not None and callable(of_sex):
+        # a map of one build raises, its classes are the ones of every sex
+        with contextlib.suppress(TypeError):
+            classes = of_sex(sex)
     if not classes:
         return None
     choices: list[Choice] = []

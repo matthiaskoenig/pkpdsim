@@ -1,5 +1,6 @@
 """The default web app of a model: pages of its doses, its diseases and its scans."""
 
+from dataclasses import replace
 from functools import cached_property
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,6 +21,7 @@ from sbmlutils.factory import (
 )
 
 from pkpdsim import webapp
+from pkpdsim.sex import Sex
 
 if TYPE_CHECKING:
     from pkpdsim.model import PKPDModel
@@ -308,3 +310,52 @@ def test_the_default_app_of_a_model_of_two_builds() -> None:
     assert [v.id for v in app.variants] == list(MODEL.variants)
     readouts = [panels[i].curves[0].id for i in app.pages[0].panels]
     assert readouts and all(r in ("A", "[A]") for r in readouts)
+
+
+class _SexMap(dict[str, float]):
+    """A map of the classes of the male build which has the ones of the female."""
+
+    def of_sex(self, sex: Sex) -> dict[str, float]:
+        if sex == Sex.MALE:
+            return self
+        return {label: round(value * 1.2, 6) for label, value in self.items()}
+
+
+class _SexBase:
+    renal_map: ClassVar[dict[str, float]] = _SexMap(_Base.renal_map)
+    cirrhosis_map: ClassVar[dict[str, float]] = _Base.cirrhosis_map
+
+
+def test_the_female_build_has_the_classes_at_its_healthy_gfr(
+    sbml: Path, studied: _Studied, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        webapp, "_studied", lambda model, ids: replace(studied, base=_SexBase)
+    )
+    monkeypatch.setattr(webapp, "_base", lambda classes: _SexBase)
+    monkeypatch.setattr(webapp, "_classes", lambda model: [])
+    model = _model(sbml, {"male": sbml, "female": sbml})
+    panels, app = default_app(model, sbml)
+    assert app is not None
+    male = panels["renal_0"].knobs[0]
+    assert [c.value for c in male.choices] == list(_Base.renal_map.values())
+    shown = webapp.default_variant_panels(model, panels, model.variants)
+    assert list(shown) == ["female"]
+    renal = [i for i in panels if i.startswith("renal_")]
+    # every panel of the renal page, and no other panel
+    assert sorted(shown["female"]) == sorted(renal)
+    female = shown["female"]["renal_0"].knobs[0]
+    assert [c.value for c in female.choices] == [
+        round(v * 1.2, 6) for v in _Base.renal_map.values()
+    ]
+    assert female.default == female.choices[0].value
+    # the dose knob of the page is the one of the male build
+    assert shown["female"]["renal_0"].knobs[1:] == panels["renal_0"].knobs[1:]
+
+
+def test_a_model_of_one_build_has_no_panels_of_a_variant(
+    sbml: Path, studied: _Studied
+) -> None:
+    model = _model(sbml, {"male": sbml})
+    panels, _ = default_app(model, sbml)
+    assert webapp.default_variant_panels(model, panels, model.variants) == {}
