@@ -258,7 +258,7 @@ def test_a_second_process_keeps_the_live_staging_directory(tmp_path: Path) -> No
             timeout=60,
         )
         assert attempt.returncode == 1
-        assert "another run" in attempt.stdout
+        assert "another run" in " ".join(attempt.stdout.split())
         assert (staging / "index.html").is_file()
 
     _staged(target, run, kind="simulate")
