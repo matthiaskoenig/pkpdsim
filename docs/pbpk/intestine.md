@@ -83,7 +83,7 @@ Route.inhaled(
 )
 ```
 
-A route which states one of the two fractions gets the rest of the dose as the other, as a formula over the one it states (`f_inh_swallowed_alb = 1 - f_inh_deposited_alb`): what is not deposited is swallowed, nothing is lost, and the pair stays exact when the stated fraction is fitted, scanned or drawn from its uncertainty. A loss needs both fractions, which a route states together.
+A route which states one of the two fractions gets the rest of the dose as the other, as a formula over the one it states (`f_inh_swallowed_alb = 1 - f_inh_deposited_alb`): what is not deposited is swallowed, nothing is lost, and the pair stays exact wherever the initial assignments are evaluated again: a fitted value, the pre-initialization of a scan and a draw of the uncertainty. A change of the stated fraction during a simulation does not reach the other, which keeps the value of its initialization, as for every formula of the library. A loss needs both fractions, which a route states together.
 
 A fraction which is no fraction of the dose (below 0 or above 1) and a **pair of numbers** which sums above the dose are refused by the definition: the loss would be negative, its reaction would run backwards into the body and the dose state would create mass while its own arithmetic stays conserved. A fraction which is a `Formula` has no number before the simulation, so a pair with a formula in it is **not** checked and the model answers for it; the formula of an omitted fraction is safe by construction, it is the rest of the dose.
 
