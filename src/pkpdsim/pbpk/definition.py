@@ -871,7 +871,8 @@ class PBPKDefinition:
         and the rest, which is the loss, so the two fractions are at most the
         dose; a route which states one of them takes the default of the data
         for the other. A fitted fraction is checked at the value of its fit
-        record (a `Formula` is not checked).
+        record; a `Formula`, which has no number before the simulation, is not
+        checked.
         """
         problems = [
             f"route {r.kind}: unknown substance '{r.substance}'"

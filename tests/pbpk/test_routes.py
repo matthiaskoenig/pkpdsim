@@ -28,6 +28,7 @@ from pkpdsim.pbpk import (
     Excretion,
     FirstOrder,
     FirstOrderDissolution,
+    Formula,
     Kp,
     Metabolism,
     Mode,
@@ -37,6 +38,7 @@ from pkpdsim.pbpk import (
     Pool,
     Route,
     Substance,
+    U,
     ids,
 )
 from pkpdsim.pbpk.builder import BuildResult, build
@@ -427,6 +429,13 @@ def test_an_inhaled_dose_which_is_more_than_the_dose_is_refused() -> None:
     routes = [Route.inhaled(S, deposited=0.5), Route.oral(S)]
     with pytest.raises(ValueError, match="sum above the dose"):
         _depot(routes, "inhaled_above").validate()
+
+
+def test_an_inhaled_fraction_as_a_formula_is_not_checked() -> None:
+    """A formula has no number before the simulation, so the split is not checked."""
+    deposited = Formula("1 dimensionless - f_inh_swallowed_drg", U.dimensionless)
+    routes = [Route.inhaled(S, deposited=deposited), Route.oral(S)]
+    _depot(routes, "inhaled_formula").validate()
 
 
 def test_a_definition_without_depot_routes_is_unchanged(tmp_path: Path) -> None:
