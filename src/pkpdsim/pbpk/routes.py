@@ -29,8 +29,9 @@ applied by a first order process, the conventions of the hand-written models:
   `Cpo_<s>` and passes the liver (the superior rectal vein), the rest the
   venous plasma (the middle and inferior rectal veins);
 - inhaled: `INHDOSE_<s>` drains with the half-life `ti_inh_<s>` (s) of the
-  application and splits into three parts, the deposition of an inhaled
-  dose. The fraction `f_inh_deposited_<s>` enters the lung depot `Ainh_<s>`
+  application and splits at the application into the deposited, the
+  swallowed and the lost part. The fraction `f_inh_deposited_<s>` enters the
+  lung depot `Ainh_<s>`
   (mmole, in `Vinh`), which the lung absorbs with first order `ka_inh_<s>`
   (1/hr) into its plasma (`J_inh_abs_<s>`, a reaction of that organ): the
   dose enters the circulation where an inhaled dose enters it, the

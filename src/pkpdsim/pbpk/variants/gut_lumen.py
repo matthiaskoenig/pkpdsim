@@ -519,8 +519,8 @@ class LumenBuilder(StandardBuilder):
         The dose state is the undissolved drug of the first segment; the
         other segments have the undissolved amount `Asolid_<seg>_<s>`. The
         swallowed part of an inhaled dose of the substance adds to the dose
-        state (`_swallowed_input`). An
-        enteric-coated tablet has no dissolution in the first segment, the
+        state (`_swallowed_input`). An enteric-coated tablet has no
+        dissolution in the first segment, the
         stomach: it only empties, undissolved, with the transit of the
         stomach of the condition, and the undissolved amount which saturates
         a dose-dependent dissolution leaves the coated tablet in the stomach
