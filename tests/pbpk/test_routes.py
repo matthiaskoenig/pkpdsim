@@ -421,21 +421,63 @@ def test_an_inhaled_route_needs_an_oral_route_of_its_substance() -> None:
 
 
 def test_an_inhaled_dose_which_is_more_than_the_dose_is_refused() -> None:
-    """A route which states one fraction takes the data default for the other.
+    """Two fractions of a route which sum above the dose leave a negative loss.
 
-    The deposited fraction and the default swallowed fraction then sum above
-    the dose, which would make the loss negative and create mass.
+    The loss would create mass: its reaction would run backwards, into the
+    body, while the arithmetic of the dose state stays conserved.
     """
-    routes = [Route.inhaled(S, deposited=0.5), Route.oral(S)]
+    routes = [Route.inhaled(S, deposited=0.6, swallowed=0.5), Route.oral(S)]
     with pytest.raises(ValueError, match="sum above the dose"):
         _depot(routes, "inhaled_above").validate()
+
+
+def test_an_inhaled_fraction_which_is_no_fraction_is_refused() -> None:
+    """A fraction above the dose would make the rest of the dose negative."""
+    routes = [Route.inhaled(S, deposited=1.3), Route.oral(S)]
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        _depot(routes, "inhaled_no_fraction").validate()
 
 
 def test_an_inhaled_fraction_as_a_formula_is_not_checked() -> None:
     """A formula has no number before the simulation, so the split is not checked."""
     deposited = Formula("1 dimensionless - f_inh_swallowed_drg", U.dimensionless)
-    routes = [Route.inhaled(S, deposited=deposited), Route.oral(S)]
+    routes = [Route.inhaled(S, deposited=deposited, swallowed=0.9), Route.oral(S)]
     _depot(routes, "inhaled_formula").validate()
+
+
+def _rest_of_the_dose(result: BuildResult, deposited: float) -> None:
+    """Simulate a 10 mg dose without the absorption: the rest is swallowed, nothing lost."""
+    r = load(result)
+    assert r[ids.inhaled_deposited_fraction(S)] == pytest.approx(deposited)
+    assert r[ids.inhaled_swallowed_fraction(S)] == pytest.approx(1.0 - deposited)
+    mmole = 10.0 / r[ids.mr(S)]
+    r[ids.depot_absorption_rate("inhaled", S)] = 0.0
+    r[ids.depot_dose("inhaled", S)] = 10.0
+    r.simulate(0, 10, 10)
+    assert r[ids.depot("inhaled", S)] == pytest.approx(deposited * mmole, rel=1e-6)
+    assert r[ids.depot_loss("inhaled", S)] == pytest.approx(0.0, abs=1e-12 * mmole)
+    assert total_amount(r, S) + dose_amount(r, S) == pytest.approx(mmole, rel=1e-9)
+
+
+def test_an_inhaled_route_which_states_the_deposited_fraction_swallows_the_rest(
+    tmp_path: Path,
+) -> None:
+    """A route which states one fraction ties the other to the rest of the dose.
+
+    The data of the library state the pair; a route which states only the
+    deposited fraction swallows the rest, as the note of the data says, and
+    loses nothing.
+    """
+    routes = [Route.inhaled(S, deposited=0.3), Route.oral(S)]
+    _rest_of_the_dose(build(_depot(routes, "inhaled_rest_swallowed"), tmp_path), 0.3)
+
+
+def test_an_inhaled_route_which_states_the_swallowed_fraction_deposits_the_rest(
+    tmp_path: Path,
+) -> None:
+    """The other direction: what is not swallowed is deposited in the lung."""
+    routes = [Route.inhaled(S, swallowed=0.4), Route.oral(S)]
+    _rest_of_the_dose(build(_depot(routes, "inhaled_rest_deposited"), tmp_path), 0.6)
 
 
 def test_a_definition_without_depot_routes_is_unchanged(tmp_path: Path) -> None:

@@ -71,7 +71,7 @@ J_inh_abs_<s>: Ainh_<s> -> Cpl_<s> = ka_inh_<s> / 60 min_per_hr * Ainh_<s>
 d(PODOSE_<s>)/dt = -(J_po_<s> + J_trs_st_<s>) * Mr_<s> + R_inh_swallow_<s>
 ```
 
-The defaults of the data are the absorption rate 1/hr of the depot routes (not verified, the absorption of the deposited dose depends on the substance, its solubility and the region of the deposition), a deposited fraction of 0.2 and a swallowed fraction of 0.8, the order of a pressurized metered-dose inhaler without a spacer (a lung deposition of 10 to 20 % of the dose, the rest in the oropharynx), which a dry powder inhaler or a spacer raises; every value is a choice of the library which a model sets or fits:
+The defaults of the data are the absorption rate 1/hr of the depot routes (not verified, the absorption of the deposited dose depends on the substance, its solubility and the region of the deposition), a deposited fraction of 0.2 and a swallowed fraction of 0.8, the order of a pressurized metered-dose inhaler without a spacer (a lung deposition of 10 to 20 % of the dose, the rest in the oropharynx), which a dry powder inhaler or a spacer raises; the pair sums to the dose, so the default route loses nothing although the loss is its third destination. Every value is a choice of the library which a model sets or fits:
 
 ```python
 # not executed
@@ -83,7 +83,9 @@ Route.inhaled(
 )
 ```
 
-A route which states one of the two fractions takes the default of the data for the other, and a definition whose deposited and swallowed fraction sum above the dose is refused: the loss would be negative and the dose state would create mass.
+A route which states one of the two fractions gets the rest of the dose as the other, as a formula over the one it states (`f_inh_swallowed_alb = 1 - f_inh_deposited_alb`): what is not deposited is swallowed, nothing is lost, and the pair stays exact when the stated fraction is fitted, scanned or drawn from its uncertainty. A loss needs both fractions, which a route states together.
+
+A fraction which is no fraction of the dose (below 0 or above 1) and a **pair of numbers** which sums above the dose are refused by the definition: the loss would be negative, its reaction would run backwards into the body and the dose state would create mass while its own arithmetic stays conserved. A fraction which is a `Formula` has no number before the simulation, so a pair with a formula in it is **not** checked and the model answers for it; the formula of an omitted fraction is safe by construction, it is the rest of the dose.
 
 A substance which is absorbed from the lung into its tissue instead of its plasma, or an inhaled dose which is cleared from the airways into the gut (mucociliary clearance), is not described: the deposited dose is one depot which the lung absorbs.
 

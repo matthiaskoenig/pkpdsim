@@ -42,7 +42,8 @@ applied by a first order process, the conventions of the hand-written models:
   the rate rule of that dose state), the part deposited in the oropharynx
   and cleared into the gut, so an inhaled route needs an oral route of its
   substance. The rest is lost into `Aloss_inh_<s>` (exhaled, or left in the
-  device and the mouth).
+  device and the mouth); a route which states one fraction only gets the
+  rest of the dose as the other and loses nothing (`inhaled_split`).
 
 The dose in mg is converted to mmole with the molecular weight `Mr_<s>`. The
 dose states and the parameters of the formulations are parameters of the
@@ -99,7 +100,7 @@ from pkpdsim.pbpk.organs import Pool
 from pkpdsim.pbpk.placement import value_parameter
 from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Q, check_literals
+from pkpdsim.pbpk.values import Formula, Q, check_literals
 
 __all__ = [
     "DEPOT",
@@ -218,7 +219,12 @@ class Depot:
             depot (s), `ti_<k>_<s>`; a formulation which releases slowly (a
             suppository) sets it.
         swallowed: the fraction of the dose which is swallowed,
-            `f_inh_swallowed_<s>`; the inhaled route only.
+            `f_inh_swallowed_<s>`; the inhaled route only. It and `fraction`
+            are a pair: one of them alone gets the rest of the dose as the
+            other and loses nothing, both of them keep the rest as the loss
+            (`inhaled_split`), and a pair of numbers above the dose is
+            refused, while a pair with a `Formula` in it is not checked and
+            must sum to at most the dose.
     """
 
     ka: Q | None = None
@@ -342,11 +348,39 @@ class Route:
         The dose splits into the fraction `deposited` in the lung, which the
         lung absorbs with `ka`, the fraction `swallowed` into the oral dose
         state (the substance needs an oral route) and the rest, which is
-        lost.
+        lost. The two fractions are a pair (`inhaled_split`): either of them
+        alone gets the rest of the dose as the other, so a route which loses
+        a part of its dose states both of them. A pair of numbers above the
+        dose is refused by the definition; a pair with a `Formula` in it is
+        not checked and must sum to at most the dose, or the loss turns
+        negative and creates mass.
         """
         return cls(
             "inhaled", s, depot=_given(ka, deposited, None, application, swallowed)
         )
+
+
+def _rest_of_the_dose(other: str, what: str) -> Formula:
+    """The fraction of an inhaled dose which is the rest of the one it is given with.
+
+    Args:
+        other: the id of the fraction the route states.
+        what: what the fraction is, for the notes.
+
+    Returns:
+        The formula `1 - <other>`, which ties the two fractions: the rest of
+        the dose is what the route does not state, so nothing is lost. A
+        formula, not a number, so that a change of the stated fraction before
+        the simulation (a fit, a scan, a draw of its uncertainty) keeps the
+        pair exact and the loss at zero.
+    """
+    return Formula(
+        f"1 dimensionless - {other}",
+        U.dimensionless,
+        notes=f"The rest of the inhaled dose, which is {what}: the route "
+        f"states `{other}` only, so the dose is deposited or swallowed and "
+        "nothing is lost.",
+    )
 
 
 def inhaled_split(route: Route) -> tuple[Q, Q]:
@@ -358,9 +392,17 @@ def inhaled_split(route: Route) -> tuple[Q, Q]:
     Returns:
         The fraction of the dose which is deposited in the lung
         (`f_inh_deposited_<s>`) and the fraction which is swallowed
-        (`f_inh_swallowed_<s>`), the defaults of the data
-        (`database/tables/routes.toml`) where the route states none; what is
-        neither is the loss.
+        (`f_inh_swallowed_<s>`); what is neither is the loss. A route which
+        states neither takes the pair of the data
+        (`database/tables/routes.toml`, 0.2 and 0.8, which sum to the dose:
+        the default route loses nothing), a route which states one of them
+        gets the rest of the dose as the other (`_rest_of_the_dose`, a
+        formula over the one it states), and a route which states both keeps
+        them, with the rest as its loss. A pair of numbers which sums above
+        the dose is refused by the definition; a `Formula` has no number
+        before the simulation, so a pair which states a formula is **not**
+        checked and the caller is responsible for a sum of at most the dose
+        (a negative loss runs the loss reaction backwards and creates mass).
 
     Raises:
         ValueError: if the route is not inhaled.
@@ -368,16 +410,23 @@ def inhaled_split(route: Route) -> tuple[Q, Q]:
     if route.kind != "inhaled":
         raise ValueError(f"Route '{route.kind}' of '{route.substance}' is not inhaled.")
     given = route.depot if route.depot is not None else Depot()
-    deposited = (
-        given.fraction
-        if given.fraction is not None
-        else value("routes", "inhaled", "f_deposited")
-    )
-    swallowed = (
-        given.swallowed
-        if given.swallowed is not None
-        else value("routes", "inhaled", "f_swallowed")
-    )
+    deposited, swallowed = given.fraction, given.swallowed
+    if deposited is None:
+        if swallowed is None:
+            return (
+                value("routes", "inhaled", "f_deposited"),
+                value("routes", "inhaled", "f_swallowed"),
+            )
+        return (
+            _rest_of_the_dose(
+                ids.inhaled_swallowed_fraction(route.substance), "deposited in the lung"
+            ),
+            swallowed,
+        )
+    if swallowed is None:
+        return deposited, _rest_of_the_dose(
+            ids.inhaled_deposited_fraction(route.substance), "swallowed"
+        )
     return deposited, swallowed
 
 

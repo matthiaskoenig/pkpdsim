@@ -868,11 +868,12 @@ class PBPKDefinition:
         """Check the routes: their substances, and the oral route and split of an inhaled one.
 
         An inhaled dose splits into its deposited and its swallowed fraction
-        and the rest, which is the loss, so the two fractions are at most the
-        dose; a route which states one of them takes the default of the data
-        for the other. A fitted fraction is checked at the value of its fit
-        record; a `Formula`, which has no number before the simulation, is not
-        checked.
+        and the rest, which is the loss, so every fraction is between 0 and 1
+        and a pair of numbers is at most the dose (a route which states one
+        of them gets the rest of the dose as the other, see `inhaled_split`).
+        A fitted fraction is checked at the value of its fit record; a
+        `Formula`, which has no number before the simulation, is not checked,
+        and `inhaled_split` says that the caller answers for its sum.
         """
         problems = [
             f"route {r.kind}: unknown substance '{r.substance}'"
@@ -890,6 +891,12 @@ class PBPKDefinition:
                     f"dose state '{ids.po_dose(r.substance)}'"
                 )
             deposited, swallowed = (number(q) for q in inhaled_split(r))
+            problems += [
+                f"the inhaled route of '{r.substance}': the {what} fraction "
+                f"{x} is no fraction of the dose, it must be between 0 and 1"
+                for what, x in (("deposited", deposited), ("swallowed", swallowed))
+                if x is not None and not 0.0 <= x <= 1.0
+            ]
             if deposited is None or swallowed is None:
                 continue
             if deposited + swallowed > 1 + 1e-9:
