@@ -6,7 +6,7 @@ A model of a tissue, e.g. a zonated liver coupled to its perfusion, is often sim
 - `Simulation(sid, title, parts)`: the parts which run one after the other, with an id and a title for the results and the figures.
 - `run_simulation(r, sim)`: resets the model (`resetAll`), runs the parts and returns one `pandas.DataFrame` with the `timeCourseSelections` of `r` as columns, whose time continues over the parts; the last point of a part and the first point of the next have the same time (the state before and after the changes).
 
-The script which runs the model loads it, sets its tolerances and selects what the timecourse holds.
+The model clock continues across parts, so time-dependent equations and events use the elapsed time of the whole simulation. Delayed events scheduled in one part can execute in a later part. The script which runs the model loads it, sets its tolerances and selects what the timecourse holds.
 
 ## Usage
 

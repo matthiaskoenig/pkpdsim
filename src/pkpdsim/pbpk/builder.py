@@ -54,6 +54,7 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 import libsbml
 from sbmlutils.factory import (
@@ -136,6 +137,14 @@ from pkpdsim.pbpk.stationary import (
 from pkpdsim.pbpk.substance import Kp, KpMethod, Substance
 from pkpdsim.pbpk.units import EXTRA_UNITS, MODEL_UNITS, U
 from pkpdsim.pbpk.values import Formula, Q, Value
+from pkpdsim.sbml.cache import (
+    cache_key,
+    cache_path,
+    has_external_models,
+    publish_outputs,
+    read_cache,
+    write_cache,
+)
 from pkpdsim.sbml.flatten import merge_unit_definitions
 
 __all__ = [
@@ -1385,19 +1394,45 @@ def build(definition: PBPKDefinition, output_dir: Path) -> BuildResult:
     model = compose(definition)
     comp_path = output_dir / f"{definition.sid}.xml"
     flat_path = output_dir / f"{definition.sid}_flat.xml"
-    # SBML L3V2, the level of the models of pkdb_models: the names of the rules
-    # and initial assignments are written (L3V1 has no name on them)
-    create_model(
-        model,
-        filepath=comp_path,
-        sbml_level=3,
-        sbml_version=2,
-        validate=False,
-    )
-    flat_model(comp_path, flat_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(dir=output_dir) as temporary:
+        staged_comp = Path(temporary) / comp_path.name
+        staged_flat = Path(temporary) / flat_path.name
+        # SBML L3V2 preserves rule and initial assignment names.
+        create_model(
+            model, filepath=staged_comp, sbml_level=3, sbml_version=2, validate=False
+        )
+        comp = staged_comp.read_bytes()
+        if has_external_models(comp):
+            # External sources resolve relative to the composed document.
+            _flatten_external(comp, output_dir, staged_flat)
+            flat = staged_flat.read_bytes()
+        else:
+            key = cache_key(comp, ValidationOptions.fast(), ValidationOptions())
+            entry = cache_path(output_dir, definition.sid, key)
+            cached = read_cache(entry, key, comp) if entry is not None else None
+            if cached is None:
+                flat_model(staged_comp, staged_flat)
+                flat = staged_flat.read_bytes()
+                if entry is not None:
+                    write_cache(entry, key, comp, flat)
+            else:
+                comp, flat = cached
+        publish_outputs(output_dir, {staged_comp: comp, staged_flat: flat})
     # a generated steady state which loads slowly or does not balance
     check_built(steady_plan(definition), flat_path)
     return BuildResult(comp_path=comp_path, flat_path=flat_path)
+
+
+def _flatten_external(comp: bytes, output_dir: Path, flat_path: Path) -> None:
+    """Flatten a document from the same directory as its external sources."""
+    with NamedTemporaryFile(dir=output_dir, suffix=".xml", delete=False) as handle:
+        path = Path(handle.name)
+    try:
+        path.write_bytes(comp)
+        flat_model(path, flat_path)
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def flat_model(comp_path: Path, flat_path: Path) -> None:
@@ -1419,8 +1454,8 @@ def flat_model(comp_path: Path, flat_path: Path) -> None:
     computes differently, and the ODEs of an organ name the units of the
     model.
 
-    The flat model depends on the content of the comp model alone, which the
-    cache of the builds of the tests uses (`tests/conftest.py`).
+    This function always validates and flattens. The library's `build` caches
+    validated builds of self-contained composed models.
 
     Args:
         comp_path: the file of the comp model.

@@ -1,18 +1,15 @@
 """Tests of the shared helpers on a tiny hand-built model."""
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import pytest
 import roadrunner
 from sbmlutils.factory import Creator
 
+from pkpdsim.pbpk import builder
 from pkpdsim.pbpk.builder import build
 
 from .conftest import dateless, definition, total_amount
-
-if TYPE_CHECKING:
-    from conftest import _FlatModelCache
 
 _SBML = """<?xml version="1.0" encoding="UTF-8"?>
 <sbml xmlns="http://www.sbml.org/sbml/level3/version2/core" level="3" version="2">
@@ -42,7 +39,7 @@ def test_total_amount() -> None:
 def test_a_cached_flat_model_is_the_flattened_one(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    flat_model_cache: _FlatModelCache,
+    flat_model_cache: Path,
 ) -> None:
     """A build of a comp model which was flattened before takes its flat model.
 
@@ -55,13 +52,13 @@ def test_a_cached_flat_model_is_the_flattened_one(
         creators=[Creator("Doe", "Jane", "jane@example.org", "Example")],
     )
     flattened = []
-    flat_model = flat_model_cache.flat_model
+    flat_model = builder.flat_model
 
     def counted(comp_path: Path, flat_path: Path) -> None:
         flattened.append(flat_path)
         flat_model(comp_path, flat_path)
 
-    monkeypatch.setattr(flat_model_cache, "flat_model", counted)
+    monkeypatch.setattr(builder, "flat_model", counted)
     results = []
     for name in ("first", "second"):
         folder = tmp_path / name

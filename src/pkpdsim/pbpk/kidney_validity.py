@@ -14,7 +14,7 @@ the tighter bound of the two. A model without a filtered substance is not
 simulated and has no bound. GFR, flow,
 hematocrit and fu are initial assignments of the parameters of the
 individual, so `kidney_outflow` reads them for an individual, the changes of
-a simulation before its initialization, from a simulation of one minute
+a simulation before its initialization, from its initialized state
 (`individual_values`, which `healthy_gfr` reads the GFR with as well), and
 `simulated_individuals` gives the individuals a simulation or a scan of an
 experiment simulates. `PBPKSimulationExperiment`
@@ -41,16 +41,15 @@ from __future__ import annotations
 import itertools
 from collections.abc import Mapping
 from dataclasses import dataclass
-from functools import cache
+from functools import lru_cache
 from pathlib import Path
 
 from sbmlsim import Q
 from sbmlsim.distrib import UNCERTAINTY_DIMENSION
-from sbmlsim.result.scan import start_values
 from sbmlsim.simulation import Scan, Simulation
 from sbmlsim.simulation.definition import Value as Change
+from sbmlsim.simulation.sampling.references import references
 from sbmlsim.simulation.scan import DimensionKind
-from sbmlsim.simulator import Simulator
 from sbmlsim.units import Quantity
 
 from pkpdsim.pbpk import ids
@@ -227,12 +226,10 @@ def individual_values(
 ) -> IndividualValues:
     """Get the start values of the flows of the kidney outflow and `GFR_base` of an individual.
 
-    The values are initial assignments, so they are read from a simulation
-    of one minute with the changes before the initialization, which
-    evaluates the initial assignments again. Only the changes of the ids
-    which the values depend on make the individual (`simulated_individuals`),
-    and the values are cached per model file, its modification time and the
-    individual: a model file which is created again is simulated again.
+    The values are read after initializing the model with the individual's
+    changes, which evaluates the initial assignments again. Only changes to the
+    ids these values depend on identify the individual (`simulated_individuals`).
+    Recent values are cached per model file, modification time and individual.
 
     Args:
         model_path: the flat SBML model of the library.
@@ -345,17 +342,22 @@ def _thawed(changes: tuple[_Frozen, ...]) -> dict[str, Change]:
     }
 
 
-@cache
+@lru_cache(maxsize=4096)
 def _individual_values(
     model_path: Path, mtime_ns: int, changes: tuple[_Frozen, ...]
 ) -> IndividualValues:
-    """Simulate an individual for one minute and read its start values, once."""
+    """Read the kidney values after the individual's pre-initialization."""
     quantities = flat_model(model_path).quantities
-    result = Simulator(n_workers=1).run(
-        loaded_model(model_path),
+    model = loaded_model(model_path)
+    values = references(
+        model,
+        quantities,
         Simulation(end=1, time_unit="min", preinit_changes=_thawed(changes)),
     )
-    numbers = {sid: float(start_values(result, sid).item()) for sid in quantities}
+    numbers = {
+        sid: float(value.magnitude) if isinstance(value, Quantity) else value
+        for sid, value in values.items()
+    }
     return IndividualValues(
-        numbers, {sid: str(result.units[sid]) for sid in quantities}
+        numbers, {sid: model.uinfo.get(sid, "") or "" for sid in quantities}
     )

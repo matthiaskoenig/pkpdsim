@@ -243,6 +243,29 @@ def test_the_chronology_of_a_model(tmp_path: Path) -> None:
     assert found.collected("Other") is None
 
 
+@pytest.mark.parametrize("unrecorded_first", [True, False])
+def test_an_unrecorded_copy_cannot_establish_temporal_validation(
+    tmp_path: Path, unrecorded_first: bool
+) -> None:
+    unrecorded, dated = tmp_path / "unrecorded", tmp_path / "dated"
+    folder = unrecorded / "CredA"
+    folder.mkdir(parents=True)
+    (folder / ".CredA_TabData.tsv").write_text("time\tmean\n0\t1\n")
+    _write_record(dated, _record("CredA", FIT_DAY + timedelta(days=1)))
+    paths = (unrecorded, dated) if unrecorded_first else (dated, unrecorded)
+    model = MODEL.replace(adopted_ids=["DECAY_20261001_120000__abcde"], data_path=paths)
+
+    fits = fit_table()
+    found = chronology(model)
+    assert found.collected("CredA") is None
+    assert not found.new(fits.table).any()
+    assessment = assess(CREDIBILITY, fits, prepared={"temporal": found})
+    temporal = _temporal(_context(assessment, "dose"))
+    assert temporal is not None
+    assert temporal["n_points"] == 0
+    assert "CredA" in temporal["undated"]
+
+
 def test_the_assessment_reads_the_chronology(
     credibility_model: PKPDModel, tmp_path: Path
 ) -> None:
