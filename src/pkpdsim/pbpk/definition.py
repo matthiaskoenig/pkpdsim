@@ -30,7 +30,7 @@ from pkpdsim.pbpk.placement import turnover_proteins
 from pkpdsim.pbpk.populations import POPULATIONS
 from pkpdsim.pbpk.pregnancy import Pregnancy
 from pkpdsim.pbpk.proteins import PROTEINS
-from pkpdsim.pbpk.routes import Route
+from pkpdsim.pbpk.routes import Route, inhaled_split
 from pkpdsim.pbpk.slow_pool import SlowPool, check_slow_pools
 from pkpdsim.pbpk.substance import Erythrocytes, Kp, KpMethod, Mode, Substance
 from pkpdsim.pbpk.units import U
@@ -865,20 +865,38 @@ class PBPKDefinition:
         return problems
 
     def _check_routes(self, known: set[str]) -> list[str]:
-        """Check the routes: their substances, and the oral route of an inhaled one."""
+        """Check the routes: their substances, and the oral route and split of an inhaled one.
+
+        An inhaled dose splits into its deposited and its swallowed fraction
+        and the rest, which is the loss, so the two fractions are at most the
+        dose; a route which states one of them takes the default of the data
+        for the other. A fitted fraction is checked at the value of its fit
+        record (a `Formula` is not checked).
+        """
         problems = [
             f"route {r.kind}: unknown substance '{r.substance}'"
             for r in self.routes
             if r.substance not in known
         ]
         oral = {r.substance for r in self.routes if r.kind == "oral"}
-        problems += [
-            f"the inhaled route of '{r.substance}' needs an oral route of that "
-            "substance: its swallowed fraction is added to the oral dose state "
-            f"'{ids.po_dose(r.substance)}'"
-            for r in self.routes
-            if r.kind == "inhaled" and r.substance not in oral
-        ]
+        for r in self.routes:
+            if r.kind != "inhaled":
+                continue
+            if r.substance not in oral:
+                problems.append(
+                    f"the inhaled route of '{r.substance}' needs an oral route of "
+                    "that substance: its swallowed fraction is added to the oral "
+                    f"dose state '{ids.po_dose(r.substance)}'"
+                )
+            deposited, swallowed = (number(q) for q in inhaled_split(r))
+            if deposited is None or swallowed is None:
+                continue
+            if deposited + swallowed > 1 + 1e-9:
+                problems.append(
+                    f"the inhaled route of '{r.substance}': the deposited "
+                    f"fraction {deposited} and the swallowed fraction {swallowed} "
+                    "sum above the dose, which leaves a negative loss"
+                )
         return problems
 
 

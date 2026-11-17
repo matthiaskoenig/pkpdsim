@@ -112,6 +112,7 @@ __all__ = [
     "depot_site",
     "dissolution_inputs",
     "dissolution_rate",
+    "inhaled_split",
     "is_enteric",
     "is_weibull",
     "route_objects",
@@ -345,6 +346,38 @@ class Route:
         return cls(
             "inhaled", s, depot=_given(ka, deposited, None, application, swallowed)
         )
+
+
+def inhaled_split(route: Route) -> tuple[Q, Q]:
+    """Get the deposited and the swallowed fraction of an inhaled route.
+
+    Args:
+        route: an inhaled route.
+
+    Returns:
+        The fraction of the dose which is deposited in the lung
+        (`f_inh_deposited_<s>`) and the fraction which is swallowed
+        (`f_inh_swallowed_<s>`), the defaults of the data
+        (`database/tables/routes.toml`) where the route states none; what is
+        neither is the loss.
+
+    Raises:
+        ValueError: if the route is not inhaled.
+    """
+    if route.kind != "inhaled":
+        raise ValueError(f"Route '{route.kind}' of '{route.substance}' is not inhaled.")
+    given = route.depot if route.depot is not None else Depot()
+    deposited = (
+        given.fraction
+        if given.fraction is not None
+        else value("routes", "inhaled", "f_deposited")
+    )
+    swallowed = (
+        given.swallowed
+        if given.swallowed is not None
+        else value("routes", "inhaled", "f_swallowed")
+    )
+    return deposited, swallowed
 
 
 def _given(
@@ -939,6 +972,7 @@ def _inhaled(route: Route, s: Substance) -> list[Sbase]:
     def default(key: str) -> Q:
         return value("routes", kind, key)
 
+    deposited_value, swallowed_value = inhaled_split(route)
     # the dose which leaves the dose state per time (mg/min)
     applied = f"ln(2) / {ti} * 60 s_per_min * {dose}"
     lost = f"(1 dimensionless - {deposited} - {swallowed})"
@@ -982,9 +1016,7 @@ def _inhaled(route: Route, s: Substance) -> list[Sbase]:
         annotate(
             value_parameter(
                 deposited,
-                given.fraction
-                if given.fraction is not None
-                else default("f_deposited"),
+                deposited_value,
                 U.dimensionless,
                 f"fraction deposited {sid} ({site.name})",
                 _SBO_PARAMETER,
@@ -996,9 +1028,7 @@ def _inhaled(route: Route, s: Substance) -> list[Sbase]:
         annotate(
             value_parameter(
                 swallowed,
-                given.swallowed
-                if given.swallowed is not None
-                else default("f_swallowed"),
+                swallowed_value,
                 U.dimensionless,
                 f"fraction swallowed {sid} ({site.name})",
                 _SBO_PARAMETER,

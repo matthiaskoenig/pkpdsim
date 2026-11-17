@@ -382,10 +382,28 @@ def test_an_inhaled_dose_reaches_the_arterial_blood_first(tmp_path: Path) -> Non
     """The lung feeds the arterial blood: the deposited dose is there before the venous.
 
     A depot which drains into the venous plasma would reach the arterial
-    blood only after the lung.
+    blood only after the lung. The drug is perfusion-limited, so the lung is
+    one compartment and the deposited dose is absorbed into it.
     """
-    routes = [Route.inhaled(S, deposited=1.0, swallowed=0.0, ka=2.0), Route.oral(S)]
-    r = load(build(_depot(routes, "inhaled_first_pass"), tmp_path))
+    drug = _closed_drug(distribution=Kp(2.0, mode=Mode.PERFUSION))
+    d = definition(
+        sid="inhaled_first_pass",
+        substances=[drug, Substance("drg_m", name="metabolite", mr=316.0)],
+        chemistry=[],
+        routes=[
+            Route.inhaled(S, deposited=1.0, swallowed=0.0, ka=2.0),
+            Route.oral(S),
+        ],
+    )
+    result = build(d, tmp_path)
+    model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
+    reaction = model.getReaction(
+        ids.flat(Organ.LUNG, ids.depot_absorption("inhaled", S))
+    )
+    assert [p.getSpecies() for p in reaction.getListOfProducts()] == [
+        ids.flat(Organ.LUNG, ids.species(Part.ORGAN, S))
+    ]
+    r = load(result)
     r[ids.depot_dose("inhaled", S)] = 10.0
     r.simulate(0, 1, 10)
     arterial = r[f"[{ids.pool_species(Pool.ARTERIAL, S)}]"]
@@ -398,6 +416,17 @@ def test_an_inhaled_route_needs_an_oral_route_of_its_substance() -> None:
     """The swallowed part is the oral dose state, so the substance needs an oral route."""
     with pytest.raises(ValueError, match=f"inhaled route of '{S}'"):
         _depot([Route.inhaled(S)], "no_oral").validate()
+
+
+def test_an_inhaled_dose_which_is_more_than_the_dose_is_refused() -> None:
+    """A route which states one fraction takes the data default for the other.
+
+    The deposited fraction and the default swallowed fraction then sum above
+    the dose, which would make the loss negative and create mass.
+    """
+    routes = [Route.inhaled(S, deposited=0.5), Route.oral(S)]
+    with pytest.raises(ValueError, match="sum above the dose"):
+        _depot(routes, "inhaled_above").validate()
 
 
 def test_a_definition_without_depot_routes_is_unchanged(tmp_path: Path) -> None:

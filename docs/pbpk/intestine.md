@@ -60,7 +60,7 @@ A depot dose is a dose of the equilibration (`DOSE_PREFIXES`): given before the 
 
 ### Inhaled route
 
-The inhaled route gives its dose into the lung, and its dose state splits at the application into three parts. The fraction `f_inh_deposited_<s>` is deposited in the lung: it enters the lung depot `Ainh_<s>` (mmole, in `Vinh`), which the lung absorbs with first order `ka_inh_<s>` into its plasma, a reaction of that organ (`LU__J_inh_abs_<s>` in the flat model). The deposited dose therefore enters the circulation where an inhaled dose enters it, the pulmonary capillaries, whose outflow is the arterial blood; a dose into the venous plasma, as the depot routes give it, would pass the lung a second time. The fraction `f_inh_swallowed_<s>` is swallowed (the part deposited in the oropharynx and cleared into the gut) and is added to the oral dose state `PODOSE_<s>`, the undissolved drug in the stomach: the rate `R_inh_swallow_<s>` (mg/min) of the top model, which the intestine reads in the rate rule of that dose state, so an inhaled route needs an oral route of its substance and the swallowed part dissolves with the formulation of its tablet. What is neither deposited nor swallowed is lost into `Aloss_inh_<s>` (exhaled, or left in the device and the mouth). The three parts leave the dose state at the rate at which they enter their destination, so the dose is conserved whatever the fractions are.
+The inhaled route gives its dose into the lung, and its dose state splits at the application into three parts. The fraction `f_inh_deposited_<s>` is deposited in the lung: it enters the lung depot `Ainh_<s>` (mmole, in `Vinh`), which the lung absorbs with first order `ka_inh_<s>` into its plasma, a reaction of that organ (`LU__J_inh_abs_<s>` in the flat model; a perfusion-limited substance, whose lung is one compartment, is absorbed into it). The deposited dose therefore enters the circulation where an inhaled dose enters it, the pulmonary capillaries, whose outflow is the arterial blood; a dose into the venous plasma, as the depot routes give it, would pass the lung a second time. The fraction `f_inh_swallowed_<s>` is swallowed (the part deposited in the oropharynx and cleared into the gut) and is added to the oral dose state `PODOSE_<s>`, the undissolved drug in the stomach: the rate `R_inh_swallow_<s>` (mg/min) of the top model, which the intestine reads in the rate rule of that dose state, so an inhaled route needs an oral route of its substance and the swallowed part dissolves with the formulation of its tablet. What is neither deposited nor swallowed is lost into `Aloss_inh_<s>` (exhaled, or left in the device and the mouth). The three parts leave the dose state at the rate at which they enter their destination, so the dose is conserved whatever the fractions are.
 
 ```equations title="inhaled (top model, absorption in the lung)"
 J_inh_<s>: -> Ainh_<s> = f_inh_deposited_<s> * ln(2) / ti_inh_<s> * 60 s_per_min * INHDOSE_<s> / Mr_<s>
@@ -82,6 +82,8 @@ Route.inhaled(
     swallowed=0.55,
 )
 ```
+
+A route which states one of the two fractions takes the default of the data for the other, and a definition whose deposited and swallowed fraction sum above the dose is refused: the loss would be negative and the dose state would create mass.
 
 A substance which is absorbed from the lung into its tissue instead of its plasma, or an inhaled dose which is cleared from the airways into the gut (mucociliary clearance), is not described: the deposited dose is one depot which the lung absorbs.
 
