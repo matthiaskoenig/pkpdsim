@@ -5,8 +5,12 @@ A depot route applies its dose state (`IMDOSE_<s>`, `SCDOSE_<s>`,
 `Asc_<s>`, `Arec_<s>`), which is absorbed with first order into the venous
 blood; the fraction `f_<k>_<s>` is absorbed, the rest leaves into a sink, and
 the rectal route sends the fraction `f_rec_portal_<s>` of the absorbed dose
-through the portal vein and the liver. A tablet without the options of its
-dissolution (`fed`, `enteric`) builds the SBML it built before.
+through the portal vein and the liver. The inhaled route splits its dose
+state (`INHDOSE_<s>`) into the lung depot `Ainh_<s>` (the fraction
+`f_inh_deposited_<s>`, absorbed by the lung into its plasma), the oral dose
+state `PODOSE_<s>` (`f_inh_swallowed_<s>`) and the loss `Aloss_inh_<s>`. A
+tablet without the options of its dissolution (`fed`, `enteric`) builds the
+SBML it built before.
 """
 
 import dataclasses
@@ -24,6 +28,7 @@ from pkpdsim.pbpk import (
     Excretion,
     FirstOrder,
     FirstOrderDissolution,
+    Formula,
     Kp,
     Metabolism,
     Mode,
@@ -33,6 +38,7 @@ from pkpdsim.pbpk import (
     Pool,
     Route,
     Substance,
+    U,
     ids,
 )
 from pkpdsim.pbpk.builder import BuildResult, build
@@ -106,6 +112,7 @@ def test_every_route_kind_is_a_dose_of_the_equilibration() -> None:
         "im": ids.depot_dose("im", ""),
         "sc": ids.depot_dose("sc", ""),
         "rectal": ids.depot_dose("rectal", ""),
+        "inhaled": ids.depot_dose("inhaled", ""),
     }
     kinds = set(get_args(get_type_hints(Route)["kind"]))
     assert kinds == set(prefixes)
@@ -297,6 +304,180 @@ def test_a_second_depot_dose_adds_to_the_depot(tmp_path: Path) -> None:
     assert added == pytest.approx(before * decay + 5.0 / mr, rel=1e-2)
     r.simulate(61, 3 * DAY, 50)
     assert total_amount(r, S) + dose_amount(r, S) == pytest.approx(15.0 / mr, rel=1e-9)
+
+
+def _inhaled(sid: str, **changes: object) -> PBPKDefinition:
+    """A definition with an inhaled and an oral route of the drug."""
+    routes = [Route.inhaled(S, deposited=0.2, swallowed=0.5), Route.oral(S)]
+    return _depot(routes, sid, **changes)
+
+
+def test_an_inhaled_dose_splits_into_the_lung_and_the_swallowed_part(
+    tmp_path: Path,
+) -> None:
+    """The deposited fraction is absorbed from the lung, the rest is swallowed or lost."""
+    result = build(_inhaled("inhaled"), tmp_path)
+    found = _ids(result.flat_path)
+    absorption = ids.flat(Organ.LUNG, ids.depot_absorption("inhaled", S))
+    assert {
+        ids.depot_dose("inhaled", S),
+        ids.depot("inhaled", S),
+        ids.depot_loss("inhaled", S),
+        ids.depot_compartment("inhaled"),
+        ids.depot_application_time("inhaled", S),
+        ids.depot_absorption_rate("inhaled", S),
+        ids.inhaled_deposited_fraction(S),
+        ids.inhaled_swallowed_fraction(S),
+        ids.inhaled_swallow_rate(S),
+        ids.depot_application("inhaled", S),
+        ids.depot_loss_reaction("inhaled", S),
+        absorption,
+    } <= found
+    # the deposited part is absorbed by the lung into its plasma, whose
+    # outflow is the arterial blood: it does not pass the lung twice
+    model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
+    reaction = model.getReaction(absorption)
+    assert [p.getSpecies() for p in reaction.getListOfReactants()] == [
+        ids.depot("inhaled", S)
+    ]
+    assert [p.getSpecies() for p in reaction.getListOfProducts()] == [
+        ids.flat(Organ.LUNG, ids.species(Part.PLASMA, S))
+    ]
+    r = load(result)
+    assert r[ids.inhaled_deposited_fraction(S)] == 0.2
+    assert r[ids.inhaled_swallowed_fraction(S)] == 0.5
+    # the substance without an inhaled route has no depot
+    assert ids.depot("inhaled", "drg_m") not in found
+
+
+def test_an_inhaled_dose_ends_as_deposited_swallowed_and_lost(tmp_path: Path) -> None:
+    """The dose splits into the lung depot, the oral dose state and the loss.
+
+    With the absorption from the lung depot switched off the three parts are
+    distinguishable: the depot holds the deposited fraction, the sink the
+    part which is neither deposited nor swallowed, and everything else of
+    the dose (the oral dose state, the intestinal lumen, the body) is the
+    swallowed fraction. With the absorption on the depot empties into the
+    body, and the dose stays conserved.
+    """
+    r = load(build(_inhaled("inhaled_balance"), tmp_path))
+    mmole = 10.0 / r[ids.mr(S)]
+    r[ids.depot_absorption_rate("inhaled", S)] = 0.0
+    r[ids.depot_dose("inhaled", S)] = 10.0
+    assert dose_amount(r, S) == pytest.approx(mmole, rel=1e-12)
+    # after 10 min the application of the dose (half-life 10 s) is over
+    r.simulate(0, 10, 10)
+    depot, loss = r[ids.depot("inhaled", S)], r[ids.depot_loss("inhaled", S)]
+    given = total_amount(r, S) + dose_amount(r, S)
+    assert depot == pytest.approx(0.2 * mmole, rel=1e-6)
+    assert loss == pytest.approx(0.3 * mmole, rel=1e-6)
+    assert given - depot - loss == pytest.approx(0.5 * mmole, rel=1e-6)
+    assert given == pytest.approx(mmole, rel=1e-9)
+    # the deposited part is absorbed through the lung
+    r[ids.depot_absorption_rate("inhaled", S)] = 2.0
+    r.simulate(10, 3 * DAY, 100)
+    assert r[ids.depot("inhaled", S)] < 1e-9 * mmole
+    assert total_amount(r, S) + dose_amount(r, S) == pytest.approx(mmole, rel=1e-9)
+
+
+def test_an_inhaled_dose_reaches_the_arterial_blood_first(tmp_path: Path) -> None:
+    """The lung feeds the arterial blood: the deposited dose is there before the venous.
+
+    A depot which drains into the venous plasma would reach the arterial
+    blood only after the lung. The drug is perfusion-limited, so the lung is
+    one compartment and the deposited dose is absorbed into it.
+    """
+    drug = _closed_drug(distribution=Kp(2.0, mode=Mode.PERFUSION))
+    d = definition(
+        sid="inhaled_first_pass",
+        substances=[drug, Substance("drg_m", name="metabolite", mr=316.0)],
+        chemistry=[],
+        routes=[
+            Route.inhaled(S, deposited=1.0, swallowed=0.0, ka=2.0),
+            Route.oral(S),
+        ],
+    )
+    result = build(d, tmp_path)
+    model = libsbml.readSBMLFromFile(str(result.flat_path)).getModel()
+    reaction = model.getReaction(
+        ids.flat(Organ.LUNG, ids.depot_absorption("inhaled", S))
+    )
+    assert [p.getSpecies() for p in reaction.getListOfProducts()] == [
+        ids.flat(Organ.LUNG, ids.species(Part.ORGAN, S))
+    ]
+    r = load(result)
+    r[ids.depot_dose("inhaled", S)] = 10.0
+    r.simulate(0, 1, 10)
+    arterial = r[f"[{ids.pool_species(Pool.ARTERIAL, S)}]"]
+    venous = r[f"[{ids.pool_species(Pool.VENOUS, S)}]"]
+    assert arterial > 0
+    assert arterial > venous
+
+
+def test_an_inhaled_route_needs_an_oral_route_of_its_substance() -> None:
+    """The swallowed part is the oral dose state, so the substance needs an oral route."""
+    with pytest.raises(ValueError, match=f"inhaled route of '{S}'"):
+        _depot([Route.inhaled(S)], "no_oral").validate()
+
+
+def test_an_inhaled_dose_which_is_more_than_the_dose_is_refused() -> None:
+    """Two fractions of a route which sum above the dose leave a negative loss.
+
+    The loss would create mass: its reaction would run backwards, into the
+    body, while the arithmetic of the dose state stays conserved.
+    """
+    routes = [Route.inhaled(S, deposited=0.6, swallowed=0.5), Route.oral(S)]
+    with pytest.raises(ValueError, match="sum above the dose"):
+        _depot(routes, "inhaled_above").validate()
+
+
+def test_an_inhaled_fraction_which_is_no_fraction_is_refused() -> None:
+    """A fraction above the dose would make the rest of the dose negative."""
+    routes = [Route.inhaled(S, deposited=1.3), Route.oral(S)]
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        _depot(routes, "inhaled_no_fraction").validate()
+
+
+def test_an_inhaled_fraction_as_a_formula_is_not_checked() -> None:
+    """A formula has no number before the simulation, so the split is not checked."""
+    deposited = Formula("1 dimensionless - f_inh_swallowed_drg", U.dimensionless)
+    routes = [Route.inhaled(S, deposited=deposited, swallowed=0.9), Route.oral(S)]
+    _depot(routes, "inhaled_formula").validate()
+
+
+def _rest_of_the_dose(result: BuildResult, deposited: float) -> None:
+    """Simulate a 10 mg dose without the absorption: the rest is swallowed, nothing lost."""
+    r = load(result)
+    assert r[ids.inhaled_deposited_fraction(S)] == pytest.approx(deposited)
+    assert r[ids.inhaled_swallowed_fraction(S)] == pytest.approx(1.0 - deposited)
+    mmole = 10.0 / r[ids.mr(S)]
+    r[ids.depot_absorption_rate("inhaled", S)] = 0.0
+    r[ids.depot_dose("inhaled", S)] = 10.0
+    r.simulate(0, 10, 10)
+    assert r[ids.depot("inhaled", S)] == pytest.approx(deposited * mmole, rel=1e-6)
+    assert r[ids.depot_loss("inhaled", S)] == pytest.approx(0.0, abs=1e-12 * mmole)
+    assert total_amount(r, S) + dose_amount(r, S) == pytest.approx(mmole, rel=1e-9)
+
+
+def test_an_inhaled_route_which_states_the_deposited_fraction_swallows_the_rest(
+    tmp_path: Path,
+) -> None:
+    """A route which states one fraction ties the other to the rest of the dose.
+
+    The data of the library state the pair; a route which states only the
+    deposited fraction swallows the rest, as the note of the data says, and
+    loses nothing.
+    """
+    routes = [Route.inhaled(S, deposited=0.3), Route.oral(S)]
+    _rest_of_the_dose(build(_depot(routes, "inhaled_rest_swallowed"), tmp_path), 0.3)
+
+
+def test_an_inhaled_route_which_states_the_swallowed_fraction_deposits_the_rest(
+    tmp_path: Path,
+) -> None:
+    """The other direction: what is not swallowed is deposited in the lung."""
+    routes = [Route.inhaled(S, swallowed=0.4), Route.oral(S)]
+    _rest_of_the_dose(build(_depot(routes, "inhaled_rest_deposited"), tmp_path), 0.6)
 
 
 def test_a_definition_without_depot_routes_is_unchanged(tmp_path: Path) -> None:

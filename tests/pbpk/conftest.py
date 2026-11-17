@@ -306,8 +306,9 @@ def total_amount(r: roadrunner.RoadRunner, sid: str) -> float:
     multiplied with the volume of its compartment. The species of the id
     scheme (`ids.species_of`: organs, pools, intestinal lumen, undissolved
     drug, mucosa, the depots of the depot routes) and the sinks: the urine
-    and feces amounts, the bile and what an injected depot does not absorb;
-    the dose states are not counted (`dose_amount`).
+    and feces amounts, the bile, what an injected depot does not absorb and
+    what an inhaled dose loses; the dose states are not counted
+    (`dose_amount`).
     """
     import libsbml
 
@@ -320,6 +321,7 @@ def total_amount(r: roadrunner.RoadRunner, sid: str) -> float:
         ids.bile(sid),
         ids.depot_loss("im", sid),
         ids.depot_loss("sc", sid),
+        ids.depot_loss("inhaled", sid),
     }
     selected = ids.species_of(sid, by_id) + [
         i for i in by_id if i.rsplit("__", 1)[-1] in sinks
@@ -340,7 +342,7 @@ def dose_amount(r: roadrunner.RoadRunner, sid: str) -> float:
         ids.iv_dose(sid),
         ids.po_dose(sid),
         ids.sol_dose(sid),
-        *(ids.depot_dose(kind, sid) for kind in ("im", "sc", "rectal")),
+        *(ids.depot_dose(kind, sid) for kind in ("im", "sc", "rectal", "inhaled")),
     )
     mg = sum(float(r[d]) for d in doses if d in r.model.getGlobalParameterIds())
     return mg / float(r[ids.mr(sid)])

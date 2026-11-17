@@ -30,7 +30,7 @@ from pkpdsim.pbpk.placement import turnover_proteins
 from pkpdsim.pbpk.populations import POPULATIONS
 from pkpdsim.pbpk.pregnancy import Pregnancy
 from pkpdsim.pbpk.proteins import PROTEINS
-from pkpdsim.pbpk.routes import Route
+from pkpdsim.pbpk.routes import Route, inhaled_split
 from pkpdsim.pbpk.slow_pool import SlowPool, check_slow_pools
 from pkpdsim.pbpk.substance import Erythrocytes, Kp, KpMethod, Mode, Substance
 from pkpdsim.pbpk.units import U
@@ -865,12 +865,47 @@ class PBPKDefinition:
         return problems
 
     def _check_routes(self, known: set[str]) -> list[str]:
-        """Check the routes."""
-        return [
+        """Check the routes: their substances, and the oral route and split of an inhaled one.
+
+        An inhaled dose splits into its deposited and its swallowed fraction
+        and the rest, which is the loss, so every fraction is between 0 and 1
+        and a pair of numbers is at most the dose (a route which states one
+        of them gets the rest of the dose as the other, see `inhaled_split`).
+        A fitted fraction is checked at the value of its fit record; a
+        `Formula`, which has no number before the simulation, is not checked,
+        and `inhaled_split` says that the caller answers for its sum.
+        """
+        problems = [
             f"route {r.kind}: unknown substance '{r.substance}'"
             for r in self.routes
             if r.substance not in known
         ]
+        oral = {r.substance for r in self.routes if r.kind == "oral"}
+        for r in self.routes:
+            if r.kind != "inhaled":
+                continue
+            if r.substance not in oral:
+                problems.append(
+                    f"the inhaled route of '{r.substance}' needs an oral route of "
+                    "that substance: its swallowed fraction is added to the oral "
+                    f"dose state '{ids.po_dose(r.substance)}'"
+                )
+            deposited, swallowed = (number(q) for q in inhaled_split(r))
+            problems += [
+                f"the inhaled route of '{r.substance}': the {what} fraction "
+                f"{x} is no fraction of the dose, it must be between 0 and 1"
+                for what, x in (("deposited", deposited), ("swallowed", swallowed))
+                if x is not None and not 0.0 <= x <= 1.0
+            ]
+            if deposited is None or swallowed is None:
+                continue
+            if deposited + swallowed > 1 + 1e-9:
+                problems.append(
+                    f"the inhaled route of '{r.substance}': the deposited "
+                    f"fraction {deposited} and the swallowed fraction {swallowed} "
+                    "sum above the dose, which leaves a negative loss"
+                )
+        return problems
 
 
 def _union[T](

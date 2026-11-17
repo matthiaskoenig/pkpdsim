@@ -1,6 +1,6 @@
 # Intestine and routes
 
-A route applies a dose of a substance: intravenous (bolus and infusion), oral tablet (with dissolution), oral solution, intramuscular, subcutaneous and rectal. A dose is a dose state in mg which an experiment sets or adds to (`PKPDSimulationExperiment.add_doses`, `"PODOSE_api + 10.0"`), applied by a first order process, the convention of the hand-written models; the dose in mg becomes mmole with the molecular weight `Mr_<s>`. The oral routes need an intestine with a lumen: the segmented intestine (the default) or the single lumen, which replace small and large intestine with one submodel `GU`, own the lumen, apply the oral doses and take the bile.
+A route applies a dose of a substance: intravenous (bolus and infusion), oral tablet (with dissolution), oral solution, intramuscular, subcutaneous, rectal and inhaled. A dose is a dose state in mg which an experiment sets or adds to (`PKPDSimulationExperiment.add_doses`, `"PODOSE_api + 10.0"`), applied by a first order process, the convention of the hand-written models; the dose in mg becomes mmole with the molecular weight `Mr_<s>`. The oral routes need an intestine with a lumen: the segmented intestine (the default) or the single lumen, which replace small and large intestine with one submodel `GU`, own the lumen, apply the oral doses and take the bile.
 
 ## Routes
 
@@ -12,8 +12,9 @@ A route applies a dose of a substance: intravenous (bolus and infusion), oral ta
 | intramuscular | `Route.im("api")` | `IMDOSE_api` (mg) | `ti_im_api` (s), `ka_im_api` (1/hr), `f_im_api` | the depot `Aim_api`, absorbed into the venous plasma `Cve_api` |
 | subcutaneous | `Route.sc("api")` | `SCDOSE_api` (mg) | `ti_sc_api` (s), `ka_sc_api` (1/hr), `f_sc_api` | the depot `Asc_api`, absorbed into the venous plasma `Cve_api` |
 | rectal | `Route.rectal("api")` | `RECDOSE_api` (mg) | `ti_rec_api` (s), `ka_rec_api` (1/hr), `f_rec_api`, `f_rec_portal_api` | the depot `Arec_api`, absorbed into the portal plasma `Cpo_api` and the venous plasma `Cve_api` |
+| inhaled | `Route.inhaled("api")` | `INHDOSE_api` (mg) | `ti_inh_api` (s), `ka_inh_api` (1/hr), `f_inh_deposited_api`, `f_inh_swallowed_api` | the lung depot `Ainh_api`, absorbed into the lung plasma; the swallowed part into the oral dose state `PODOSE_api` |
 
-The dose states and the parameters of the routes are parameters of the top model; the intestine reads the oral ones through its ports and owns their reactions and rate rules. Inhalation, sublingual and buccal, transdermal and vaginal routes and the glucose and insulin clamps are designed for (a route is a component with dose parameters) and implemented when the models which need them are migrated.
+The dose states and the parameters of the routes are parameters of the top model; the intestine reads the oral ones through its ports and owns their reactions and rate rules, and the lung absorbs the inhaled depot. Sublingual and buccal, transdermal and vaginal routes and the glucose and insulin clamps are designed for (a route is a component with dose parameters) and implemented when the models which need them are migrated.
 
 ```equations title="intravenous (top model)"
 J_iv_<s>: -> Cve_<s> = Kiv_<s> * IVDOSE_<s> / Mr_<s>
@@ -56,6 +57,37 @@ Route.rectal("mor", ka=1.2, fraction=0.6, portal=0.5, application=600.0)
 ```
 
 A depot dose is a dose of the equilibration (`DOSE_PREFIXES`): given before the initialization it moves to the start; the depot is a drug-free zero and the sink of an injected depot is set back at the start as the urine.
+
+### Inhaled route
+
+The inhaled route gives its dose into the lung, and its dose state splits at the application into three parts. The fraction `f_inh_deposited_<s>` is deposited in the lung: it enters the lung depot `Ainh_<s>` (mmole, in `Vinh`), which the lung absorbs with first order `ka_inh_<s>` into its plasma, a reaction of that organ (`LU__J_inh_abs_<s>` in the flat model; a perfusion-limited substance, whose lung is one compartment, is absorbed into it). The deposited dose therefore enters the circulation where an inhaled dose enters it, the pulmonary capillaries, whose outflow is the arterial blood; a dose into the venous plasma, as the depot routes give it, would pass the lung a second time. The fraction `f_inh_swallowed_<s>` is swallowed (the part deposited in the oropharynx and cleared into the gut) and is added to the oral dose state `PODOSE_<s>`, the undissolved drug in the stomach: the rate `R_inh_swallow_<s>` (mg/min) of the top model, which the intestine reads in the rate rule of that dose state, so an inhaled route needs an oral route of its substance and the swallowed part dissolves with the formulation of its tablet. What is neither deposited nor swallowed is lost into `Aloss_inh_<s>` (exhaled, or left in the device and the mouth). The three parts leave the dose state at the rate at which they enter their destination, so the dose is conserved whatever the fractions are.
+
+```equations title="inhaled (top model, absorption in the lung)"
+J_inh_<s>: -> Ainh_<s> = f_inh_deposited_<s> * ln(2) / ti_inh_<s> * 60 s_per_min * INHDOSE_<s> / Mr_<s>
+J_inh_loss_<s>: -> Aloss_inh_<s> = (1 - f_inh_deposited_<s> - f_inh_swallowed_<s>) * ln(2) / ti_inh_<s> * 60 s_per_min * INHDOSE_<s> / Mr_<s>
+R_inh_swallow_<s> = f_inh_swallowed_<s> * ln(2) / ti_inh_<s> * 60 s_per_min * INHDOSE_<s>
+d(INHDOSE_<s>)/dt = -(J_inh_<s> + J_inh_loss_<s>) * Mr_<s> - R_inh_swallow_<s>
+J_inh_abs_<s>: Ainh_<s> -> Cpl_<s> = ka_inh_<s> / 60 min_per_hr * Ainh_<s>
+d(PODOSE_<s>)/dt = -(J_po_<s> + J_trs_st_<s>) * Mr_<s> + R_inh_swallow_<s>
+```
+
+The defaults of the data are the absorption rate 1/hr of the depot routes (not verified, the absorption of the deposited dose depends on the substance, its solubility and the region of the deposition), a deposited fraction of 0.2 and a swallowed fraction of 0.8, the order of a pressurized metered-dose inhaler without a spacer (a lung deposition of 10 to 20 % of the dose, the rest in the oropharynx), which a dry powder inhaler or a spacer raises; the pair sums to the dose, so the default route loses nothing although the loss is its third destination. Every value is a choice of the library which a model sets or fits:
+
+```python
+# not executed
+Route.inhaled(
+    "alb",
+    ka=fitted(FITS.parameter("ka_inh_alb", unit=U.per_hr)),
+    deposited=0.195,
+    swallowed=0.55,
+)
+```
+
+A route which states one of the two fractions gets the rest of the dose as the other, as a formula over the one it states (`f_inh_swallowed_alb = 1 - f_inh_deposited_alb`): what is not deposited is swallowed, nothing is lost, and the pair stays exact wherever the initial assignments are evaluated again: a fitted value, the pre-initialization of a scan and a draw of the uncertainty. A change of the stated fraction during a simulation does not reach the other, which keeps the value of its initialization, as for every formula of the library. A loss needs both fractions, which a route states together.
+
+A fraction which is no fraction of the dose (below 0 or above 1) and a **pair of numbers** which sums above the dose are refused by the definition: the loss would be negative, its reaction would run backwards into the body and the dose state would create mass while its own arithmetic stays conserved. A fraction which is a `Formula` has no number before the simulation, so a pair with a formula in it is **not** checked and the model answers for it; the formula of an omitted fraction is safe by construction, it is the rest of the dose.
+
+A substance which is absorbed from the lung into its tissue instead of its plasma, or an inhaled dose which is cleared from the airways into the gut (mucociliary clearance), is not described: the deposited dose is one depot which the lung absorbs.
 
 ### Dissolution
 

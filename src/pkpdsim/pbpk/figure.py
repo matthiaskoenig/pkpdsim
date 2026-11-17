@@ -176,6 +176,7 @@ _BADGES = {
     "URI": ("urine", "#fff8c5", "#9a6700"),
     "SLW": ("slow pool", "#eef1f4", "#57606a"),
     "ORL": ("oral dose", "#fbefff", "#8250df"),
+    "INH": ("inhaled dose", "#f3f0ff", "#6639ba"),
     "ABS": ("absorption", "#e6f6ec", "#1a7f37"),
     "BIL": ("bile", "#fff1e5", "#953800"),
     "CNV": ("lumen conversion", "#ffebe9", "#cf222e"),
@@ -548,6 +549,16 @@ class _Figure:
                     urine.append(s.sid)
             if urine:
                 lines.append(("URI", "filtered into the urine: " + ", ".join(urine)))
+        if Organ.LUNG in organs:
+            inhaled = [r.substance for r in self.d.routes if r.kind == "inhaled"]
+            if inhaled:
+                lines.append(
+                    (
+                        "INH",
+                        "deposited in the lung and absorbed into its plasma: "
+                        + ", ".join(inhaled),
+                    )
+                )
         for pool in self.d.slow_pools:
             if any(o in pool.organs for o in organs):
                 lines.append(

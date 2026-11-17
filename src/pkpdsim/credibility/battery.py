@@ -43,10 +43,10 @@ model without doses, is not applicable and assesses nothing.
 
 `dose_prefixes` is the dose states of the PBPK library
 (`pkpdsim.pbpk.equilibration.DOSE_PREFIXES`, `IVDOSE_<s>`, `PODOSE_<s>`,
-`SOLDOSE_<s>` and the depots `IMDOSE_<s>`, `SCDOSE_<s>`, `RECDOSE_<s>`) and
-`LEGACY_DOSE_STATES`, the dose states of the models which are not built with
-the library (an inhaled, buccal, legacy rectal or sublingual dose, an oral
-solution). A state in mg which a reaction reads and which is neither is a
+`SOLDOSE_<s>` and the depots `IMDOSE_<s>`, `SCDOSE_<s>`, `RECDOSE_<s>`,
+`INHDOSE_<s>`) and `LEGACY_DOSE_STATES`, the dose states of the models which
+are not built with the library (a buccal, legacy rectal or sublingual dose, an
+oral solution). A state in mg which a reaction reads and which is neither is a
 dose state or a depot of a dose the battery does not know: the check
 `dose_states` reports it (`FlatBuild.unknown_doses`) instead of leaving it
 out in silence, so it is given its prefix or the check is declared as a
@@ -143,7 +143,6 @@ _INFUSION: Final = "Ri"
 #: PBPK library does not create, with the model which has them: the library
 #: has no such route and will not have one until these models are migrated
 LEGACY_DOSE_STATES: Final = {
-    "INHDOSE_": "albuterol, the inhaled dose",
     "BUDOSE_": "morphine, the buccal dose",
     "REDOSE_": "morphine, the rectal dose (the spelling before `RECDOSE_`)",
     "SLDOSE_": "captopril, the sublingual dose",

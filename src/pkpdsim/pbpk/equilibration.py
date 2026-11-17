@@ -148,7 +148,7 @@ def growing_states(
 #: equilibration moves to the start
 DOSE_PREFIXES: tuple[str, ...] = (
     *(f("") for f in (ids.po_dose, ids.iv_dose, ids.sol_dose, ids.infusion_rate)),
-    *(ids.depot_dose(kind, "") for kind in ("im", "sc", "rectal")),
+    *(ids.depot_dose(kind, "") for kind in ("im", "sc", "rectal", "inhaled")),
 )
 
 

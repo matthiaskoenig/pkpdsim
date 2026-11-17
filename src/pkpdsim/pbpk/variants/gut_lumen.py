@@ -303,6 +303,31 @@ class LumenBuilder(StandardBuilder):
         self.replacements[pid] = pid
         return pid
 
+    def _swallowed_input(self, sid: str) -> str | None:
+        """The swallowed part of an inhaled dose of a substance (mg/min), `None` without one.
+
+        The rate `R_inh_swallow_<s>` of the top model
+        (`pkpdsim.pbpk.routes`), which the rate rule of the oral dose state
+        adds: the swallowed part of an inhaled dose is the undissolved drug
+        in the stomach, as a tablet is.
+        """
+        if not any(r.kind == "inhaled" and r.substance == sid for r in self.ctx.routes):
+            return None
+        pid = ids.inhaled_swallow_rate(sid)
+        self.parameters[pid] = Parameter(
+            pid,
+            0.0,
+            U.mg_per_min,
+            constant=False,
+            name=f"swallowed dose rate {sid} (inhaled) [mg/min]",
+            sboTerm=_SBO_PARAMETER,
+            notes="Swallowed part of the inhaled dose of the body, replaced by "
+            "it; the intestine adds it to the oral dose state.",
+            port=_Port(f"{pid}_port", portType=PortType.INPUT_PORT),
+        )
+        self.replacements[pid] = pid
+        return pid
+
     def _absorbed_into(self, s: Substance, parts: Parts, seg: Segment) -> str:
         """The species the absorbed drug enters: the mucosa, else the plasma of the wall."""
         if s.sid in self.mucosal:
@@ -492,8 +517,10 @@ class LumenBuilder(StandardBuilder):
         """The oral tablet: dissolution and transit of the undissolved drug.
 
         The dose state is the undissolved drug of the first segment; the
-        other segments have the undissolved amount `Asolid_<seg>_<s>`. An
-        enteric-coated tablet has no dissolution in the first segment, the
+        other segments have the undissolved amount `Asolid_<seg>_<s>`. The
+        swallowed part of an inhaled dose of the substance adds to the dose
+        state (`_swallowed_input`). An enteric-coated tablet has no
+        dissolution in the first segment, the
         stomach: it only empties, undissolved, with the transit of the
         stomach of the condition, and the undissolved amount which saturates
         a dose-dependent dissolution leaves the coated tablet in the stomach
@@ -574,10 +601,12 @@ class LumenBuilder(StandardBuilder):
             kind="transit",
             segment=self.segments[0].token,
         )
+        swallowed = self._swallowed_input(sid)
         self.rate_rules.append(
             RateRule(
                 dose,
-                f"-({' + '.join([*dissolved, empty])}) * {mr}",
+                f"-({' + '.join([*dissolved, empty])}) * {mr}"
+                + (f" + {swallowed}" if swallowed is not None else ""),
                 U.mg_per_min,
                 name=f"oral dose {sid} (tablet)",
             )

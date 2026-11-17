@@ -101,7 +101,8 @@ def standard() -> PBPKDefinition:
     capacity as a ratio of `PRMIN`; `drg` inhibits CYP2C9 competitively;
     `drg`, `prf` and `prm` have an endogenous baseline; a PD component reads
     the liver cells of `prm`; `drg` has a slow pool in muscle; `sat` is
-    reabsorbed up to a renal threshold (`ThresholdReabsorption`).
+    reabsorbed up to a renal threshold (`ThresholdReabsorption`). `drg` is
+    given by every route, the inhaled one included.
     """
     return PBPKDefinition(
         sid="toy_standard",
@@ -237,6 +238,7 @@ def standard() -> PBPKDefinition:
             Route.im("drg"),
             Route.sc("prf"),
             Route.rectal("drg"),
+            Route.inhaled("drg"),
         ],
         pd=[_cell_reader()],
         slow_pools=[SlowPool("drg", frozenset({Organ.MUSCLE}), k=1e-3, kp=1.5)],

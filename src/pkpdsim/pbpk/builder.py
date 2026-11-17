@@ -13,7 +13,8 @@ The comp model has a top model and one submodel per organ:
   replace the parameters `Cout_<o>_<s>` of the top model. The intestine
   (`segmented` by default, or `single_lumen`) replaces small and large
   intestine with one submodel `GU`, which owns the intestinal lumen and
-  applies the oral doses.
+  applies the oral doses; the lung absorbs the lung depot of an inhaled dose
+  into its plasma.
 
 Every port is declared by the organ (its `Boundary`) and every replacement is
 generated here from it; the flat model has the ids of the scheme

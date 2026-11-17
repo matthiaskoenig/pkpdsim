@@ -303,6 +303,8 @@ class StandardBuilder(OrganBuilder):
         self._slow_pools()
         if self.organ is Organ.KIDNEY:
             self._urine_rates()
+        if self.organ is Organ.LUNG:
+            self._inhaled_absorption()
         md = self.model_definition(self._notes())
         boundary = Boundary(
             replacements=dict(self.replacements), outputs=dict(self.outputs)
@@ -1446,6 +1448,49 @@ class StandardBuilder(OrganBuilder):
                 kind="urine_rate",
             )
             self.outputs[pid] = pid
+
+    def _inhaled_absorption(self) -> None:
+        """The absorption of the lung depot of every inhaled route, `J_inh_abs_<s>`.
+
+        The deposited part of an inhaled dose is the amount `Ainh_<s>` of the
+        top model, which the lung absorbs with first order `ka_inh_<s>` into
+        its plasma (the flow-limited organ into its organ species): the dose
+        enters the circulation in the pulmonary capillaries, whose outflow is
+        the arterial blood, and does not pass the lung a second time as a
+        dose into the venous plasma would. The depot, its compartment and the
+        rate are read through a port each (`pkpdsim.pbpk.routes`).
+        """
+        by_id = {s.sid: s for s in self.ctx.substances}
+        for route in self.ctx.routes:
+            if route.kind != "inhaled":
+                continue
+            s = by_id[route.substance]
+            sid = s.sid
+            self._input_compartment(
+                ids.depot_compartment("inhaled"),
+                "inhaled depot",
+                "The depot of the inhaled doses in the lung.",
+            )
+            depot = self._input_species(
+                ids.depot("inhaled", sid),
+                ids.depot_compartment("inhaled"),
+                f"{s.name} (inhaled depot)",
+                amount=True,
+            )
+            ka = self._input(
+                ids.depot_absorption_rate("inhaled", sid),
+                U.per_hr,
+                f"absorption rate {sid} (inhaled) [1/hr]",
+            )
+            parts = self.ctx.parts[sid]
+            part = Part.ORGAN if parts.tissue == "organ" else Part.PLASMA
+            self._reaction(
+                ids.depot_absorption("inhaled", sid),
+                f"{depot} -> {ids.species(part, sid)}",
+                f"{ka} / 60 min_per_hr * {depot}",
+                f"inhaled absorption {sid}",
+                kind="depot_absorption_inhaled",
+            )
 
     def _processes(self) -> list[Metabolism | Transport | CustomReaction]:
         """The processes of the chemistry of the organ."""

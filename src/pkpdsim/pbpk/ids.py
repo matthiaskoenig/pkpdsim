@@ -157,6 +157,9 @@ __all__ = [
     "impairment_factor",
     "inflow_reaction",
     "infusion_rate",
+    "inhaled_deposited_fraction",
+    "inhaled_swallow_rate",
+    "inhaled_swallowed_fraction",
     "injection_rate",
     "injection_time",
     "interstitial_fraction",
@@ -1307,30 +1310,35 @@ def sol_dose(s: str) -> str:
     return f"SOLDOSE_{s}"
 
 
-type _DepotKind = Literal["im", "sc", "rectal"]
+type _DepotKind = Literal["im", "sc", "rectal", "inhaled"]
 """The kinds of the depot routes (`Route.kind`)."""
 
-_DEPOT_TOKENS: dict[str, str] = {"im": "im", "sc": "sc", "rectal": "rec"}
-"""The token of a depot route in its ids: intramuscular, subcutaneous, rectal."""
+_DEPOT_TOKENS: dict[str, str] = {
+    "im": "im",
+    "sc": "sc",
+    "rectal": "rec",
+    "inhaled": "inh",
+}
+"""The token of a depot route in its ids: intramuscular, subcutaneous, rectal, inhaled."""
 
 
 def depot_dose(kind: _DepotKind, s: str) -> str:
-    """The id of the dose state of a depot route (mg), `IMDOSE_<s>`, `SCDOSE_<s>`, `RECDOSE_<s>`."""
+    """The id of the dose state of a depot route (mg), `IMDOSE_<s>`, `SCDOSE_<s>`, `RECDOSE_<s>`, `INHDOSE_<s>`."""
     return f"{_DEPOT_TOKENS[kind].upper()}DOSE_{s}"
 
 
 def depot(kind: _DepotKind, s: str) -> str:
-    """The id of the depot of a depot route (mmole), `Aim_<s>`, `Asc_<s>`, `Arec_<s>`.
+    """The id of the depot of a depot route (mmole), `Aim_<s>`, `Asc_<s>`, `Arec_<s>`, `Ainh_<s>`.
 
-    The amount at the site of the administration (muscle, subcutis, rectum)
-    which the dose state applies and which is absorbed from there, a
+    The amount at the site of the administration (muscle, subcutis, rectum,
+    lung) which the dose state applies and which is absorbed from there, a
     species of the top model in the depot compartment of the route.
     """
     return f"A{_DEPOT_TOKENS[kind]}_{s}"
 
 
 def depot_compartment(kind: _DepotKind) -> str:
-    """The id of the compartment of the depots of a route, `Vim`, `Vsc`, `Vrec`.
+    """The id of the compartment of the depots of a route, `Vim`, `Vsc`, `Vrec`, `Vinh`.
 
     A compartment of amounts with the nominal volume 1 l, as the urine.
     """
@@ -1348,7 +1356,12 @@ def depot_absorption_rate(kind: _DepotKind, s: str) -> str:
 
 
 def depot_fraction(kind: _DepotKind, s: str) -> str:
-    """The id of the fraction of a depot which is absorbed, `f_im_<s>`, `f_rec_<s>`."""
+    """The id of the fraction of a depot which is absorbed, `f_im_<s>`, `f_rec_<s>`.
+
+    The inhaled route has no such fraction: its dose splits into the
+    deposited and the swallowed fraction (`inhaled_deposited_fraction`,
+    `inhaled_swallowed_fraction`).
+    """
     return f"f_{_DEPOT_TOKENS[kind]}_{s}"
 
 
@@ -1357,12 +1370,41 @@ def rectal_portal_fraction(s: str) -> str:
     return f"f_rec_portal_{s}"
 
 
+def inhaled_deposited_fraction(s: str) -> str:
+    """The id of the fraction of an inhaled dose deposited in the lung, `f_inh_deposited_<s>`.
+
+    The part of the dose which enters the lung depot `Ainh_<s>` and is
+    absorbed from there by the lung.
+    """
+    return f"f_inh_deposited_{s}"
+
+
+def inhaled_swallowed_fraction(s: str) -> str:
+    """The id of the fraction of an inhaled dose which is swallowed, `f_inh_swallowed_<s>`.
+
+    The part of the dose which is added to the oral dose state `PODOSE_<s>`.
+    """
+    return f"f_inh_swallowed_{s}"
+
+
+def inhaled_swallow_rate(s: str) -> str:
+    """The id of the swallowed part of an inhaled dose (mg/min), `R_inh_swallow_<s>`.
+
+    The rate at which the inhaled dose state adds to the oral dose state, an
+    assignment rule of the top model which the intestine reads in the rate
+    rule of `PODOSE_<s>`.
+    """
+    return f"R_inh_swallow_{s}"
+
+
 def depot_loss(kind: _DepotKind, s: str) -> str:
     """The id of the amount of an injected depot which is not absorbed (mmole), `Aloss_im_<s>`.
 
     The sink of the intramuscular and the subcutaneous depot (degraded at
-    the site of the injection); the rectal depot which is not absorbed
-    leaves into the feces `Afeces_<s>`, which this function gives for it.
+    the site of the injection) and of the inhaled dose (`Aloss_inh_<s>`,
+    exhaled or left in the device and the mouth); the rectal depot which is
+    not absorbed leaves into the feces `Afeces_<s>`, which this function
+    gives for it.
     """
     if kind == "rectal":
         return feces(s)
@@ -1370,18 +1412,30 @@ def depot_loss(kind: _DepotKind, s: str) -> str:
 
 
 def depot_application(kind: _DepotKind, s: str) -> str:
-    """The id of the application of a depot dose into the depot, `J_im_<s>`, `J_rec_<s>`."""
+    """The id of the application of a depot dose into the depot, `J_im_<s>`, `J_rec_<s>`.
+
+    Of an inhaled dose (`J_inh_<s>`) the deposited part only, the rest is
+    swallowed or lost (`depot_loss_reaction`).
+    """
     return dose_reaction(_DEPOT_TOKENS[kind], s)
 
 
 def depot_absorption(kind: _DepotKind, s: str, portal: bool = False) -> str:
-    """The id of the absorption from a depot, `J_im_abs_<s>`; `J_rec_abs_po_<s>` into the portal vein."""
+    """The id of the absorption from a depot, `J_im_abs_<s>`; `J_rec_abs_po_<s>` into the portal vein.
+
+    The absorption of the inhaled depot (`J_inh_abs_<s>`) is a reaction of
+    the lung, which absorbs it into its plasma: a local id of that organ.
+    """
     suffix = "_po" if portal else ""
     return f"J_{_DEPOT_TOKENS[kind]}_abs{suffix}_{s}"
 
 
 def depot_loss_reaction(kind: _DepotKind, s: str) -> str:
-    """The id of the part of a depot which is not absorbed, into its sink, `J_im_loss_<s>`."""
+    """The id of the part of a depot which is not absorbed, into its sink, `J_im_loss_<s>`.
+
+    Of an inhaled dose (`J_inh_loss_<s>`) the part which is neither
+    deposited in the lung nor swallowed.
+    """
     return f"J_{_DEPOT_TOKENS[kind]}_loss_{s}"
 
 
