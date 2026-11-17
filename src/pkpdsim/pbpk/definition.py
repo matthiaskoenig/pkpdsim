@@ -865,12 +865,21 @@ class PBPKDefinition:
         return problems
 
     def _check_routes(self, known: set[str]) -> list[str]:
-        """Check the routes."""
-        return [
+        """Check the routes: their substances, and the oral route of an inhaled one."""
+        problems = [
             f"route {r.kind}: unknown substance '{r.substance}'"
             for r in self.routes
             if r.substance not in known
         ]
+        oral = {r.substance for r in self.routes if r.kind == "oral"}
+        problems += [
+            f"the inhaled route of '{r.substance}' needs an oral route of that "
+            "substance: its swallowed fraction is added to the oral dose state "
+            f"'{ids.po_dose(r.substance)}'"
+            for r in self.routes
+            if r.kind == "inhaled" and r.substance not in oral
+        ]
+        return problems
 
 
 def _union[T](

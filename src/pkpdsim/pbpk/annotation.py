@@ -372,6 +372,12 @@ _DEPOT_ROUTES: dict[str, _DepotRoute] = {
         "uberon/UBERON:0001052",  # rectum
         "rectal",
     ),
+    "inhaled": _DepotRoute(
+        "INHALATION_EXPOSURE",
+        "ncit/C38216",  # respiratory (inhalation) route of administration
+        "uberon/UBERON:0002048",  # lung
+        "inhaled",
+    ),
 }
 """The depot routes by the kind of `Route`."""
 
@@ -1022,6 +1028,36 @@ KINDS: dict[str, Kind] = {
             (BQB.IS_PROPERTY_OF, _DEPOT_ROUTES["rectal"].route),
         ),
         requested="fraction of the absorbed rectal dose into the portal vein",
+    ),
+    # the inhaled dose splits at the application: the deposited fraction is
+    # the one which reaches the blood (`depot_fraction_inhaled`), the rest is
+    # swallowed or lost, and neither is a loss at the site of an injection
+    "inhaled_swallowed_fraction": Kind(
+        _P,
+        _PHYS,
+        terms=(
+            (BQB.IS_PROPERTY_OF, pbpko("INHALATION_EXPOSURE")),
+            (BQB.IS_PROPERTY_OF, _DEPOT_ROUTES["inhaled"].route),
+        ),
+        requested="fraction of an inhaled dose which is swallowed",
+    ),
+    "inhaled_swallow_rate": Kind(
+        _P,
+        "OUTPUT_PARAMETER",
+        terms=(
+            (BQB.IS_PART_OF, pbpko("INHALATION_EXPOSURE")),
+            (BQB.IS_PART_OF, _DEPOT_ROUTES["inhaled"].route),
+        ),
+        requested="swallowed part of an inhaled dose (mass per time)",
+    ),
+    "depot_loss_inhaled": Kind(
+        _T,
+        None,
+        terms=(
+            (BQB.IS_PART_OF, pbpko("INHALATION_EXPOSURE")),
+            (BQB.IS_PART_OF, _DEPOT_ROUTES["inhaled"].route),
+        ),
+        requested="loss of an inhaled dose which is neither deposited nor swallowed",
     ),
     "custom_reaction": Kind(
         SBO.BIOCHEMICAL_OR_TRANSPORT_REACTION,

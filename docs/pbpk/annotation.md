@@ -117,6 +117,10 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | subcutaneous depot compartment | `COMPARTMENT` |
 | rectal depot compartment | `COMPARTMENT` |
 | rectal exposure | `ROUTE_OF_EXPOSURE` (`BQB.IS_VERSION_OF`) |
+| inhaled depot compartment | `COMPARTMENT` |
+| fraction of an inhaled dose which is swallowed | `PHYSIOLOGICAL_PARAMETER` |
+| swallowed part of an inhaled dose (mass per time) | `OUTPUT_PARAMETER` |
+| loss of an inhaled dose which is neither deposited nor swallowed | none, the terms of other ontologies only |
 | application time of a depot dose | `PARAMETER` |
 | cumulative amount of a depot dose which is not absorbed | `AMOUNT_OF_COMPOUND_IN_COMPARTMENT` |
 | loss of a depot dose at the site of the injection | none, the terms of other ontologies only |

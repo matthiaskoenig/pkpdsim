@@ -27,7 +27,21 @@ applied by a first order process, the conventions of the hand-written models:
   injection; the feces `Afeces_<s>` from the rectum); of the absorbed
   rectal dose the fraction `f_rec_portal_<s>` enters the portal plasma
   `Cpo_<s>` and passes the liver (the superior rectal vein), the rest the
-  venous plasma (the middle and inferior rectal veins).
+  venous plasma (the middle and inferior rectal veins);
+- inhaled: `INHDOSE_<s>` drains with the half-life `ti_inh_<s>` (s) of the
+  application and splits into three parts, the deposition of an inhaled
+  dose. The fraction `f_inh_deposited_<s>` enters the lung depot `Ainh_<s>`
+  (mmole, in `Vinh`), which the lung absorbs with first order `ka_inh_<s>`
+  (1/hr) into its plasma (`J_inh_abs_<s>`, a reaction of that organ): the
+  dose enters the circulation where an inhaled dose enters it, the
+  pulmonary capillaries, whose outflow is the arterial blood, and it does
+  not pass the lung a second time as a dose into the venous plasma would.
+  The fraction `f_inh_swallowed_<s>` is added to the oral dose state
+  `PODOSE_<s>` (`R_inh_swallow_<s>`, mg/min, which the intestine reads in
+  the rate rule of that dose state), the part deposited in the oropharynx
+  and cleared into the gut, so an inhaled route needs an oral route of its
+  substance. The rest is lost into `Aloss_inh_<s>` (exhaled, or left in the
+  device and the mouth).
 
 The dose in mg is converted to mmole with the molecular weight `Mr_<s>`. The
 dose states and the parameters of the formulations are parameters of the
@@ -178,7 +192,7 @@ type Formulation = FirstOrderDissolution | WeibullDissolution | DoseDependentDis
 ORAL = frozenset({"oral", "oral_solution"})
 """The routes into the intestine."""
 
-DEPOT = frozenset({"im", "sc", "rectal"})
+DEPOT = frozenset({"im", "sc", "rectal", "inhaled"})
 """The routes into a depot at the site of the administration."""
 
 
@@ -193,18 +207,23 @@ class Depot:
     Attributes:
         ka: the rate of the absorption from the depot (1/hr), `ka_<k>_<s>`.
         fraction: the fraction of the depot which is absorbed, `f_<k>_<s>`
-            (1 by default), the rest leaves into the sink.
+            (1 by default), the rest leaves into the sink; of the inhaled
+            route the fraction of the dose which is deposited in the lung,
+            `f_inh_deposited_<s>`.
         portal: the fraction of the absorbed dose which enters the portal
             vein, `f_rec_portal_<s>`; the rectal route only.
         application: the half-life of the application of the dose into the
             depot (s), `ti_<k>_<s>`; a formulation which releases slowly (a
             suppository) sets it.
+        swallowed: the fraction of the dose which is swallowed,
+            `f_inh_swallowed_<s>`; the inhaled route only.
     """
 
     ka: Q | None = None
     fraction: Q | None = None
     portal: Q | None = None
     application: Q | None = None
+    swallowed: Q | None = None
 
 
 @dataclass(frozen=True)
@@ -213,15 +232,15 @@ class Route:
 
     Attributes:
         kind: intravenous, oral tablet (with dissolution), oral solution,
-            intramuscular, subcutaneous or rectal.
+            intramuscular, subcutaneous, rectal or inhaled.
         substance: the id of the administered substance.
         formulation: the dissolution of the tablet, the first order
             dissolution of the data (`Ka_dis`) if `None`.
         depot: the parameters of a depot route (intramuscular, subcutaneous,
-            rectal), the defaults of the data if `None`.
+            rectal, inhaled), the defaults of the data if `None`.
     """
 
-    kind: Literal["iv", "oral", "oral_solution", "im", "sc", "rectal"]
+    kind: Literal["iv", "oral", "oral_solution", "im", "sc", "rectal", "inhaled"]
     substance: str
     formulation: Formulation | None = None
     depot: Depot | None = None
@@ -231,8 +250,9 @@ class Route:
 
         Raises:
             ValueError: if the kind is none of its choices, a route which is
-                no depot route has a depot, or a route which is not rectal a
-                portal fraction.
+                no depot route has a depot, a route which is not rectal a
+                portal fraction or a route which is not inhaled a swallowed
+                fraction.
         """
         check_literals(self)
         if self.depot is None:
@@ -246,6 +266,11 @@ class Route:
             raise ValueError(
                 f"Route '{self.kind}' of '{self.substance}': only the rectal "
                 "route has a portal fraction."
+            )
+        if self.depot.swallowed is not None and self.kind != "inhaled":
+            raise ValueError(
+                f"Route '{self.kind}' of '{self.substance}': only the inhaled "
+                "route has a swallowed fraction."
             )
 
     @classmethod
@@ -300,12 +325,37 @@ class Route:
         """Get the rectal route of a substance, see `Depot`."""
         return cls("rectal", s, depot=_given(ka, fraction, portal, application))
 
+    @classmethod
+    def inhaled(
+        cls,
+        s: str,
+        *,
+        ka: Q | None = None,
+        deposited: Q | None = None,
+        swallowed: Q | None = None,
+        application: Q | None = None,
+    ) -> Route:
+        """Get the inhaled route of a substance, see `Depot`.
+
+        The dose splits into the fraction `deposited` in the lung, which the
+        lung absorbs with `ka`, the fraction `swallowed` into the oral dose
+        state (the substance needs an oral route) and the rest, which is
+        lost.
+        """
+        return cls(
+            "inhaled", s, depot=_given(ka, deposited, None, application, swallowed)
+        )
+
 
 def _given(
-    ka: Q | None, fraction: Q | None, portal: Q | None, application: Q | None
+    ka: Q | None,
+    fraction: Q | None,
+    portal: Q | None,
+    application: Q | None,
+    swallowed: Q | None = None,
 ) -> Depot | None:
     """The depot of the given values, `None` if none is given (the route of the defaults)."""
-    values = (ka, fraction, portal, application)
+    values = (ka, fraction, portal, application, swallowed)
     return None if all(v is None for v in values) else Depot(*values)
 
 
@@ -482,6 +532,8 @@ def route_objects(route: Route, substance: Substance) -> list[Sbase]:
     The intravenous route applies its dose into the venous plasma, a depot
     route into its depot, from which it is absorbed into the venous (and the
     portal) plasma; the oral routes are applied by the intestine. The
+    inhaled route splits its dose into its lung depot, the oral dose state
+    and its loss, and the lung absorbs its depot (`pkpdsim.pbpk.organ`). The
     compartment of the depots of a route is `depot_site`.
 
     Args:
@@ -495,6 +547,8 @@ def route_objects(route: Route, substance: Substance) -> list[Sbase]:
     s = substance.sid
     if route.kind == "iv":
         return _iv(substance)
+    if route.kind == "inhaled":
+        return _inhaled(route, substance)
     if route.kind in DEPOT:
         return _depot(route, substance)
     if route.kind == "oral":
@@ -647,14 +701,15 @@ _SITES: dict[str, _Site] = {
     "im": _Site("intramuscular", "the muscle at the site of the injection"),
     "sc": _Site("subcutaneous", "the subcutis at the site of the injection"),
     "rectal": _Site("rectal", "the rectum"),
+    "inhaled": _Site("inhaled", "the lung"),
 }
 """The depot routes by kind, the sections of their defaults in `routes.toml`."""
 
 
-def _depot_kind(route: Route) -> Literal["im", "sc", "rectal"]:
+def _depot_kind(route: Route) -> Literal["im", "sc", "rectal", "inhaled"]:
     """The kind of a depot route, narrowed."""
     kind = route.kind
-    if kind == "im" or kind == "sc" or kind == "rectal":
+    if kind == "im" or kind == "sc" or kind == "rectal" or kind == "inhaled":
         return kind
     raise ValueError(f"Route '{kind}' is no depot route.")
 
@@ -853,3 +908,171 @@ def _depot(route: Route, s: Substance) -> list[Sbase]:
         ),
     ]
     return objects
+
+
+def _inhaled(route: Route, s: Substance) -> list[Sbase]:
+    """The dose state, the lung depot and the split of an inhaled dose.
+
+    The dose state drains with the half-life of the application into three
+    destinations: the fraction `f_inh_deposited_<s>` into the lung depot
+    `Ainh_<s>` (which the lung absorbs, `pkpdsim.pbpk.organ`), the fraction
+    `f_inh_swallowed_<s>` into the oral dose state `PODOSE_<s>` (the rate
+    `R_inh_swallow_<s>`, which the intestine reads in the rate rule of that
+    dose state) and the rest into the loss `Aloss_inh_<s>`. The three parts
+    leave the dose state at the rate at which they enter their destination,
+    so the dose is conserved whatever the fractions are.
+    """
+    kind = "inhaled"
+    site = _SITES[kind]
+    given = route.depot if route.depot is not None else Depot()
+    sid, mr = s.sid, ids.mr(s.sid)
+    dose, depot = ids.depot_dose(kind, sid), ids.depot(kind, sid)
+    ti = ids.depot_application_time(kind, sid)
+    ka = ids.depot_absorption_rate(kind, sid)
+    deposited = ids.inhaled_deposited_fraction(sid)
+    swallowed = ids.inhaled_swallowed_fraction(sid)
+    swallow = ids.inhaled_swallow_rate(sid)
+    application = ids.depot_application(kind, sid)
+    loss, sink = ids.depot_loss_reaction(kind, sid), ids.depot_loss(kind, sid)
+    po = ids.po_dose(sid)
+
+    def default(key: str) -> Q:
+        return value("routes", kind, key)
+
+    # the dose which leaves the dose state per time (mg/min)
+    applied = f"ln(2) / {ti} * 60 s_per_min * {dose}"
+    lost = f"(1 dimensionless - {deposited} - {swallowed})"
+    return [
+        _dose(
+            dose,
+            f"inhaled dose {sid} [mg]",
+            f"Inhaled dose of {s.name}: the fraction `{deposited}` is deposited "
+            f"in the lung (its depot `{depot}`, absorbed by the lung), the "
+            f"fraction `{swallowed}` is swallowed (added to the oral dose state "
+            f"`{po}`), the rest is lost into `{sink}` (exhaled, or left in the "
+            "device and the mouth).",
+        ),
+        annotate(
+            value_parameter(
+                ti,
+                given.application
+                if given.application is not None
+                else value("routes", "depot", "ti"),
+                U.second,
+                f"application time {sid} ({site.name}) [s]",
+                _SBO_PARAMETER,
+                "Half-life of the application of the inhaled dose: of its "
+                "deposition in the lung, of the swallowing of its swallowed part "
+                "and of its loss.",
+            ),
+            f"depot_time_{kind}",
+        ),
+        annotate(
+            value_parameter(
+                ka,
+                given.ka if given.ka is not None else default("ka"),
+                U.per_hr,
+                f"absorption rate {sid} ({site.name}) [1/hr]",
+                _SBO_PARAMETER,
+                "First order absorption of the deposited dose from the lung "
+                "depot, which the lung absorbs into its plasma.",
+            ),
+            f"depot_rate_{kind}",
+        ),
+        annotate(
+            value_parameter(
+                deposited,
+                given.fraction
+                if given.fraction is not None
+                else default("f_deposited"),
+                U.dimensionless,
+                f"fraction deposited {sid} ({site.name})",
+                _SBO_PARAMETER,
+                f"Fraction of the inhaled dose which is deposited in the lung, "
+                f"its depot `{depot}`.",
+            ),
+            f"depot_fraction_{kind}",
+        ),
+        annotate(
+            value_parameter(
+                swallowed,
+                given.swallowed
+                if given.swallowed is not None
+                else default("f_swallowed"),
+                U.dimensionless,
+                f"fraction swallowed {sid} ({site.name})",
+                _SBO_PARAMETER,
+                "Fraction of the inhaled dose which is swallowed (deposited in "
+                f"the oropharynx and cleared into the gut), added to `{po}`; what "
+                "is neither deposited nor swallowed is lost.",
+            ),
+            "inhaled_swallowed_fraction",
+        ),
+        annotate(
+            Species(
+                depot,
+                ids.depot_compartment(kind),
+                initialAmount=0.0,
+                substanceUnit=U.mmole,
+                hasOnlySubstanceUnits=True,
+                name=f"{s.name} ({site.name} depot)",
+                sboTerm=SBO.SIMPLE_CHEMICAL,
+            ),
+            f"depot_amount_{kind}",
+            substance=s,
+        ),
+        annotate(
+            Species(
+                sink,
+                ids.depot_compartment(kind),
+                initialAmount=0.0,
+                substanceUnit=U.mmole,
+                hasOnlySubstanceUnits=True,
+                name=f"{s.name} ({site.name} dose, lost)",
+                sboTerm=SBO.SIMPLE_CHEMICAL,
+            ),
+            f"depot_loss_amount_{kind}",
+            substance=s,
+        ),
+        annotate(
+            Parameter(
+                swallow,
+                None,
+                U.mg_per_min,
+                constant=False,
+                name=f"swallowed dose rate {sid} ({site.name}) [mg/min]",
+                sboTerm=_SBO_PARAMETER,
+                notes="Swallowed part of the inhaled dose, which the intestine "
+                f"adds to the oral dose state `{po}`.\n\n"
+                f"`{swallow} = {swallowed} * {applied}`",
+            ),
+            "inhaled_swallow_rate",
+        ),
+        AssignmentRule(swallow, f"{swallowed} * {applied}", U.mg_per_min),
+        annotate(
+            Reaction(
+                sid=application,
+                equation=f"-> {depot}",
+                formula=(f"{deposited} * {applied} / {mr}", U.mmole_per_min),
+                name=f"{site.name} deposition {sid}",
+                sboTerm=SBO.TRANSPORT_REACTION,
+            ),
+            f"depot_application_{kind}",
+        ),
+        annotate(
+            Reaction(
+                sid=loss,
+                equation=f"-> {sink}",
+                formula=(f"{lost} * {applied} / {mr}", U.mmole_per_min),
+                name=f"{site.name} dose lost {sid}",
+                sboTerm=SBO.TRANSPORT_REACTION,
+            ),
+            f"depot_loss_{kind}",
+        ),
+        RateRule(
+            dose,
+            f"-({application} + {loss}) * {mr} - {swallow}",
+            U.mg_per_min,
+            name=f"{site.name} dose {sid}",
+        ),
+    ]

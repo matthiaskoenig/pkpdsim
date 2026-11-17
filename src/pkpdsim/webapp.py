@@ -84,7 +84,7 @@ __all__ = [
 ]
 
 #: the targets of a dose of the PBPK library: the route and the substance
-DOSE_TARGETS: Final = re.compile(r"^(PO|IV|SOL|IM|SC|REC)DOSE_(\w+)$")
+DOSE_TARGETS: Final = re.compile(r"^(PO|IV|SOL|IM|SC|REC|INH)DOSE_(\w+)$")
 #: the routes of the dose targets as they are shown
 ROUTE_LABELS: Final = {
     "PO": "oral",
@@ -93,6 +93,7 @@ ROUTE_LABELS: Final = {
     "IM": "intramuscular",
     "SC": "subcutaneous",
     "REC": "rectal",
+    "INH": "inhaled",
 }
 #: the most readouts of a page
 READOUTS: Final = 8
