@@ -11,6 +11,7 @@ dist/
 .tox/
 .pytest_cache/
 .ruff_cache/
+.pkpdsim-cache/
 .coverage
 coverage.xml
 # build cache of zensical

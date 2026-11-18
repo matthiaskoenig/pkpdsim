@@ -19,14 +19,17 @@ from typing import cast
 import libsbml
 import numpy as np
 import pytest
+import roadrunner
 from sbmlsim import Q
 from sbmlsim.distrib import UNCERTAINTY_DIMENSION
 from sbmlsim.model import AbstractModel
 from sbmlsim.model.model_roadrunner import RoadrunnerSBMLModel
+from sbmlsim.result.scan import start_values
 from sbmlsim.simulation import Change as TimedChange
 from sbmlsim.simulation import Dimension, Scan, Simulation, SteadyState
 from sbmlsim.simulation.definition import Value as Change
 from sbmlsim.simulator import Simulator
+from sbmlsim.simulator.plan import Assignment
 from sbmlsim.task import Task
 
 from pkpdsim.model import PKPDModel
@@ -45,8 +48,11 @@ from pkpdsim.pbpk import (
 )
 from pkpdsim.pbpk.builder import BuildResult
 from pkpdsim.pbpk.experiment import PBPKSimulationExperiment
+from pkpdsim.pbpk.flat_model import flat_model, loaded_model
 from pkpdsim.pbpk.kidney_validity import (
     KidneyOutflow,
+    covariate_changes,
+    individual_values,
     kidney_outflow,
     simulated_individuals,
 )
@@ -198,6 +204,75 @@ def test_the_flows_of_every_carrier(built: BuildResult) -> None:
     assert outflows[None].text().startswith("the filtered plasma water GFR ")
 
 
+def test_individual_values_match_the_start_of_a_simulation(built: BuildResult) -> None:
+    """Covariates and changes expressed as quantities update the initial assignments."""
+    model = loaded_model(built.flat_path)
+    simulator = Simulator(n_workers=1)
+    quantities = flat_model(built.flat_path).quantities
+    for bw, height, hf, cp, renal in [
+        (72.0, 178.0, 0.0, 0.0, 1.0),
+        (96.0, 190.0, 1.0, 2.0, 0.5),
+    ]:
+        changes = covariate_changes(bw, height, hf, cp, renal)
+        result = simulator.run(
+            model, Simulation(end=1, time_unit="min", preinit_changes=changes)
+        )
+        values = individual_values(built.flat_path, changes)
+        assert values.numbers == pytest.approx(
+            {sid: start_values(result, sid).item() for sid in quantities}
+        )
+        assert values.units == {sid: result.units[sid] for sid in quantities}
+
+
+def test_individual_values_fire_initial_events_without_integrating(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A time-zero event counts, a later event does not, and each read resets."""
+    doc = libsbml.SBMLDocument(3, 2)
+    model = doc.createModel()
+    model.setId("initial_events")
+    model.setTimeUnits("second")
+    for sid, value in ((ids.BW, 1.0), (ids.GFR_BASE, 3.0)):
+        parameter = model.createParameter()
+        parameter.setId(sid)
+        parameter.setValue(value)
+        parameter.setUnits("dimensionless")
+        parameter.setConstant(False)
+    initial = model.createInitialAssignment()
+    initial.setSymbol(ids.GFR_BASE)
+    initial.setMath(libsbml.parseL3Formula(f"2 + {ids.BW}"))
+    for name, condition, formula in [
+        ("initial", f"time >= 0 && {ids.BW} > 1", f"3 * {ids.BW}"),
+        ("later", "time >= 1", "100"),
+    ]:
+        event = model.createEvent()
+        event.setId(name)
+        event.setUseValuesFromTriggerTime(True)
+        trigger = event.createTrigger()
+        trigger.setInitialValue(False)
+        trigger.setPersistent(True)
+        trigger.setMath(libsbml.parseL3Formula(condition))
+        assignment = event.createEventAssignment()
+        assignment.setVariable(ids.GFR_BASE)
+        assignment.setMath(libsbml.parseL3Formula(formula))
+    path = tmp_path / "initial_events.xml"
+    libsbml.writeSBMLToFile(doc, str(path))
+    changes = {ids.BW: 2.0}
+    result = Simulator(n_workers=1).run(
+        loaded_model(path), Simulation(end=1, time_unit="min", preinit_changes=changes)
+    )
+    expected = start_values(result, ids.GFR_BASE).item()
+    assert expected == 6.0
+
+    def fail(*args: object, **kwargs: object) -> None:
+        pytest.fail("initial values must not integrate the model")
+
+    monkeypatch.setattr(Simulator, "run", fail)
+    monkeypatch.setattr(roadrunner.RoadRunner, "simulate", fail)
+    assert individual_values(path, changes).number(ids.GFR_BASE) == expected
+    assert individual_values(path, {}).number(ids.GFR_BASE) == 3.0
+
+
 def test_an_outflow_is_valid_below_the_plasma_flow() -> None:
     assert KidneyOutflow("x", gfr=100.0, filtered=99.0, plasma_flow=100.0).valid
     assert not KidneyOutflow("x", gfr=100.0, filtered=100.0, plasma_flow=100.0).valid
@@ -329,17 +404,17 @@ def test_an_individual_outside_the_validity_fails_the_initialization(
 def test_doses_and_draws_make_no_individual(
     built: BuildResult, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Simulations of one individual are simulated once; the draws are not checked."""
+    """One individual is initialized once, and fit draws add no checks."""
     base = _experiment(built)
     high = base.renal_function_limits()[1]
-    runs: list[object] = []
-    run = Simulator.run
+    initializations = 0
+    initialize = RoadrunnerSBMLModel.initialize
 
-    def counted(self: Simulator, *args: object, **kwargs: object) -> object:
-        runs.append(args)
-        return run(self, *args, **kwargs)  # ty: ignore[invalid-argument-type]
+    def counted(self: RoadrunnerSBMLModel, assignments: tuple[Assignment, ...]) -> None:
+        nonlocal initializations
+        initializations += 1
+        initialize(self, assignments)
 
-    monkeypatch.setattr(Simulator, "run", counted)
     bw = {"BW": Q(81.2345, "kg")}
     study = _study(
         base,
@@ -366,8 +441,9 @@ def test_doses_and_draws_make_no_individual(
             ),
         },
     )
+    monkeypatch.setattr(RoadrunnerSBMLModel, "initialize", counted)
     study.initialize()
-    assert len(runs) == 1
+    assert initializations == 1
 
 
 @pytest.fixture(scope="module")
@@ -384,12 +460,14 @@ def unfiltered(tmp_path_factory: pytest.TempPathFactory) -> BuildResult:
 def test_a_model_without_filtration_is_not_simulated(
     unfiltered: BuildResult, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Without a filtered substance there is no outflow to check, nothing is simulated."""
-    runs: list[object] = []
-    monkeypatch.setattr(Simulator, "run", lambda *args, **kwargs: runs.append(args))
+    """Without a filtered substance there is no outflow to check."""
+    monkeypatch.setattr(
+        RoadrunnerSBMLModel,
+        "initialize",
+        lambda *args: pytest.fail("a model without filtration must not be initialized"),
+    )
     assert kidney_outflow(unfiltered.flat_path, _renal(100.0)) == ()
     assert _experiment(unfiltered).renal_function_limits() == (0.0, float("inf"))
-    assert runs == []
 
 
 def test_a_model_without_a_kidney_is_not_simulated(
@@ -400,10 +478,14 @@ def test_a_model_without_a_kidney_is_not_simulated(
     model.createModel().setId("plain")
     path = tmp_path / "plain.xml"
     libsbml.writeSBMLToFile(model, str(path))
-    runs: list[object] = []
-    monkeypatch.setattr(Simulator, "run", lambda *args, **kwargs: runs.append(args))
+    monkeypatch.setattr(
+        RoadrunnerSBMLModel,
+        "initialize",
+        lambda *args: pytest.fail(
+            "a model without kidney flows must not be initialized"
+        ),
+    )
     assert kidney_outflow(path, _renal(100.0)) == ()
-    assert runs == []
 
 
 @pytest.fixture(scope="module")

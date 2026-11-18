@@ -179,7 +179,8 @@ def chronology(model: Project) -> Chronology:
 
     Returns:
         The days of the adopted fits of the model (`Project.adopted_fits`) and
-        the records of the study folders of every data path of the model.
+        the earliest collection record for each study. If any copy of a study
+        lacks a record, its collection date is unknown.
 
     Raises:
         ValueError: if a record is not readable, see
@@ -187,12 +188,16 @@ def chronology(model: Project) -> Chronology:
     """
     studies: dict[str, StudyRecord] = {}
     for name, folders in study_folders(model).items():
+        missing = False
+        earliest = None
         for folder in folders:
             record = read_study_record(folder)
             if record is None:
+                missing = True
                 continue
-            earlier = studies.get(name)
-            studies[name] = record if earlier is None else _merged(earlier, record)
+            earliest = record if earliest is None else _merged(earliest, record)
+        if earliest is not None and not missing:
+            studies[name] = earliest
     return Chronology(
         fits={
             fit_subset(fit_id): fit_date(fit_id)

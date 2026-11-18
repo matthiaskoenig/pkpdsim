@@ -97,12 +97,10 @@ def healthy_gfr(
     `GFR = GFR_base * f_renal_function`): it scales with the body surface area
     of the body weight and the height, the severity of heart failure lowers
     the renal blood flow and with it the GFR, and the cirrhosis lowers it by
-    the hepatorenal factor of its Child-Pugh class. The GFR and its covariates
-    are initial assignments, so it is read from a simulation of one minute
-    with the covariates as changes before the initialization, which evaluates
-    the initial assignments again (sbmlsim). It is cached per model file, its
-    modification time and the individual, once for all experiments of a
-    process; a model file which is created again is simulated again. The sex
+    the hepatorenal factor of its Child-Pugh class. The GFR is read after
+    initializing the model with the covariate changes, which evaluates the
+    initial assignments again. Recent values are cached across experiments
+    per model file, its modification time and the individual. The sex
     is no parameter of the model: the library builds the model of one sex, and
     the GFR of a woman is the GFR of the female build.
 

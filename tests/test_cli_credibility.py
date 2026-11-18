@@ -113,8 +113,8 @@ def test_the_command_reports_a_broken_declaration(
     assert exit_info.value.code == 1
     assert "CredB" in capsys.readouterr().out
     assert not (tmp_path / "broken").exists()
-    # no staging is left behind
-    assert list(tmp_path.iterdir()) == []
+    # Only the persistent lock sidecar remains. It is reused by the next writer.
+    assert [p.name for p in tmp_path.iterdir()] == [".broken.lock"]
 
 
 def test_the_command_reports_a_missing_record(

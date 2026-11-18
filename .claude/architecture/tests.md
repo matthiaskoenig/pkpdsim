@@ -2,7 +2,7 @@
 
 Part of the architecture notes of pkpdsim, see [CLAUDE.md](../../CLAUDE.md).
 
-The tests share the flat models of the session: `tests/conftest.py` patches `pkpdsim.pbpk.builder.flat_model` for the session (`flat_model_cache`) with a cache by the sha256 of the comp file without the dates of the model history, in a folder of the session which every worker of pytest-xdist shares (about a quarter of the builds of the suite repeat a comp model); a test which checks what the validation logs is marked `uncached_build`.
+The tests share the production build cache: `tests/conftest.py` points `PKPDSIM_BUILD_CACHE` at a directory shared by the workers of the session (`flat_model_cache`). Builds reuse validated comp/flat pairs by their content, software versions and validation settings, without a test-only flattening wrapper. A test which checks validation or flattening is marked `uncached_build`, which sets `PKPDSIM_BUILD_CACHE=off` for that test.
 
 The tests of these modules run on the toy package `tests/pkpdsim_toy`; its SBML is created once per session by the controller (pytest-xdist), and a test writes only into `tmp_path`.
 

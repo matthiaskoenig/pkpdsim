@@ -18,6 +18,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 import roadrunner
+from sbmlsim.model.model_roadrunner import reset_all as _reset_all
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,9 @@ def run_simulation(r: roadrunner.RoadRunner, sim: Simulation) -> pd.DataFrame:
     """Run the parts of a simulation and concatenate their timecourses.
 
     The model is reset (`resetAll`) before the first part, so that a
-    simulation does not depend on the simulations before it. A part sets its
+    simulation does not depend on the simulations before it. The integration
+    start times are zeroed before the reset, so initial event delays also
+    restart at zero. A part sets its
     changes and simulates from the state in which the part before ends; the
     time of its timecourse continues the time of the part before, so the last
     point of a part and the first point of the next part have the same time
@@ -75,16 +78,16 @@ def run_simulation(r: roadrunner.RoadRunner, sim: Simulation) -> pd.DataFrame:
         after the other (the index of each part starts at 0).
     """
     start = time.perf_counter()
-    r.resetAll()
+    _reset_all(r)
     dfs: list[pd.DataFrame] = []
     t_offset: float = 0.0
     for part in sim.parts:
         for key, value in part.changes.items():
             r.setValue(key, value)
-        s = r.simulate(start=0, end=part.tend, steps=part.steps)
+        t_end = t_offset + part.tend
+        s = r.simulate(start=t_offset, end=t_end, steps=part.steps)
         df = pd.DataFrame(s, columns=s.colnames)
-        df["time"] = df["time"] + t_offset
-        t_offset = t_offset + part.tend
+        t_offset = t_end
         dfs.append(df)
 
     df = pd.concat(dfs)

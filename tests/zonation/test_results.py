@@ -410,6 +410,50 @@ def _with_failed(draws: int = 5, failed: Sequence[int] = (2,)) -> ScanResult:
     )
 
 
+@pytest.mark.parametrize("failed", [(0,), (2,)])
+def test_series_band_uses_the_successful_draws(failed: tuple[int, ...]) -> None:
+    res = _with_failed(5, failed)
+    kept = np.delete(np.arange(5), failed)
+    expected_time, expected = series_band(
+        res.isel(**{UNCERTAINTY_DIMENSION: kept}), CELL[0], "uM", run=_run(4)
+    )
+    time, band = series_band(res, CELL[0], "uM", run=_run(5))
+    np.testing.assert_allclose(time, expected_time)
+    np.testing.assert_allclose(band.median, expected.median)
+    assert band.lower is not None and expected.lower is not None
+    assert band.upper is not None and expected.upper is not None
+    np.testing.assert_allclose(band.lower, expected.lower)
+    np.testing.assert_allclose(band.upper, expected.upper)
+
+
+def test_series_band_without_a_successful_draw_has_no_time_points() -> None:
+    time, band = series_band(
+        _with_failed(3, (0, 1, 2)), CELL[0], "uM", run=_run(3), time_unit="hr"
+    )
+    assert time.size == band.median.size == 0
+    assert band.lower is not None and band.lower.size == 0
+    assert band.upper is not None and band.upper.size == 0
+
+
+def test_series_band_aligns_different_time_grids() -> None:
+    res = _with_failed(2, ())
+    res.ds["time"].values[1] = [0.0, 70.0, 100.0, 120.0]
+    res.ds[CELL[0]].values[:] = res.ds["time"].values / 60
+    time, band = series_band(res, CELL[0], "uM", run=_run(2), time_unit="hr")
+    np.testing.assert_allclose(time, np.array([0, 40, 70, 80, 100, 120]) / 60)
+    np.testing.assert_allclose(band.median, 1e3 * time)
+
+
+def test_series_band_preserves_a_change_on_different_time_grids() -> None:
+    res = _with_failed(2, ())
+    res.ds.attrs["changes"] = [60.0]
+    res.ds["time"].values[:] = [[0.0, 60.0, 60.0, 120.0], [30.0, 60.0, 60.0, 90.0]]
+    res.ds[CELL[0]].values[:] = [[1.0, 1.0, 10.0, 10.0], [1.0, 1.0, 10.0, 10.0]]
+    time, band = series_band(res, CELL[0], "uM", run=_run(2), time_unit="hr")
+    np.testing.assert_allclose(time, [0.0, 0.5, 1.0, 1.5, 2.0])
+    np.testing.assert_allclose(band.median, [1e3, 1e3, 1e4, 1e4, 1e4])
+
+
 def test_a_draw_which_failed_is_left_out_of_the_band() -> None:
     band = zone_band(_with_failed(5, (2,)), CELL, 120.0, "mM", run=_run(5))
     # the band of the draws which ran, the failed one neither shifts nor NaNs it

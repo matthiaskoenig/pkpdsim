@@ -107,6 +107,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import datetime
+import errno
 import importlib
 import json
 import logging
@@ -118,7 +119,8 @@ import sys
 import tempfile
 import uuid
 import webbrowser
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
+from contextlib import contextmanager
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NoReturn
@@ -156,7 +158,7 @@ from sbmlsim.fit.result import FIT_ID, fit_id, fit_subset
 from sbmlsim.fit.sampling import SamplingType
 from sbmlsim.project import Project, collect_figure_files, load_project, resolve
 from sbmlsim.run import ConfigurationError, execute, list_analyses, plan
-from sbmlsim.run.context import SPEC_FILE
+from sbmlsim.run.context import RUN_FILE, SPEC_FILE
 from sbmlsim.run.profiling import (
     PROFILE_DIR,
     PROFILE_OPTION,
@@ -382,6 +384,11 @@ def _overlaps(out: Path, path: Path) -> bool:
         _same(target, other)
         or any(_same(target, parent) for parent in other.parents)
         or any(_same(other, parent) for parent in target.parents)
+        # Replacing the output can also remove an input's link to a file elsewhere.
+        or any(
+            _same(target, parent.resolve())
+            for parent in Path(os.path.abspath(path)).parents
+        )
     )
 
 
@@ -395,30 +402,121 @@ def _check_out(
 
     A command replaces its output, so the output must not be an input of the
     command (the records of a fit), the adopted fits, the factory or a build
-    of the model, contain one of them or lie inside one, nor contain the
-    package or a folder of its data.
+    or dedicated data directory of the model, contain one of them or lie
+    inside one, nor contain the package.
 
     Raises:
         SystemExit: a usage error naming the input.
     """
-    for path in [*inputs, model.fits_dir, model.factory_dir, *model.variants.values()]:
+    root = model.root.resolve()
+    data = [path for path in model.data_paths if not _same(path.resolve(), root)]
+    for path in [
+        *inputs,
+        model.fits_dir,
+        model.factory_dir,
+        *model.variants.values(),
+        *data,
+    ]:
         if _overlaps(out, path):
             parser.error(
                 f"The output '{out}' is or contains the input '{path}' of the "
                 "command, or lies inside it, which the output would replace: "
                 "give another output."
             )
-    for path in [model.root, *model.data_paths]:
-        target, other = out.resolve(), path.resolve()
-        if _same(target, other) or any(_same(target, p) for p in other.parents):
-            parser.error(
-                f"The output '{out}' contains the input '{path}' of the command, "
-                "which the output would replace: give another output."
+    target = out.resolve()
+    if _same(target, root) or any(_same(target, p) for p in root.parents):
+        parser.error(
+            f"The output '{out}' contains the input '{model.root}' of the command, "
+            "which the output would replace: give another output."
+        )
+
+
+@contextmanager
+def _lock_result(target: Path) -> Generator[None]:
+    """Hold the OS lock on a persistent sidecar until the writer closes it."""
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        lock = target.with_name(f".{target.name}.lock").open("a+b")
+    except OSError as err:
+        _failed(f"The result '{target}' cannot be locked: {err}")
+    with lock:
+        try:
+            if sys.platform == "win32":
+                import msvcrt
+
+                lock.seek(0)
+                msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as err:
+            if err.errno in {errno.EACCES, errno.EAGAIN, errno.EWOULDBLOCK}:
+                _failed(
+                    f"The result '{target}' is in use by another run. Try again later."
+                )
+            _failed(f"The result '{target}' cannot be locked: {err}")
+        yield
+
+
+def _check_result(target: Path, kind: str) -> None:
+    """Refuse to replace a nonempty directory which is unfamiliar to the command."""
+    if target.is_symlink() or (target.exists() and not target.is_dir()):
+        _failed(f"The output '{target}' must be a directory: give another output.")
+    if not target.exists() or not any(target.iterdir()):
+        return
+    if kind == "credibility":
+        if (target / CREDIBILITY_RECORD).is_file():
+            return
+        _failed(
+            f"The output directory '{target}' is not empty and holds no "
+            f"{CREDIBILITY_RECORD}; it is not replaced."
+        )
+    records = target / ANALYSIS_DIR if kind == "identifiability" else target
+    try:
+        record = json.loads((records / RUN_FILE).read_text(encoding="utf-8"))
+    except OSError, UnicodeError, ValueError:
+        record = None
+    if isinstance(record, dict):
+        recognized = record.get("kind") == kind
+    elif kind == "simulate":
+        # The library route (--workers auto) and older simulations have only a report.
+        recognized = _is_simulation_report(target)
+    elif kind in {"report", "identifiability"} and not (target / RUN_FILE).exists():
+        # Reports made directly by sbmlsim predate the run records.
+        files = ["index.html", PARAMETERS_FILE, "metrics_mappings.tsv", "report.typ"]
+        if kind == "identifiability":
+            files.append("identifiability.json")
+        recognized = all((target / filename).is_file() for filename in files)
+    else:
+        recognized = False
+    if not recognized:
+        _failed(
+            f"The output directory '{target}' holds no recognized {kind} result: "
+            "give another output."
+        )
+
+
+def _is_simulation_report(target: Path) -> bool:
+    """Recognize the generated index and figures of a simulation without run records."""
+    if not (target / "_figures").is_dir():
+        return False
+    try:
+        with (target / "index.html").open(encoding="utf-8") as report:
+            return "<title>Simulation experiments | sbmlsim</title>" in report.read(
+                4096
             )
+    except OSError, UnicodeError:
+        return False
 
 
 def _staged[T](
-    target: Path, run: Callable[[Path], T], *, inner: str | None = None
+    target: Path,
+    run: Callable[[Path], T],
+    *,
+    kind: str,
+    inner: str | None = None,
+    after_publish: Callable[[], None] | None = None,
 ) -> T:
     """Run into a staging directory and replace the result only when the run succeeded.
 
@@ -429,11 +527,15 @@ def _staged[T](
     renamed into its place and the earlier result removed (the pattern of
     `sbmlsim.fit.records.adopt_fit`). A failed run, also a failed plan,
     removes the staging directory and leaves the earlier result untouched.
+    A per-target interprocess lock covers recovery, the run and publication.
 
     Args:
         target: the folder of the result.
         run: runs into the staging directory, which it creates.
+        kind: the kind of result the command may replace.
         inner: the folder of the result in the staging directory, relative.
+        after_publish: an optional action that uses the published result while
+            its lock is still held.
 
     Returns:
         What the run returns.
@@ -441,10 +543,19 @@ def _staged[T](
     Raises:
         SystemExit: exit 1 if the result is not moved into its place.
     """
+    target = target.parent.resolve() / target.name
+    with _lock_result(target):
+        _recover_result(target, kind)
+        result = _swap_result(target, run, inner=inner)
+        if after_publish is not None:
+            after_publish()
+        return result
+
+
+def _swap_result[T](target: Path, run: Callable[[Path], T], *, inner: str | None) -> T:
+    """Run and publish a result with its lock already held."""
     token = uuid.uuid4().hex
     staging = target.parent / f".{target.name}.{token}"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    _sweep(target)
     try:
         result = run(staging)
     except BaseException:
@@ -481,17 +592,32 @@ def _staged[T](
     return result
 
 
-def _sweep(target: Path) -> None:
-    """Remove the stagings and earlier results of a target which a killed run left.
-
-    A run which was killed leaves `.<name>.<uuid>` or `.<name>.old.<uuid>`
-    next to the target, see `_staged`; each removal is logged.
-    """
-    pattern = re.compile(rf"^\.{re.escape(target.name)}\.(old\.)?[0-9a-f]{{32}}$")
+def _recover_result(target: Path, kind: str) -> None:
+    """Restore the only backup when needed and remove abandoned directories."""
+    name = re.escape(os.path.normcase(target.name))
+    pattern = re.compile(rf"^\.{name}\.(old\.)?[0-9a-f]{{32}}$")
+    abandoned: list[Path] = []
+    backups: list[Path] = []
     for entry in sorted(target.parent.iterdir()):
-        if entry.is_dir() and pattern.match(entry.name):
-            logger.warning("A run which was killed left '%s', it is removed.", entry)
-            shutil.rmtree(entry, ignore_errors=True)
+        match = pattern.fullmatch(os.path.normcase(entry.name))
+        if match and not entry.is_symlink() and entry.is_dir():
+            (backups if match[1] else abandoned).append(entry)
+    if backups and not target.exists() and not target.is_symlink():
+        if len(backups) != 1:
+            names = ", ".join(str(path) for path in backups)
+            _failed(
+                f"The result '{target}' has multiple backups: {names}. Restore one first."
+            )
+        backup = backups.pop()
+        try:
+            backup.rename(target)
+        except OSError as err:
+            _failed(f"The result '{target}' cannot be restored from '{backup}': {err}")
+        logger.warning("A run which was killed left '%s', it is restored.", backup)
+    _check_result(target, kind)
+    for entry in [*abandoned, *backups]:
+        logger.warning("A run which was killed left '%s', it is removed.", entry)
+        shutil.rmtree(entry, ignore_errors=True)
 
 
 def _relocated_input(spec_file: Path, staged: Path, final: Path) -> None:
@@ -735,7 +861,9 @@ def _run_factory(
     out = results_dir / FACTORY_DIR
     _check_out(parser, model, out)
     spec = {"project": project_reference(model)}
-    summary = _staged(out, lambda staging: _execute(parser, "factory", spec, staging))
+    summary = _staged(
+        out, lambda staging: _execute(parser, "factory", spec, staging), kind="factory"
+    )
     changed: list[str] = list(summary["changed"])
     display.key_values({"compared": summary["outputs"], "changed": len(changed)})
     display.link("models", out / summary["directory"])
@@ -769,9 +897,9 @@ def _simulate(
     """Simulate the given groups and experiments with the kind `simulate`.
 
     A name which is neither a group nor an experiment is reported and left
-    out, the run of no experiment exits with 1. The run replaces an earlier
-    result only when it ran (`_staged`), also with failed experiments, whose
-    report is written. `--workers auto` runs the experiments with
+    out, the run of no experiment exits with 1. A failed experiment keeps an
+    earlier result if present. The report of a first run is published even when
+    an experiment fails. `--workers auto` runs the experiments with
     `Project.run_experiments` and the choice of sbmlsim, without the records
     of a run, see `run_workers`.
 
@@ -797,7 +925,12 @@ def _simulate(
         _failed("No experiments to simulate.")
 
     single_group = len(names) == 1 and names[0] in registry
-    output_dir = simulation_dir / (names[0] if single_group else "custom_selection")
+    group = (
+        _plain_name(parser, names[0], "an experiment group")
+        if single_group
+        else "custom_selection"
+    )
+    output_dir = simulation_dir / group
     display.section("Simulations", icon=":chart_increasing:")
     display.key_values({"experiments": len(classes)})
     display.link("output", output_dir)
@@ -838,12 +971,18 @@ def _simulate(
             else:
                 _execute(parser, "simulate", spec, staging, workers=n_workers)
         except ExperimentRunError as err:
+            if output_dir.is_dir() and any(output_dir.iterdir()):
+                raise
             collect_figure_files(staging)
             return list(err.failures)
         collect_figure_files(staging)
         return []
 
-    failures = _staged(output_dir, run)
+    try:
+        failures = _staged(output_dir, run, kind="simulate")
+    except ExperimentRunError as err:
+        display.link("earlier results kept", output_dir / "index.html")
+        return list(err.failures)
     display.link("results", output_dir / "index.html")
     if show_report:
         webbrowser.open((output_dir / "index.html").resolve().as_uri())
@@ -1676,6 +1815,7 @@ def _adopted_reports(model: PKPDModel, args: Sequence[str]) -> Path:
         _staged(
             out,
             lambda staging, spec=spec: _execute(p, "report", spec, staging),
+            kind="report",
             inner=adopted_id,
         )
     for directory in directories:
@@ -1709,7 +1849,10 @@ def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
     definitions = model.load_fit_definitions()
     p = report_parser(model, definitions)
     options = p.parse_args(arguments)
+    name = _plain_name(p, options.name or REPORT_NAME, "--name")
+    out = options.output_dir / name
     if len(options.parameters) > 1 or not _has_records(options.parameters[0]):
+        _check_out(p, model, out, options.parameters)
         return report_cli(
             definitions,
             args=with_output_dir(arguments, model.report_dir),
@@ -1719,8 +1862,6 @@ def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
         )
     log.enable_rich_logging()
     reference = project_reference(model)
-    name = _plain_name(p, options.name or REPORT_NAME, "--name")
-    out = options.output_dir / name
     (parameters,) = options.parameters
     spec = {
         "project": reference,
@@ -1733,6 +1874,7 @@ def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
     _staged(
         out,
         lambda staging: _execute(p, "report", spec, staging, inputs=inputs),
+        kind="report",
         inner=REPORT_NAME,
     )
     # the report of the kind named its folder before it was moved
@@ -1853,7 +1995,10 @@ def identifiability_command(
     definitions = model.load_fit_definitions()
     p = identifiability_parser(model, definitions)
     options = p.parse_args(arguments)
+    name = _plain_name(p, options.name or "identifiability", "--name")
+    out = options.output_dir / name
     if not _has_records(options.parameters):
+        _check_out(p, model, out, [options.parameters])
         return identifiability_cli(
             definitions,
             args=with_output_dir(arguments, model.identifiability_dir),
@@ -1861,8 +2006,6 @@ def identifiability_command(
         )
     log.enable_rich_logging()
     reference = project_reference(model)
-    name = _plain_name(p, options.name or "identifiability", "--name")
-    out = options.output_dir / name
     _check_out(p, model, out, [options.parameters.parent])
     spec = {
         "project": reference,
@@ -1884,7 +2027,7 @@ def identifiability_command(
         "group_by": _group_by(options),
     }
 
-    def run(staging: Path) -> Path:
+    def run(staging: Path) -> None:
         analysis = staging / ANALYSIS_DIR
         _execute(
             p,
@@ -1896,12 +2039,11 @@ def identifiability_command(
         )
         report_run = staging / REPORT_RUN_DIR
         _execute(p, "report", report_spec, report_run, inputs={"fit": analysis})
-        return analysis
+        # The report read the analysis in staging. Its published spec names
+        # the final location of that input.
+        _relocated_input(report_run / SPEC_FILE, analysis, out / ANALYSIS_DIR)
 
-    staged = _staged(out, run, inner=f"{REPORT_RUN_DIR}/{REPORT_NAME}")
-    # the report read the analysis in the staging directory: its spec names
-    # the analysis where it is now
-    _relocated_input(out / REPORT_RUN_DIR / SPEC_FILE, staged, out / ANALYSIS_DIR)
+    _staged(out, run, kind="identifiability", inner=f"{REPORT_RUN_DIR}/{REPORT_NAME}")
     # the report of the kind named its folder before it was moved
     display.link("results", out / "index.html")
     return out
@@ -2043,8 +2185,17 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
     ):
         p.error("--draws and --seed are options of --uncertainty")
     out = options.output_dir
-    _check_out(p, model, out)
-    _check_credibility_out(out)
+    record = options.from_json
+    direct_record = out / CREDIBILITY_RECORD
+    in_place = (
+        record is not None
+        and os.path.normcase(os.path.abspath(record))
+        == os.path.normcase(os.path.abspath(direct_record))
+        # Resolve only the expected directory so a link at the record itself
+        # cannot make a separate input eligible for in-place regeneration.
+        and record.resolve() == out.resolve() / CREDIBILITY_RECORD
+    )
+    _check_out(p, model, out, [] if record is None or in_place else [record])
     spec: dict[str, Any] = {
         "project": project_reference(model),
         "verification": not options.no_verification,
@@ -2057,19 +2208,9 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
         "studies": options.studies,
         "source_commit": options.source_commit,
     }
-    inputs = None if options.from_json is None else {"record": options.from_json}
+    inputs = None if record is None else {"record": record}
 
-    try:
-        _staged(
-            out,
-            lambda staging: _execute(p, "credibility", spec, staging, inputs=inputs),
-            inner=CREDIBILITY_DIR,
-        )
-    except (LookupError, ValueError, TypeError, OSError) as err:
-        # the errors of the declaration, the evidence, the records and the
-        # lock, e.g. `DeclarationError`, `SelectionError`, `KindMismatchError`
-        _failed(str(err))
-    if options.lock:
+    def publish_lock() -> None:
         from sbmlsim.credibility import lock as locks
 
         # the lock of the package, which the next assessment compares with
@@ -2082,26 +2223,21 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
                 f"'{out}'."
             )
         display.key_values({"lock": lock})
+
+    try:
+        _staged(
+            out,
+            lambda staging: _execute(p, "credibility", spec, staging, inputs=inputs),
+            kind="credibility",
+            inner=CREDIBILITY_DIR,
+            after_publish=publish_lock if options.lock else None,
+        )
+    except (LookupError, ValueError, TypeError, OSError) as err:
+        # the errors of the declaration, the evidence, the records and the
+        # lock, e.g. `DeclarationError`, `SelectionError`, `KindMismatchError`
+        _failed(str(err))
     display.key_values({"report": out / "index.html"})
     return out
-
-
-def _check_credibility_out(out: Path) -> None:
-    """Refuse an output of an assessment which holds other files than an assessment.
-
-    The outputs replace an earlier assessment, a directory with
-    `credibility.json`, as `sbmlsim.credibility.report.write_outputs` does.
-
-    Raises:
-        SystemExit: exit 1 for a file or a directory with other files.
-    """
-    if out.exists() and not out.is_dir():
-        _failed(f"The output directory '{out}' is a file.")
-    if out.is_dir() and any(out.iterdir()) and not (out / CREDIBILITY_RECORD).is_file():
-        _failed(
-            f"The output directory '{out}' is not empty and holds no "
-            f"{CREDIBILITY_RECORD}; it is not replaced."
-        )
 
 
 DOTTED_PACKAGE = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)*$")

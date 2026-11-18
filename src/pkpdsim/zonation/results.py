@@ -10,12 +10,11 @@ title names the band with. `Band` is a drawing input of plain arrays and lives
 with the figures, next to `ZoneColumn`; it is re-exported here, so a caller
 imports it from either module.
 
-A time is matched and not interpolated: of the points of the result the one
-nearest the time is taken, and of several points at the same distance the
-last, because a change of the simulation (a medium change, a second dose)
-gives two points at its time and the state after the change is the one to
-draw. Every time is read and returned in `time_unit`, minutes by default, the
-convention of the engine.
+To read the zones at a time, take the nearest point of the result. Take the
+last of several points at the same distance, so a change of the simulation
+(a medium change, a second dose) uses the state after the change.
+`series_band` aligns full time courses on a common grid. Every time is read
+and returned in `time_unit`, minutes by default, the convention of the engine.
 
 A band reads every selection once over all its draws (`_rows`, the draws of
 the result as the first axis) and converts the time of the result once per
@@ -36,7 +35,15 @@ from collections.abc import Callable, Sequence
 import numpy as np
 from sbmlsim import Q
 from sbmlsim.experiment.draws import UncertaintyRun
-from sbmlsim.result.scan import POINT, TIME, ScanResult, point_timecourse
+from sbmlsim.result.scan import (
+    CHANGES,
+    POINT,
+    TIME,
+    ScanResult,
+    point_band,
+    point_timecourse,
+)
+from sbmlsim.result.timecourse import plot_times
 
 from pkpdsim.zonation.figures import (
     DEFAULT_TIME_UNIT,
@@ -257,6 +264,30 @@ def zone_band(
     )
 
 
+def _interpolate_draw(
+    grid: np.ndarray, time: np.ndarray, values: np.ndarray
+) -> np.ndarray:
+    """Interpolate between samples, keeping both sides of a change distinct."""
+    finite = np.isfinite(time)
+    time, values = time[finite], values[finite]
+    out = np.full(grid.shape, np.nan)
+    if not time.size:
+        return out
+    within = (grid >= time[0]) & (grid <= time[-1])
+    target = grid[within]
+    # At a repeated time, take the state after the change. Before it, use the
+    # state before the change as the right endpoint of the interpolation.
+    left = np.searchsorted(time, target, side="right") - 1
+    aligned = values[left]
+    between = target > time[left]
+    lower = left[between]
+    upper = lower + 1
+    weight = (target[between] - time[lower]) / (time[upper] - time[lower])
+    aligned[between] = (1 - weight) * values[lower] + weight * values[upper]
+    out[within] = aligned
+    return out
+
+
 def series_band(
     res: ScanResult,
     selection: str,
@@ -268,7 +299,8 @@ def series_band(
     """Get the time and the values of one selection, over the draws of a run.
 
     Args:
-        res: the result of the simulation, every draw on the same times.
+        res: the result of the simulation, with shared times or with each draw
+            on its own time points.
         selection: the selection.
         unit: the unit of the values.
         run: the run of the draws; `None`, or a result which carries no draws
@@ -277,9 +309,10 @@ def series_band(
             (min).
 
     Returns:
-        The time in `time_unit` and the band of the values in `unit`; every
-        draw is on the same times, so the times of the first draw are the
-        times of the band.
+        The time in `time_unit` and the band in `unit`. Draws on different
+        grids are interpolated onto a common grid within the span of each draw.
+        At a change the band uses the state after it. Failed draws are skipped.
+        When there are no valid time points, the time and band arrays are empty.
 
     Raises:
         KeyError: naming the variables of the result, if it has no variable of
@@ -288,26 +321,53 @@ def series_band(
     """
     _ = res[selection]  # the `KeyError` of the module for an unknown selection
 
-    def series(result: ScanResult) -> tuple[np.ndarray, np.ndarray]:
-        """The time and the values of one point of the scan, as they are read."""
-        return point_timecourse(result, selection)
-
     def value(values: np.ndarray) -> np.ndarray:
         """The values of a draw in the unit of the call."""
         return Q(values, res.units[selection]).m_as(unit)
 
-    draws = _draws(res, run)
-    if not draws or run is None:
-        points, values = series(res)
+    if run is None or not _draws(res, run):
+        points, values = point_timecourse(res, selection)
         return Q(points, res.units[TIME]).m_as(time_unit), Band(value(values))
-    # a whole time course per draw: the states before the changes are dropped
-    # per draw (`point_timecourse`), so this keeps the loop, and only the time
-    # of the first draw is read and converted, as every draw has the same
-    points, first = series(res.isel(**{run.id: 0}))
-    values = np.stack(
-        [first, *(series(res.isel(**{run.id: k}))[1] for k in range(1, draws))]
+    times = _rows(res, TIME, run.id)
+    finite = np.isfinite(times)
+    if not finite.any():
+        _ = _rows(res, selection, run.id)  # validate the time course
+        empty = np.empty(0)
+        return Q(empty, res.units[TIME]).m_as(time_unit), Band(
+            value(empty), value(empty), value(empty)
+        )
+
+    if res.ragged:
+        successful = finite.any(axis=1)
+        if not successful.all():
+            res = res.isel(**{run.id: np.flatnonzero(successful)})
+            times = times[successful]
+
+    changes = np.asarray(res.ds.attrs.get(CHANGES, ()), dtype=float)
+    if res.ragged and changes.size:
+        # point_band drops the pre-change state before interpolating. Retain
+        # it here so a discontinuity does not affect earlier points.
+        first = times[0]
+        shared = np.all((times == first) | (np.isnan(times) & np.isnan(first)))
+        if not shared:
+            values = _rows(res, selection, run.id)
+            points = plot_times(times, keep=changes.tolist())
+            aligned = np.stack(
+                [
+                    _interpolate_draw(points, t, v)
+                    for t, v in zip(times, values, strict=True)
+                ]
+            )
+            return Q(points, res.units[TIME]).m_as(time_unit), _band(
+                value(aligned), run
+            )
+
+    points, lower, median, upper = point_band(
+        res, selection, across=run.id, quantiles=run.quantiles
     )
-    return Q(points, res.units[TIME]).m_as(time_unit), _band(value(values), run)
+    return Q(points, res.units[TIME]).m_as(time_unit), Band(
+        value(median), value(lower), value(upper)
+    )
 
 
 def band_text(run: UncertaintyRun | None) -> str:

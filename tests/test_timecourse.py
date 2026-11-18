@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import libsbml
 import numpy as np
 import pytest
 import roadrunner
@@ -88,3 +89,59 @@ def test_a_simulation_starts_from_the_initial_state(r: roadrunner.RoadRunner) ->
     assert second["[S]"].iloc[0] == 0.0
     assert second["k_in"].iloc[0] == 1.0
     np.testing.assert_allclose(first.to_numpy(), second.to_numpy())
+
+
+def _clock(*, delayed: bool = False, initial: bool = False) -> roadrunner.RoadRunner:
+    document = libsbml.SBMLDocument(3, 2)
+    model = document.createModel()
+    model.setId("clock")
+    for sid in ("x", "flag"):
+        parameter = model.createParameter()
+        parameter.setId(sid)
+        parameter.setValue(0)
+        parameter.setConstant(False)
+    rule = model.createRateRule()
+    rule.setVariable("x")
+    rule.setMath(libsbml.parseL3Formula("time"))
+    event = model.createEvent()
+    event.setUseValuesFromTriggerTime(True)
+    trigger = event.createTrigger()
+    trigger.setInitialValue(False)
+    trigger.setPersistent(True)
+    condition = "time >= 0" if initial else "time >= 0.5" if delayed else "time >= 1.5"
+    trigger.setMath(libsbml.parseL3Formula(condition))
+    if delayed:
+        event.createDelay().setMath(libsbml.parseL3Formula("1"))
+    assignment = event.createEventAssignment()
+    assignment.setVariable("flag")
+    assignment.setMath(libsbml.parseL3Formula("1"))
+    runner = roadrunner.RoadRunner(libsbml.writeSBMLToString(document))
+    runner.timeCourseSelections = ["time", "x", "flag"]
+    runner.integrator.absolute_tolerance = 1e-10
+    runner.integrator.relative_tolerance = 1e-10
+    return runner
+
+
+@pytest.mark.parametrize("delayed", [False, True], ids=["event", "delayed-event"])
+def test_model_time_and_events_continue_over_parts(delayed: bool) -> None:
+    runner = _clock(delayed=delayed)
+    simulation = Simulation(
+        "clock", "clock", [SimPart(1.0, {}, 10), SimPart(1.0, {}, 10)]
+    )
+    result = run_simulation(runner, simulation)
+    reference = _clock(delayed=delayed).simulate(0, 2, steps=20)
+    assert runner.getValue("time") == pytest.approx(2.0)
+    np.testing.assert_allclose(result.iloc[-1].to_numpy(), reference[-1], atol=1e-7)
+    assert result["x"].iloc[-1] == pytest.approx(2.0, abs=1e-7)
+    assert result["flag"].iloc[-1] == 1.0
+
+
+def test_repeated_runs_reset_initial_event_delays() -> None:
+    runner = _clock(delayed=True, initial=True)
+    simulation = Simulation(
+        "clock", "clock", [SimPart(1.0, {}, 10), SimPart(1.0, {}, 10)]
+    )
+    first = run_simulation(runner, simulation)
+    second = run_simulation(runner, simulation)
+    assert first["flag"].iloc[10] == 1.0
+    np.testing.assert_allclose(first.to_numpy(), second.to_numpy(), atol=1e-7)
