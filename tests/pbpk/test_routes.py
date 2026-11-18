@@ -216,8 +216,16 @@ def test_an_intramuscular_dose_is_absorbed_into_the_venous_blood(
     assert r[f"[{ids.pool_species(Pool.VENOUS, S)}]"] > 0
     r.simulate(60, 48 * 60, 50)
     depot, loss = r[ids.depot("im", S)], r[ids.depot_loss("im", S)]
-    assert depot < 1e-12 * mmole
-    assert dose_amount(r, S) < 1e-12 * mmole
+    # A state of the solution is zero to within the absolute tolerance of the
+    # integrator, 1e-12 of `load`, which is larger than a part in 1e12 of the
+    # dose (3e-14), so a drained state is asserted at the scale the integrator
+    # promises and not at a fraction of the dose: this simulation leaves 4e-13
+    # in the depot at atol 1e-12 and -3e-17 at 1e-14, i.e. noise around zero,
+    # and which side of 3e-14 it lands on depends on the steps of the build of
+    # libroadrunner.
+    empty = 10 * r.integrator.absolute_tolerance
+    assert abs(depot) < empty
+    assert abs(dose_amount(r, S)) < empty
     total = total_amount(r, S)
     assert total + dose_amount(r, S) == pytest.approx(mmole, rel=1e-9)
     absorbed = total - depot - loss
@@ -455,7 +463,10 @@ def _rest_of_the_dose(result: BuildResult, deposited: float) -> None:
     r[ids.depot_dose("inhaled", S)] = 10.0
     r.simulate(0, 10, 10)
     assert r[ids.depot("inhaled", S)] == pytest.approx(deposited * mmole, rel=1e-6)
-    assert r[ids.depot_loss("inhaled", S)] == pytest.approx(0.0, abs=1e-12 * mmole)
+    # zero at the scale of the integrator, as in the test of the im route
+    assert r[ids.depot_loss("inhaled", S)] == pytest.approx(
+        0.0, abs=10 * r.integrator.absolute_tolerance
+    )
     assert total_amount(r, S) + dose_amount(r, S) == pytest.approx(mmole, rel=1e-9)
 
 
