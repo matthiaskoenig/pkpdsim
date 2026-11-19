@@ -3,11 +3,13 @@
 import hashlib
 import itertools
 import json
+import re
 import runpy
 import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree
 
 import numpy as np
 import pytest
@@ -279,11 +281,39 @@ def test_anatomy_reuses_the_physiology_figure_bodies(tmp_path: Path) -> None:
     output = tmp_path / "anatomy.json"
     SCRIPT["export_anatomy"](output)
     source = OUTPUT.parent / "cardiovascular-anatomy.json"
-    assert output.read_bytes() == source.read_bytes()
-    bodies = json.loads(output.read_text(encoding="utf-8"))["bodies"]
+    regenerated = json.loads(output.read_text(encoding="utf-8"))
+    exported = json.loads(source.read_text(encoding="utf-8"))
+    assert regenerated.keys() == exported.keys()
+    for key in regenerated.keys() - {"bodies"}:
+        assert regenerated[key] == exported[key]
+    bodies = regenerated["bodies"]
+    assert bodies.keys() == exported["bodies"].keys()
     assert set(bodies) == {"male", "female"}
     assert bodies["male"]["height"] == pytest.approx(176)
     assert bodies["female"]["height"] == pytest.approx(163)
-    for body in bodies.values():
+    for sex, body in bodies.items():
+        saved = exported["bodies"][sex]
+        assert body["height"] == pytest.approx(saved["height"], abs=1e-8)
+        assert body["anchors"].keys() == saved["anchors"].keys()
+        for key, anchor in body["anchors"].items():
+            np.testing.assert_allclose(anchor, saved["anchors"][key], atol=1e-4, rtol=0)
         assert 'data-k="li"' in body["svg"]
         assert set(body["anchors"]) == {organ.value for organ in SCRIPT["Organ"]}
+        actual_paths = list(ElementTree.fromstring(f"<svg>{body['svg']}</svg>"))
+        saved_paths = list(ElementTree.fromstring(f"<svg>{saved['svg']}</svg>"))
+        assert len(actual_paths) == len(saved_paths)
+        for actual, expected in zip(actual_paths, saved_paths, strict=True):
+            assert actual.tag == expected.tag
+            actual_d = actual.attrib.pop("d")
+            expected_d = expected.attrib.pop("d")
+            assert actual.attrib == expected.attrib
+            numbers = r"-?\d+(?:\.\d+)?"
+            assert re.sub(numbers, "#", actual_d) == re.sub(numbers, "#", expected_d)
+            # visual.body.path quantizes centimetres to one decimal place (1 mm).
+            # Platform rounding can place a half-way coordinate in either bin.
+            np.testing.assert_allclose(
+                [float(v) for v in re.findall(numbers, actual_d)],
+                [float(v) for v in re.findall(numbers, expected_d)],
+                atol=0.100001,
+                rtol=0,
+            )
