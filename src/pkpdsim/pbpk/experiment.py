@@ -396,6 +396,13 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
     parameters of a run over them).
 
     Attributes:
+        lobe_map: the interventions on the lobes of the liver which the
+            experiment simulates, by the name of the procedure to the
+            parameters it changes and their values; empty by default. The
+            named procedures of a species are
+            `pkpdsim.pbpk.interventions.scenario_changes`, and an experiment
+            applies the changes of one before a simulation or between the
+            phases of one, which is what a surgery at a time point is.
         renal_function_range: a narrower range of the renal functions the
             model supports, `None` (the default) for the range of the validity
             of the kidney outflow, from 0 (anuria, the substances leave by the
@@ -415,6 +422,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
     cardiac_map: ClassVar[Mapping[str, float]] = impairment.HEART_FAILURE
     cardiac_colors: ClassVar[Mapping[str, str]] = impairment.HEART_FAILURE_COLORS
     renal_function_range: ClassVar[tuple[float, float] | None] = None
+    lobe_map: ClassVar[Mapping[str, Mapping[str, float]]] = {}
 
     @override
     def initialize(self) -> None:

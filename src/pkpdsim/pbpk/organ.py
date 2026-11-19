@@ -685,7 +685,10 @@ class StandardBuilder(OrganBuilder):
                 kind="outflow_lobe",
             )
             terms.append(f"{self._flow(ids.lobe_flow(out_flow, lobe))} * {out}")
-        return f"({' + '.join(terms)}) / {self._flow(out_flow)}"
+        # a liver whose every branch is closed has no flow at all: the guard
+        # makes the mix 0 instead of undefined, and nothing leaves the organ
+        # at a flow of 0 either way
+        return f"({' + '.join(terms)}) / max({self._flow(out_flow)}, 1e-12 l_per_min)"
 
     def _leaving(
         self, s: Substance, part: Part, zone: str | None, k_organ: str | None

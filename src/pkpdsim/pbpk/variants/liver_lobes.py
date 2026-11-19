@@ -56,6 +56,9 @@ if TYPE_CHECKING:
 
 __all__ = ["MAX_SITES", "LobedBuilder", "LobedLiver"]
 
+_TINY = "1e-12"
+"""The guard of a denominator which an occlusion of every branch makes 0."""
+
 MAX_SITES = 40
 """How many sites (lobes times zones) a liver may have.
 
@@ -369,12 +372,15 @@ def _flows(lobes: Sequence[Lobe]) -> list[Sbase]:
         total = " + ".join(
             f"{conductance(lobe.token)} * {fraction(lobe.token)}" for lobe in lobes
         )
+        # the open shares of a liver whose every branch is closed sum to 0:
+        # the guard makes every lobe flow 0 instead of undefined
+        patent = f"max({total}, {_TINY} dimensionless)"
         for lobe in lobes:
             objects.append(
                 InitialAssignment(
                     ids.lobe_flow(flow, lobe.token),
                     f"{flow} * {conductance(lobe.token)} * "
-                    f"{fraction(lobe.token)} / ({total})",
+                    f"{fraction(lobe.token)} / {patent}",
                     U.l_per_min,
                 )
             )
@@ -425,15 +431,18 @@ def lobe_objects(lobes: Sequence[Lobe]) -> list[Sbase]:
             1.0,
             U.litre,
             "volume of the lobes of the liver [l]",
-            "The sum of the volumes of the lobes: the liver which is there, "
-            "the reference volume of the intact organ and less after a "
-            "resection or an atrophy.",
+            "The sum of the volumes of the lobes which are in place: the "
+            "liver which is there, the reference volume of the intact organ "
+            "and less after a resection or an atrophy.",
             "lobe_volume",
             constant=False,
         ),
         AssignmentRule(
             ids.VLI_LOBES,
-            " + ".join(ids.lobe_volume(lobe.token) for lobe in lobes),
+            " + ".join(
+                f"{ids.lobe_present(lobe.token)} * {ids.lobe_volume(lobe.token)}"
+                for lobe in lobes
+            ),
             U.litre,
         ),
     ]
@@ -623,6 +632,25 @@ class LobedBuilder(ZonatedBuilder):
             f"volume of lobe {lobe} [l]",
             "The volume of the lobe of the body.",
         )
+
+    def _site_share(self, key: str | None, site: str | None) -> str | None:
+        """The share of a site of the capacity of the liver.
+
+        The share of the zonated liver times the presence of its lobe, so a
+        lobe which was resected has no capacity: it metabolizes and
+        transports nothing.
+        """
+        share = super()._site_share(key, site)
+        lobe = self._lobe_of(site)
+        if lobe is None:
+            return share
+        present = self._input(
+            ids.lobe_present(lobe),
+            U.dimensionless,
+            f"presence of lobe {lobe}",
+            "1 is the lobe in place, 0 the resected one, which has no capacity.",
+        )
+        return present if share is None else f"{share} * {present}"
 
     def _zone_of(self, site: str | None) -> str:
         """The zone of a site, the lobe token stripped.

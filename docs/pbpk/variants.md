@@ -10,6 +10,7 @@ An organ variant is an alternative component for an organ with the boundary of t
 |---|---|---|---|
 | every organ | `standard` | `StandardOrgan()` | the [standard organ](organ.md), the default |
 | liver | `zonated` | `ZonatedLiver(n_zones=10, profiles={}, geometry=Geometry.WELL_STIRRED, axial_diffusion=True, means=False)` | the sinusoid from periportal to pericentral as zones in series, the chemistry placed by volume or by a zonal profile of its protein; `Geometry.SINUSOID` adds the axial diffusion and the fenestrated endothelium of the zonation engine, `axial_diffusion=False` leaves the axial diffusion out, `means=True` adds the periportal and pericentral means |
+| liver | `lobes` | `LobedLiver(lobes=None, zonation=None, remodelling=None, habr=None)` | the [lobes of the liver](lobes.md) perfused in parallel, each with its share of the volume, its own hepatic artery and portal vein inflow and its own drainage; `zonation` gives every lobe the zones of a sinusoid, `remodelling` makes the lobe volumes states which follow an intervention, `habr` the hepatic arterial buffer response of the pressure driven circulation |
 | kidney | `nephron` | `NephronKidney()` | filtration into the tubule, the tubular segments, secretion into and reabsorption from the tubular fluid |
 | small intestine | `segmented` | `SegmentedIntestine()` | the default intestine: the lumen segments of Thelen 2011, the mucosa, dissolution, absorption, bile; replaces small and large intestine with `GU` |
 | small intestine | `single_lumen` | `SingleLumen()` | one lumen with first order absorption, the absorption of most hand-written models; replaces small and large intestine with `GU` |
@@ -41,6 +42,7 @@ Every variant ships an equivalence test: in its limiting case it reproduces the 
 
 | variant | limiting case | test |
 |---|---|---|
+| lobed liver | one lobe is the standard liver, and one lobe of zones the zonated liver, line by line; lobes whose supply is proportional to their mass are the lumped liver, since every lobe then extracts `CL/(Q + CL)` of its inflow whatever its share and the mix of the lobes is the outflow of the whole organ | `tests/pbpk/test_lobes_build.py`, `tests/pbpk/test_lobes_zones.py` |
 | zonated liver | one zone is the standard liver, for every kinetics; uniform zones agree with the standard liver at a low extraction, and at a moderate extraction they extract as `n` well-stirred tanks in series; the sinusoid geometry without axial diffusion and with an open fenestral barrier is the well-stirred liver | `tests/pbpk/test_liver_zonated.py` |
 | nephron kidney | without secretion and reabsorption the urinary excretion is `fu*GFR*C_p` of the standard kidney | `tests/pbpk/test_kidney_nephron.py` |
 | intestines | the boundary of the standard organs of small and large intestine on the blood side; mass balance of an oral dose; the fraction absorbed of the compartmental absorption and transit model | `tests/pbpk/test_intestine.py` |

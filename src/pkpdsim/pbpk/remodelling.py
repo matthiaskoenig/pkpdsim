@@ -111,18 +111,20 @@ def _tau_track() -> Value:
 
 
 def lobes_dynamic(definition: PBPKDefinition) -> tuple[str, ...]:
-    """The lobe volumes which change during a simulation.
+    """The quantities of the lobes which change during a simulation.
 
-    The quantities of the top model and of the organs which read them (the
-    share of a lobe, the compartments of its sites, its perfusion) must
-    follow them, so they are the seeds of `pkpdsim.pbpk.builder._dynamic`.
+    The patency of the two branches of a lobe and its presence, which an
+    intervention changes, and the volumes of the lobes where a driver moves
+    them. The quantities of the top model and of the organs which read them
+    (the lobe flows, the share of a lobe, the compartments of its sites, its
+    perfusion) must follow them, so they are the seeds of
+    `pkpdsim.pbpk.builder._dynamic`.
 
     Args:
         definition: the definition.
 
     Returns:
-        The ids of the lobe volumes, empty for a liver without lobes or
-        without a driver of the remodelling.
+        The ids, empty for a liver without lobes.
 
     Raises:
         ValueError: for a species without a lobe set.
@@ -131,12 +133,26 @@ def lobes_dynamic(definition: PBPKDefinition) -> tuple[str, ...]:
     from pkpdsim.pbpk.variants.liver_lobes import LobedLiver
 
     liver = organ_component(definition, Organ.LIVER)
-    if not isinstance(liver, LobedLiver) or liver.remodelling is None:
+    if not isinstance(liver, LobedLiver):
         return ()
     lobes = liver.lobe_set(definition.species)
     if len(lobes) < 2:
         return ()
-    return tuple(ids.lobe_volume(lobe.token) for lobe in lobes)
+    # an intervention changes these during a simulation, so the lobe flows
+    # must be assignment rules and not initial assignments: a ligation or a
+    # resection at a time point then takes effect at that point
+    names = [
+        name(lobe.token)
+        for lobe in lobes
+        for name in (
+            ids.arterial_conductance,
+            ids.portal_conductance,
+            ids.lobe_present,
+        )
+    ]
+    if liver.remodelling is not None:
+        names += [ids.lobe_volume(lobe.token) for lobe in lobes]
+    return tuple(names)
 
 
 def _parameter(pid: str, v: float, unit: object, name: str, text: str) -> Parameter:
