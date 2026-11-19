@@ -23,18 +23,18 @@ repos:
     args: [ --maxkb=2000 ]
     # Reproducible IDA reference cases for the static documentation app.
     # Tests verify their source models, integration and conservation.
-    exclude: '^docs/pbpk/examples/cardiovascular-data\.json$'
+    exclude: '^docs/pbpk/examples/(female/)?cardiovascular-data\.json$'
   - id: check-merge-conflict
     description: Check for files that contain merge conflict strings
   - id: check-symlinks
     description: Check for symlinks which do not point to anything
   - id: trailing-whitespace
     description: Trim trailing whitespaces
-    exclude: '^(src/pkpdsim/database/studies|tests/data/pkdb_data|docs/pbpk/examples/solver)/'
+    exclude: '^(src/pkpdsim/database/studies|tests/data/pkdb_data|docs/pbpk/examples/(female/)?solver)/'
   - id: end-of-file-fixer
     description: Fix empty lines at ends of files
     # The browser runtime, compiled model and notices are exported byte for byte.
-    exclude: '^(tests/data/pkdb_data|docs/pbpk/examples/solver)/'
+    exclude: '^(tests/data/pkdb_data|docs/pbpk/examples/(female/)?solver)/'
   - id: detect-private-key
     description: Detects the presence of private keys
   - id: check-case-conflict
