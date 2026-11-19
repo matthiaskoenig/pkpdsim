@@ -1409,7 +1409,7 @@ def build(definition: PBPKDefinition, output_dir: Path) -> BuildResult:
             flat = staged_flat.read_bytes()
         else:
             key = cache_key(comp, ValidationOptions.fast(), ValidationOptions())
-            entry = cache_path(output_dir, definition.sid, key)
+            entry = cache_path(key)
             cached = read_cache(entry, key, comp) if entry is not None else None
             if cached is None:
                 flat_model(staged_comp, staged_flat)

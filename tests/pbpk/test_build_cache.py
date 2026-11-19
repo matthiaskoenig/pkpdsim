@@ -19,9 +19,20 @@ from .conftest import definition
 
 
 @pytest.fixture(autouse=True)
-def local_cache(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Use the production default, regardless of the test session cache."""
+def local_cache(
+    monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> Path:
+    """Use the production default, in a cache folder of this test alone.
+
+    The default is the cache folder of the user (`cache.cache_root`), so the
+    tests point `XDG_CACHE_HOME` at a directory of their own instead of the
+    one of whoever runs them, and not into the output of a build, which they
+    check is left without a cache.
+    """
     monkeypatch.delenv("PKPDSIM_BUILD_CACHE", raising=False)
+    home = tmp_path_factory.mktemp("cache_home")
+    monkeypatch.setenv("XDG_CACHE_HOME", str(home))
+    return home / "pkpdsim" / "build"
 
 
 def _outputs(result: BuildResult) -> tuple[Path, Path]:
@@ -131,11 +142,11 @@ def test_build_revalidates_after_a_cache_key_change(
 
 
 def test_corrupt_cache_member_is_rebuilt(
-    tmp_path: Path, validations: list[bool]
+    tmp_path: Path, validations: list[bool], local_cache: Path
 ) -> None:
     d = definition()
     result = builder.build(d, tmp_path)
-    entry = tmp_path / ".pkpdsim-cache" / f"{d.sid}.zip"
+    (entry,) = local_cache.glob("*.zip")
     with ZipFile(entry) as archive:
         manifest = archive.read("manifest.json")
         comp = archive.read("comp.xml")
@@ -196,3 +207,19 @@ def test_external_sources_are_resolved_relative_to_the_output_directory(
     builder.build(d, tmp_path)
     assert validations == [False, True, False, True]
     assert not list(tmp_path.rglob("*.zip"))
+
+
+def test_a_build_writes_no_cache_into_its_output(
+    tmp_path: Path, local_cache: Path
+) -> None:
+    """The cache of a build is the one of the user and no output of the model.
+
+    A model package tracks the directory of its models and compares it against
+    a rebuild (`Project.changed_outputs` of sbmlsim), so a cache beside the
+    models made every such comparison fail: its archive is not reproducible.
+    """
+    builder.build(definition(), tmp_path)
+
+    assert not (tmp_path / ".pkpdsim-cache").exists()
+    assert not list(tmp_path.rglob("*.zip"))
+    assert len(list(local_cache.glob("*.zip"))) == 1
