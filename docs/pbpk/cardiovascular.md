@@ -17,9 +17,11 @@ Both variants emit SBML algebraic rules and use the **`core` engine of sbmlsim**
 
 Change hepatic, systemic, portal and renal resistance with the same sliders in both views. **Pressure network** solves the steady junction balances. **Beating heart** runs the compiled SBML model with sbmlsim-core and SUNDIALS IDA in a browser worker; it also provides heart-rate and contractility controls. Resistance settings carry over when switching views.
 
-<iframe class="pkpd-figure" src="examples/cardiovascular.html" title="Interactive cardiovascular model: resistance sliders and animated flow schematic" style="height:1600px" loading="lazy"></iframe>
+<iframe class="pkpd-figure cardiovascular-dashboard" src="examples/cardiovascular.html" title="Interactive cardiovascular model: resistance sliders and animated flow schematic" style="height:780px" allowfullscreen loading="lazy"></iframe>
 
-Edge widths show instantaneous blood flow during heartbeat playback. Pause or scrub the simulation to compare pressures, valve opening and regional perfusion at the same time. The [interactive examples walkthrough](cardiovascular_examples.md) explains the controls, the shared flow-width scale and how to reproduce the simulations. [Open the explorer in its own window](examples/cardiovascular.html){ target="_blank" rel="noopener" } for larger schematics and plots.
+The compact dashboard uses the male and female whole-body anatomy of the physiology figures. **Physiology** switches both the body and the underlying sex-specific SBML circulation; resistance and heart controls carry over. **Full screen** uses the available display.
+
+Edge widths show instantaneous blood flow during heartbeat playback. Adjust **Edge-width scale** to magnify the shared flow-to-width mapping without changing the model. The orange dots, halos, value labels and cursor lines highlight the displayed instant in every heart plot. Click or drag a time course, or use the time slider, to inspect the final beats. Pause or scrub the simulation to compare pressures, valve opening and regional perfusion at the same time. The [interactive examples walkthrough](cardiovascular_examples.md) explains the controls, the shared flow-width scale and how to reproduce the simulations. [Open the explorer in its own window](examples/cardiovascular.html){ target="_blank" rel="noopener" } for a dashboard that fills its window.
 
 ## The network and its reference state
 

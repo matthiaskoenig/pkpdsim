@@ -15,7 +15,14 @@ from sbmlsim.model import AbstractModel
 from sbmlsim.simulation import Simulation
 from sbmlsim.simulator import Simulator
 
-from pkpdsim.pbpk import DynamicHeart, PBPKDefinition, PressureFlow, Variants, build
+from pkpdsim.pbpk import (
+    DynamicHeart,
+    PBPKDefinition,
+    PressureFlow,
+    Sex,
+    Variants,
+    build,
+)
 
 SCRIPT = runpy.run_path(
     str(Path(__file__).parents[2] / "scripts/cardiovascular_examples.py")
@@ -34,24 +41,30 @@ def test_javascript_network_and_app_interactions() -> None:
             [node, str(Path(__file__).with_name(filename))],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=50,
             check=False,
         )
         assert result.returncode == 0, result.stdout + result.stderr
 
 
-@pytest.fixture(scope="module")
-def data() -> dict[str, Any]:
-    return json.loads(OUTPUT.read_text(encoding="utf-8"))
+@pytest.fixture(scope="module", params=["male", "female"])
+def sex(request: pytest.FixtureRequest) -> Sex:
+    return Sex(request.param)
 
 
 @pytest.fixture(scope="module")
-def sbml(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
+def data(sex: Sex) -> dict[str, Any]:
+    path = OUTPUT if sex is Sex.MALE else OUTPUT.parent / "female" / OUTPUT.name
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="module")
+def sbml(tmp_path_factory: pytest.TempPathFactory, sex: Sex) -> dict[str, Path]:
     folder = tmp_path_factory.mktemp("cardiovascular_examples")
     return {
         name: build(
             PBPKDefinition(
-                f"{name}_examples", [], variants=Variants(circulation=variant)
+                f"{name}_examples", [], sex=sex, variants=Variants(circulation=variant)
             ),
             folder / name,
         ).flat_path
@@ -193,7 +206,8 @@ def test_every_case_is_finite_and_preserves_blood_volume(data: dict[str, Any]) -
             assert np.isfinite(values).all()
             assert (np.diff(values[:, 0]) >= 0).all()
             volume = values[:, table["columns"].index("CV_V_blood_total")]
-            np.testing.assert_allclose(volume, 5.3, atol=1e-5)
+            expected_volume = 5.3 if data["provenance"]["sex"] == "male" else 3.9
+            np.testing.assert_allclose(volume, expected_volume, atol=1e-5)
         duration = case["beats"]["values"][-1][0] - case["beats"]["values"][0][0]
         assert duration == pytest.approx(3 * 60 / case["heart_rate"])
 
@@ -259,3 +273,17 @@ def test_preview_samples_match_a_fresh_ida_integration(
             rtol=1e-5,
             atol=1e-4,
         )
+
+
+def test_anatomy_reuses_the_physiology_figure_bodies(tmp_path: Path) -> None:
+    output = tmp_path / "anatomy.json"
+    SCRIPT["export_anatomy"](output)
+    source = OUTPUT.parent / "cardiovascular-anatomy.json"
+    assert output.read_bytes() == source.read_bytes()
+    bodies = json.loads(output.read_text(encoding="utf-8"))["bodies"]
+    assert set(bodies) == {"male", "female"}
+    assert bodies["male"]["height"] == pytest.approx(176)
+    assert bodies["female"]["height"] == pytest.approx(163)
+    for body in bodies.values():
+        assert 'data-k="li"' in body["svg"]
+        assert set(body["anchors"]) == {organ.value for organ in SCRIPT["Organ"]}

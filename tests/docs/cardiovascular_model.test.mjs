@@ -79,9 +79,10 @@ test("replay samples clamp at endpoints and respect the post-intervention event 
 });
 
 test("schematic widths use one monotonic magnitude scale and separate portal storage flows", () => {
-  const widths = [0, 1, 5, 20, 100].map(flowWidth);
+  const widths = [0, 1, 5, 20, 100].map(flow => flowWidth(flow));
   assert.ok(widths.every(Number.isFinite));
   assert.ok(widths.every((width, index) => !index || width > widths[index - 1]));
+  close(flowWidth(5, 2) - flowWidth(0), 2 * (flowWidth(5) - flowWidth(0)));
   close(flowWidth(-5), flowWidth(5));
   close(flowWidth(NaN), flowWidth(0));
   close(flowWidth(4) - flowWidth(0), 2 * (flowWidth(1) - flowWidth(0)));

@@ -135,14 +135,17 @@ export function heartCase(result, controls, config) {
   };
 }
 
-async function defaultLoadAsset(name) {
-  const response = await fetch(new URL(`solver/${name}`, import.meta.url));
+async function defaultLoadAsset(name, sex) {
+  const modelAsset = ["model.wasm", "model.json", "config.json"].includes(name);
+  const prefix = sex === "female" && modelAsset ? "female/" : "";
+  const response = await fetch(new URL(`${prefix}solver/${name}`, import.meta.url));
   if (!response.ok) throw new Error(`Could not load heart solver ${name}: HTTP ${response.status}.`);
   return new Uint8Array(await response.arrayBuffer());
 }
 
 /** A worker of the installed sbmlsim-core host, with its documented protocol. */
-export async function createHeartSolver({host = globalThis.sbmlsimCore, loadAsset = defaultLoadAsset, createWorker} = {}) {
+export async function createHeartSolver({host = globalThis.sbmlsimCore, sex = "male", loadAsset = name => defaultLoadAsset(name, sex), createWorker} = {}) {
+  if (!["male", "female"].includes(sex)) throw new RangeError("Unknown reference sex.");
   if (!host?.blobWorkers && !createWorker) throw new Error("The sbmlsim-core browser host has not loaded.");
   const [engineBytes, mathlibBytes, modelBytes, descriptionBytes, configBytes] = await Promise.all([
     "engine.wasm", "mathlib.wasm", "model.wasm", "model.json", "config.json",

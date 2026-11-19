@@ -3,7 +3,7 @@ import {createSchematic} from "./cardiovascular-schematic.mjs";
 import {createHeartSolver, normalizeHeartControls} from "./cardiovascular-solver.mjs";
 
 const $ = id => document.getElementById(id);
-const state = {mode: "pressure", window: "response", caseId: "baseline", cache: new Map(),
+const state = {mode: "pressure", window: "beats", sex: "male", datasets: new Map(), caseId: "baseline", cache: new Map(),
   serial: 0, pending: false, flowTime: 0, playing: false, raf: 0, cursors: {}};
 const palette = name => getComputedStyle(document.documentElement).getPropertyValue(`--${name}`).trim();
 const text = (id, value) => { $(id).textContent = value; };
@@ -21,53 +21,69 @@ function element(name, attributes = {}, content) {
   return node;
 }
 
-function plot(id, curves, {xLabel, yLabel, zero = false, intervention = false, markers = [], cursor = false, point = false}) {
+function plot(id, curves, {xLabel, yLabel, zero = false, intervention = false, markers = [], cursor = false, point = false, inspect}) {
   const host = $(id);
-  const width = Math.max(280, host.clientWidth);
-  const height = 270;
-  const margin = {left: 53, right: 16, top: 28, bottom: 46};
+  const width = Math.max(160, host.clientWidth);
+  const height = Math.max(135, host.clientHeight || 240);
+  const margin = {left: width < 260 ? 40 : 49, right: 9, top: 26, bottom: 35};
   const points = curves.flatMap(curve => curve.x.map((x, index) => [x, curve.y[index]]));
-  let xmin = Math.min(...points.map(point => point[0]));
-  let xmax = Math.max(...points.map(point => point[0]));
-  let ymin = Math.min(...points.map(point => point[1]));
-  let ymax = Math.max(...points.map(point => point[1]));
+  let xmin = Math.min(...points.map(point => point[0])), xmax = Math.max(...points.map(point => point[0]));
+  let ymin = Math.min(...points.map(point => point[1])), ymax = Math.max(...points.map(point => point[1]));
   if (zero) ymin = Math.min(0, ymin);
   if (xmax === xmin) { xmin -= 0.5; xmax += 0.5; }
   const padding = Math.max((ymax - ymin) * 0.1, Math.abs(ymax) * 0.015, 0.05);
-  ymin = zero && ymin === 0 ? 0 : ymin - padding;
-  ymax += padding;
+  ymin = zero && ymin === 0 ? 0 : ymin - padding; ymax += padding;
   const sx = x => margin.left + (x - xmin) / (xmax - xmin) * (width - margin.left - margin.right);
   const sy = y => height - margin.bottom - (y - ymin) / (ymax - ymin) * (height - margin.top - margin.bottom);
   const svg = element("svg", {viewBox: `0 0 ${width} ${height}`, "aria-hidden": "true"});
-  svg.append(element("text", {x: margin.left, y: 14, class: "axis-label"}, yLabel));
+  svg.append(element("text", {x: margin.left, y: 12, class: "axis-label"}, yLabel));
   const decimals = ymax - ymin < 3 ? 1 : 0;
-  for (let i = 0; i <= 4; i++) {
-    const y = ymin + (ymax - ymin) * i / 4;
+  const ticks = width < 260 ? 3 : 4;
+  for (let i = 0; i <= ticks; i++) {
+    const y = ymin + (ymax - ymin) * i / ticks;
     svg.append(element("line", {x1: margin.left, x2: width - margin.right, y1: sy(y), y2: sy(y), class: "grid"}));
-    svg.append(element("text", {x: margin.left - 9, y: sy(y) + 4, "text-anchor": "end"}, format(y, decimals)));
-    const x = xmin + (xmax - xmin) * i / 4;
-    svg.append(element("text", {x: sx(x), y: height - margin.bottom + 22, "text-anchor": "middle"}, format(x, xmax - xmin < 5 ? 1 : 0)));
+    svg.append(element("text", {x: margin.left - 6, y: sy(y) + 3, "text-anchor": "end"}, format(y, decimals)));
+    const x = xmin + (xmax - xmin) * i / ticks;
+    svg.append(element("text", {x: sx(x), y: height - margin.bottom + 15, "text-anchor": "middle"}, format(x, xmax - xmin < 5 ? 1 : 0)));
   }
-  svg.append(element("text", {x: margin.left + (width - margin.left - margin.right) / 2, y: height - 5, "text-anchor": "middle", class: "axis-label"}, xLabel));
+  svg.append(element("text", {x: (margin.left + width - margin.right) / 2, y: height - 3, "text-anchor": "middle", class: "axis-label"}, xLabel));
   if (intervention && xmin <= 24 && xmax >= 24) {
     svg.append(element("line", {x1: sx(24), x2: sx(24), y1: margin.top, y2: height - margin.bottom, stroke: palette("muted"), "stroke-dasharray": "3 5", opacity: "0.65"}));
-    svg.append(element("text", {x: sx(24) + 5, y: margin.top + 12}, "Intervention"));
+    svg.append(element("text", {x: sx(24) + 4, y: margin.top + 10}, "24 s"));
   }
   for (const curve of curves) {
     const d = curve.x.map((x, index) => `${index ? "L" : "M"}${sx(x).toFixed(2)},${sy(curve.y[index]).toFixed(2)}`).join(" ");
     svg.append(element("path", {d, stroke: palette(curve.color), class: "curve", ...(curve.dashed ? {"stroke-dasharray": "5 4"} : {})}));
   }
-  for (const marker of markers) {
-    svg.append(element("circle", {cx: sx(marker.x), cy: sy(marker.y), r: 5, fill: palette(marker.color), stroke: palette("paper"), "stroke-width": 2}));
+  for (const marker of markers) svg.append(element("circle", {cx: sx(marker.x), cy: sy(marker.y), r: 5, fill: palette(marker.color), stroke: palette("paper"), "stroke-width": 2}));
+  const band = element("rect", {width: 18, y: margin.top, height: height - margin.top - margin.bottom, class: "inspection-band"});
+  const line = element("line", {y1: margin.top, y2: height - margin.bottom, class: "inspection-line"});
+  const halo = element("circle", {r: 10, class: "inspection-halo"});
+  const dot = element("circle", {r: 5.5, class: "inspection-point", "data-cursor-point": id});
+  const label = element("text", {class: "inspection-label"});
+  if (cursor) svg.append(band, line);
+  if (cursor || point) svg.append(halo, dot, label);
+  if (inspect) {
+    const hit = element("rect", {x: margin.left, y: margin.top, width: width - margin.left - margin.right, height: height - margin.top - margin.bottom, class: "inspection-hit"});
+    const seek = event => {
+      const bounds = svg.getBoundingClientRect();
+      const x = (event.clientX - bounds.left) * width / bounds.width;
+      inspect(xmin + Math.max(0, Math.min(1, (x - margin.left) / (width - margin.left - margin.right))) * (xmax - xmin));
+    };
+    hit.addEventListener("pointerdown", event => { hit.setPointerCapture?.(event.pointerId); seek(event); });
+    hit.addEventListener("pointermove", event => { if (event.buttons === 1) seek(event); });
+    svg.append(hit);
   }
-  const indicator = point
-    ? element("circle", {r: 5, fill: palette("accent"), stroke: palette("paper"), "stroke-width": 2})
-    : element("line", {y1: margin.top, y2: height - margin.bottom, stroke: palette("accent"), "stroke-width": 1.5, "stroke-dasharray": "3 3"});
-  if (cursor || point) svg.append(indicator);
   host.replaceChildren(svg);
   return (x, y) => {
-    if (point) { indicator.setAttribute("cx", sx(x)); indicator.setAttribute("cy", sy(y)); }
-    else { indicator.setAttribute("x1", sx(x)); indicator.setAttribute("x2", sx(x)); }
+    const cx = sx(x), cy = sy(y);
+    line.setAttribute("x1", cx); line.setAttribute("x2", cx); band.setAttribute("x", cx - 9);
+    for (const item of [halo, dot]) { item.setAttribute("cx", cx); item.setAttribute("cy", cy); }
+    const right = cx > (margin.left + width) / 2;
+    label.setAttribute("x", Math.max(margin.left + 4, Math.min(width - margin.right - 4, cx + (right ? -9 : 9))));
+    label.setAttribute("y", Math.max(margin.top + 13, Math.min(height - margin.bottom - 9, cy - 13)));
+    label.setAttribute("text-anchor", right ? "end" : "start");
+    label.textContent = point ? `${format(x, 1)} ml · ${format(y, 1)}` : format(y, 2);
   };
 }
 
@@ -87,7 +103,7 @@ function readControls() {
 }
 
 function heartKey(controls) {
-  return JSON.stringify(normalizeHeartControls(controls));
+  return `${state.sex}:${JSON.stringify(normalizeHeartControls(controls))}`;
 }
 
 function exampleControls(example) {
@@ -116,9 +132,9 @@ function controlsChanged(delay = 160) {
 }
 
 function setSchematic() {
-  if (state.schematicMode !== state.mode) {
-    state.schematic = createSchematic($("circulation-schematic"), state.mode === "heart");
-    state.schematicMode = state.mode;
+  if (state.schematicMode !== `${state.sex}:${state.mode}`) {
+    state.schematic = createSchematic($("circulation-schematic"), state.mode === "heart", state.anatomy.bodies[state.sex]);
+    state.schematicMode = `${state.sex}:${state.mode}`;
   }
 }
 
@@ -147,10 +163,8 @@ function pressureView() {
   metric(3, "Cardiac output", result.co, "l/min", baseline.co);
   state.schematic.update({CV_P_ar: controls.arterial, CV_P_ve: controls.venous,
     CV_P_po: result.ppo, CV_P_li: result.pli, Qpo: result.qpo, Qh: result.qh,
-    Qha: result.qha, ...Object.fromEntries(result.flows.map(organ => [`Q${organ.id}`, organ.flow]))});
-  text("pressure-insight", `Portal pressure is ${format(result.ppo, 1)} mmHg (${signed(result.ppo - baseline.ppo, 1)} from reference). ` +
-    `The portal-to-systemic venous gradient is ${format(result.ppo - controls.venous, 1)} mmHg. ` +
-    `The hepatic artery contributes ${format(100 * result.qha / result.qh, 0)}% of hepatic flow.`);
+    Qha: result.qha, ...Object.fromEntries(result.flows.map(organ => [`Q${organ.id}`, organ.flow]))}, Number($("flow-scale").value));
+  text("pressure-insight", `Portal ${format(result.ppo, 1)} mmHg · venous gradient ${format(result.ppo - controls.venous, 1)} mmHg · hepatic arterial share ${format(100 * result.qha / result.qh, 0)}%.`);
   const factors = Array.from({length: 71}, (_, i) => 1 + i / 10);
   const scan = factors.map(hepatic => solvePressure(reference, {...controls, hepatic}));
   plot("resistance-chart", [
@@ -186,6 +200,7 @@ function requestHeart(delay = 160) {
   clearTimeout(state.solveTimer);
   state.abort?.abort();
   const serial = ++state.serial;
+  const sex = state.sex;
   const controls = normalizeHeartControls(readControls());
   const key = heartKey(controls);
   state.solveError = null;
@@ -200,10 +215,10 @@ function requestHeart(delay = 160) {
     const controller = new AbortController();
     state.abort = controller;
     try {
-      state.solverPromise ??= createHeartSolver();
+      state.solverPromise ??= createHeartSolver({sex});
       const solver = await state.solverPromise;
+      if (serial !== state.serial) { if (sex !== state.sex) solver.close(); return; }
       state.solver = solver;
-      if (serial !== state.serial) return;
       const started = performance.now();
       const example = await solver.simulate(controls, {signal: controller.signal});
       if (serial !== state.serial) return;
@@ -228,9 +243,9 @@ function heartView() {
   text("case-description", preset ? preset.description : "Combined slider settings, applied after the shared 24-second reference settling interval.");
   $("solver-retry").hidden = !state.solveError;
   text("solver-status", state.solveError ? `Could not solve these settings: ${state.solveError}. Previous result remains visible.`
-    : state.pending ? "Solving the current sliders with SUNDIALS IDA in a Web Worker. Previous result remains visible."
-    : example?.elapsed_ms ? `Current settings solved in the browser with IDA in ${format(example.elapsed_ms / 1000, 2)} s.`
-    : "Ready. Reference IDA solution for the current settings; changing any slider runs the compiled SBML in your browser.");
+    : state.pending ? "Solving IDA; previous result remains visible."
+    : example?.elapsed_ms ? `Current settings solved with IDA in ${format(example.elapsed_ms / 1000, 2)} s.`
+    : "Reference IDA solution. Sliders rerun the model.");
   if (!example) return;
   const summary = example.summary.after;
   const before = example.summary.before;
@@ -238,8 +253,7 @@ function heartView() {
   metric(1, "Mean cardiac output", summary.mean_cardiac_output, "l/min", before.mean_cardiac_output, 2, "vs before");
   metric(2, "Stroke volume", summary.stroke_volume, "ml", before.stroke_volume, 1, "vs before");
   metric(3, "Heart rate", summary.heart_rate, "/min", before.heart_rate, 0, "vs before");
-  text("heart-insight", `After settling: ${format(summary.arterial_systolic, 0)}/${format(summary.arterial_diastolic, 0)} mmHg systemic pressure. ` +
-    `Mean hepatic flow ${format(summary.mean_hepatic_flow)} l/min. Intervention at 24 s.`);
+  text("heart-insight", `${format(summary.arterial_systolic, 0)}/${format(summary.arterial_diastolic, 0)} mmHg · hepatic flow ${format(summary.mean_hepatic_flow)} l/min · intervention at 24 s.`);
   const beats = state.window === "beats";
   const selectedSeries = beats ? example.beats : example.series;
   const baselineSeries = beats ? baseline.beats : baseline.series;
@@ -256,7 +270,7 @@ function heartView() {
     state.cursors[id] = plot(id, [
       {x: time(baselineSeries), y: column(baselineSeries, variable), color: "baseline", dashed: true},
       {x: time(selectedSeries), y: column(selectedSeries, variable), color: "accent"},
-    ], {xLabel: beats ? "Time within final 3 beats (s)" : "Time (s)", yLabel: label, intervention: !beats, zero: variable === "CO", cursor: true});
+    ], {xLabel: beats ? "Time within final 3 beats (s)" : "Time (s)", yLabel: label, intervention: !beats, zero: variable === "CO", cursor: true, inspect: inspectTime});
   }
   const referenceBeat = lastBeat(baseline.beats, baseline.heart_rate);
   const selectedBeat = lastBeat(example.beats, example.heart_rate);
@@ -281,14 +295,23 @@ function displayFrame() {
   const series = state.heartResult.beats;
   const start = series.values[0][series.columns.indexOf("time")];
   const row = sampleAt(series, start + state.flowTime);
-  state.schematic.update(row);
+  state.schematic.update(row, Number($("flow-scale").value));
   $("flow-time").value = String(state.flowTime);
   text("flow-clock", `${format(state.flowTime, 2)} s`);
+  $("flow-clock").setAttribute("title", `Simulation time: ${format(start + state.flowTime, 2)} s`);
   const x = state.window === "beats" ? state.flowTime : start + state.flowTime;
-  for (const name of ["arterial-chart", "portal-chart", "flow-chart"]) state.cursors[name]?.(x);
+  for (const [name, variable] of [["arterial-chart", "CV_P_ar"], ["portal-chart", "CV_P_po"], ["flow-chart", "CO"]]) state.cursors[name]?.(x, row[variable]);
   state.cursors.pv?.(row.CV_V_lv, row.CV_P_lv);
   $("play-flow").setAttribute("aria-pressed", String(state.playing));
   text("play-flow", state.playing ? "Pause" : "Play");
+}
+
+function inspectTime(x) {
+  if (!state.heartResult) return;
+  const times = column(state.heartResult.beats, "time");
+  const relative = state.window === "beats" ? x : x - times[0];
+  state.flowTime = Math.max(0, Math.min(times.at(-1) - times[0], relative));
+  state.playing = false; stopAnimation(); displayFrame();
 }
 
 function stopAnimation() {
@@ -317,7 +340,7 @@ function startAnimation() {
 }
 
 function render() {
-  if (!state.data) return;
+  if (!state.data || state.loading) return;
   const pressure = state.mode === "pressure";
   $("pressure-results").hidden = !pressure;
   $("pressure-boundaries").hidden = !pressure;
@@ -338,8 +361,8 @@ function render() {
   text("control-method", pressure ? "Live algebraic solution" : "Live SUNDIALS IDA simulation");
   text("control-explanation", pressure ? "Prescribed pressure boundaries drive the steady network. Change any resistance and inspect the regional flows."
     : "The same resistance sliders now control the beating heart. Settings are applied at 24 s, then the closed-loop model settles; pressures are outputs.");
-  text("schematic-description", pressure ? "The arterial and venous boundaries supply parallel tissue branches and the liver's dual blood supply. All edges share one flow-width scale."
-    : "The systemic and portal beds join a closed pulmonary loop with two ventricles and four valves. Play or scrub the final three beats to inspect instantaneous flows and pressures.");
+  text("individual-label", `${state.sex === "male" ? "Male" : "Female"} reference`);
+  text("flow-scale-value", `${format(Number($("flow-scale").value))}×`);
   setSchematic();
   if (pressure) { stopAnimation(); pressureView(); }
   else { heartView(); startAnimation(); }
@@ -362,36 +385,58 @@ function theme() {
   render();
 }
 
-async function load() {
-  $("load-error").hidden = true;
-  $("loading").hidden = false;
+async function load(controls) {
+  const sex = state.sex, serial = (state.loadSerial ?? 0) + 1;
+  state.loadSerial = serial; state.loading = true;
+  $("load-error").hidden = true; $("loading").hidden = false; $("workspace").hidden = true;
+  $("app").setAttribute("aria-busy", "true");
   try {
-    const response = await fetch("cardiovascular-data.json");
-    if (!response.ok) throw new Error(`Reference data request failed: ${response.status}`);
-    const data = await response.json();
+    const read = async path => {
+      const response = await fetch(path);
+      if (!response.ok) throw new Error(`Reference data request failed: ${response.status}`);
+      return response.json();
+    };
+    const [data, anatomy] = await Promise.all([
+      state.datasets.get(sex) ?? read(`${sex === "female" ? "female/" : ""}cardiovascular-data.json`),
+      state.anatomy ?? read("cardiovascular-anatomy.json"),
+    ]);
+    if (serial !== state.loadSerial) return;
     if (data.schema_version !== 1 || !data.cases?.[0]?.beats.columns.includes("CV_Q_tv")) throw new Error("The circulation data needs regeneration with the current model.");
-    state.data = data;
-    state.cache.clear();
-    for (const example of data.cases) remember(heartKey(exampleControls(example)), example);
+    state.datasets.set(sex, data); state.data = data; state.anatomy = anatomy;
+    for (const example of data.cases) if (!state.cache.has(heartKey(exampleControls(example)))) remember(heartKey(exampleControls(example)), example);
     adoptHeart(data.cases.find(example => example.id === "baseline"));
     const custom = document.createElement("option"); custom.value = "custom"; custom.textContent = "Custom slider settings"; custom.disabled = true;
     $("heart-case").replaceChildren(custom, ...data.cases.map(example => {
       const option = document.createElement("option"); option.value = example.id; option.textContent = example.label; return option;
     }));
-    $("workspace").hidden = false;
-    $("loading").hidden = true;
-    $("app").setAttribute("aria-busy", "false");
-    applyControls({...defaultControls(data.pressure), heartRate: 75, contractility: 1});
+    state.loading = false;
+    $("workspace").hidden = false; $("loading").hidden = true; $("app").setAttribute("aria-busy", "false");
+    applyControls(controls ?? {...defaultControls(data.pressure), heartRate: 75, contractility: 1});
   } catch (error) {
-    $("loading").hidden = true;
-    $("load-error").hidden = false;
-    $("app").setAttribute("aria-busy", "false");
-    console.error("Cardiovascular example:", error);
-    resizeFrame();
+    if (serial !== state.loadSerial) return;
+    $("loading").hidden = true; $("load-error").hidden = false; $("app").setAttribute("aria-busy", "false");
+    console.error("Cardiovascular example:", error); resizeFrame();
   }
 }
 
+$("sex").addEventListener("change", () => {
+  const controls = readControls();
+  clearTimeout(state.solveTimer); state.abort?.abort(); ++state.serial; stopAnimation();
+  state.solver?.close(); state.solver = null; state.solverPromise = null;
+  state.sex = $("sex").value; state.heartResult = null;
+  load(controls);
+});
+$("flow-scale").addEventListener("input", () => render());
+$("fullscreen").addEventListener("click", async () => {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await $("app").requestFullscreen();
+  } catch { window.open(window.location.href, "_blank", "noopener"); }
+});
+document.addEventListener?.("fullscreenchange", () => { text("fullscreen", document.fullscreenElement ? "Exit full screen" : "Full screen"); render(); });
+
 for (const button of document.querySelectorAll("[data-mode]")) button.addEventListener("click", () => {
+  if ($("workspace").hidden) return;
   state.mode = button.dataset.mode;
   if (state.mode === "heart") {
     if (!state.hasPlayed) {
@@ -417,7 +462,7 @@ $("heart-case").addEventListener("change", event => {
   const example = state.data.cases.find(item => item.id === event.target.value);
   if (example) applyControls(exampleControls(example));
 });
-$("retry").addEventListener("click", load);
+$("retry").addEventListener("click", () => load());
 $("solver-retry").addEventListener("click", () => { state.solver?.close(); state.solver = null; state.solverPromise = null; requestHeart(0); });
 $("play-flow").addEventListener("click", () => {
   state.playing = !state.playing;
@@ -435,12 +480,12 @@ $("download").addEventListener("click", () => {
     const organs = [...result.flows, {id: "lu", flow: result.co}];
     series = {columns: ["organ", "flow", "portal_pressure", "sinusoidal_pressure"], values: organs.map(organ => [organ.id, organ.flow, result.ppo, result.pli])};
     units = {flow: "l/min", portal_pressure: "mmHg", sinusoidal_pressure: "mmHg"};
-    filename = "pressure-network.csv";
+    filename = `pressure-network-${state.sex}.csv`;
   } else {
     const example = state.heartResult;
     series = state.window === "beats" ? example.beats : example.series;
     units = state.data.provenance.units;
-    filename = `cardiovascular-${state.caseId}-${state.window}.csv`;
+    filename = `cardiovascular-${state.sex}-${state.caseId}-${state.window}.csv`;
   }
   const url = URL.createObjectURL(new Blob([csv(series, units)], {type: "text/csv;charset=utf-8"}));
   const link = document.createElement("a"); link.href = url; link.download = filename; link.click();

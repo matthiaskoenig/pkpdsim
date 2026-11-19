@@ -4,25 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23007c78'/%3E%3Cpath d='M4 16H9L12 9L16 24L20 13L23 16H28' fill='none' stroke='white' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E">
-  <title>Cardiovascular examples | pkpdsim</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='6'%20fill='%23007c78'/%3E%3Cpath%20d='M4%2016H9L12%209L16%2024L20%2013L23%2016H28'%20fill='none'%20stroke='white'%20stroke-width='2'%20stroke-linejoin='round'/%3E%3C/svg%3E">
+  <title>Cardiovascular dashboard | pkpdsim</title>
   <link rel="stylesheet" href="cardiovascular.css">
   <script src="solver/sbmlsim-core.js"></script>
   <script type="module" src="cardiovascular.mjs"></script>
 </head>
 <body>
-  <main id="app" aria-busy="true">
-    <header class="app-header">
-      <div class="eyebrow">pkpdsim / cardiovascular examples</div>
-      <h1>From resistance to perfusion</h1>
-      <p>Explore the portal circulation, then see how the heart and vessels respond.</p>
-      <div class="mode-switch" role="group" aria-label="Circulation model">
-        <button type="button" data-mode="pressure" aria-pressed="true">Pressure network</button>
-        <button type="button" data-mode="heart" aria-pressed="false">Beating heart</button>
-      </div>
-    </header>
-
-    <p id="loading" role="status">Loading the reference circulation...</p>
+  <main id="app" aria-busy="true"><header class="app-header"><div class="brand">
+<span class="eyebrow">pkpdsim</span><h1>Cardiovascular circulation</h1>
+</div>
+<div class="mode-switch" role="group" aria-label="Circulation model">
+<button type="button" data-mode="pressure" aria-pressed="true">Pressure network</button><button type="button" data-mode="heart" aria-pressed="false">Beating heart</button>
+</div>
+<div class="header-tools">
+<label for="sex">Physiology <select id="sex"><option value="male">Male</option>
+<option value="female">Female</option></select></label><button type="button" id="fullscreen">Full screen</button><button id="download" type="button">CSV ↓</button>
+</div></header><p id="loading" role="status">Loading the reference circulation...</p>
     <div id="load-error" class="notice" role="alert" hidden>
       <p>The example data could not be loaded. Serve this page through the documentation server and try again.</p>
       <button type="button" id="retry">Try again</button>
@@ -30,22 +28,24 @@
     <noscript>This explorer needs JavaScript. The accompanying documentation explains the same examples and provides Python code.</noscript>
 
     <div id="workspace" hidden>
-      <section id="pressure-controls" class="panel" aria-labelledby="pressure-heading">
-        <div class="section-heading"><div>
+<aside class="controls panel" aria-label="Model controls"><section id="pressure-controls" class="panel" aria-labelledby="pressure-heading">
+        <div class="section-heading">
+<div>
           <span id="control-method" class="eyebrow">Live algebraic solution</span>
-          <h2 id="pressure-heading">Change vascular resistance</h2>
-        </div><button type="button" id="reset">Reset</button></div>
-        <p id="control-explanation" class="explanation">The pressure boundaries stay fixed. Portal and sinusoidal pressures, organ perfusion and total flow follow the resistance network.</p>
+          <h2 id="pressure-heading">Vascular resistance</h2>
+        </div>
+<button type="button" id="reset">Reset</button>
+</div>
         <div class="presets" role="group" aria-label="Resistance examples">
           <button type="button" data-preset="baseline">Reference</button>
-          <button type="button" data-preset="hepatic">Hepatic resistance ×4</button>
-          <button type="button" data-preset="vasodilator">Systemic resistance ×0.7</button>
+          <button type="button" data-preset="hepatic">Hepatic ×4</button>
+          <button type="button" data-preset="vasodilator">Systemic ×0.7</button>
         </div>
         <div class="control-grid">
-          <label class="control" for="hepatic"><span>Hepatic outflow resistance <output id="hepatic-value" for="hepatic">1.0×</output></span><input id="hepatic" type="range" min="1" max="8" step="0.1" value="1"><small>After the arterial and portal supplies merge</small></label>
-          <label class="control" for="systemic"><span>Systemic resistance <output id="systemic-value" for="systemic">1.00×</output></span><input id="systemic" type="range" min="0.5" max="2" step="0.05" value="1"><small>All arterial organ branches</small></label>
-          <label class="control" for="portal"><span>Portal resistance <output id="portal-value" for="portal">1.0×</output></span><input id="portal" type="range" min="1" max="6" step="0.1" value="1"><small>Between portal vein and sinusoidal node</small></label>
-          <label class="control" for="renal"><span>Renal resistance <output id="renal-value" for="renal">1.0×</output></span><input id="renal" type="range" min="0.5" max="3" step="0.1" value="1"><small>Kidney branch only</small></label>
+          <label class="control" for="hepatic"><span>Hepatic outflow <output id="hepatic-value" for="hepatic">1.0×</output></span><input id="hepatic" type="range" min="1" max="8" step="0.1" value="1"></label>
+          <label class="control" for="systemic"><span>Systemic <output id="systemic-value" for="systemic">1.00×</output></span><input id="systemic" type="range" min="0.5" max="2" step="0.05" value="1"></label>
+          <label class="control" for="portal"><span>Portal <output id="portal-value" for="portal">1.0×</output></span><input id="portal" type="range" min="1" max="6" step="0.1" value="1"></label>
+          <label class="control" for="renal"><span>Renal <output id="renal-value" for="renal">1.0×</output></span><input id="renal" type="range" min="0.5" max="3" step="0.1" value="1"></label>
         </div>
         <details id="pressure-boundaries" class="boundaries"><summary>Pressure boundaries</summary><div class="control-grid">
           <label class="control" for="arterial"><span>Arterial pressure <output id="arterial-value" for="arterial">95 mmHg</output></span><input id="arterial" type="range" min="70" max="130" step="1" value="95"></label>
@@ -54,59 +54,98 @@
       </section>
 
       <section id="heart-controls" class="panel" aria-labelledby="heart-heading" hidden>
-        <div class="section-heading"><div><span class="eyebrow">sbmlsim-core / WebAssembly / IDA</span><h2 id="heart-heading">Heart rate and contractility</h2></div></div>
+        <div class="section-heading"><div>
+<span class="eyebrow">sbmlsim-core / WebAssembly / IDA</span><h2 id="heart-heading">Heart</h2>
+</div></div>
         <div class="control-grid heart-knobs">
-          <label class="control" for="heart-rate"><span>Heart rate <output id="heart-rate-value" for="heart-rate">75/min</output></span><input id="heart-rate" type="range" min="50" max="120" step="1" value="75"><small>The integrated cardiac phase stays continuous</small></label>
-          <label class="control" for="contractility"><span>Contractility <output id="contractility-value" for="contractility">1.00×</output></span><input id="contractility" type="range" min="0.5" max="1.5" step="0.05" value="1"><small>Active ventricular elastance</small></label>
+          <label class="control" for="heart-rate"><span>Heart rate <output id="heart-rate-value" for="heart-rate">75/min</output></span><input id="heart-rate" type="range" min="50" max="120" step="1" value="75"></label>
+          <label class="control" for="contractility"><span>Contractility <output id="contractility-value" for="contractility">1.00×</output></span><input id="contractility" type="range" min="0.5" max="1.5" step="0.05" value="1"></label>
         </div>
         <label class="case-label" for="heart-case">Example preset<select id="heart-case"></select></label>
-        <p id="case-description" class="explanation"></p>
         <p id="solver-status" class="method" role="status" aria-live="polite"></p>
         <button id="solver-retry" type="button" hidden>Retry simulation</button>
       </section>
 
-      <section class="metrics" aria-label="Circulation readouts" aria-live="polite" aria-atomic="true">
-        <article><h3 id="metric-label-0">Portal pressure</h3><p><strong id="metric-0">-</strong> <span id="unit-0">mmHg</span></p><small id="delta-0"></small></article>
-        <article><h3 id="metric-label-1">Portal flow</h3><p><strong id="metric-1">-</strong> <span id="unit-1">l/min</span></p><small id="delta-1"></small></article>
-        <article><h3 id="metric-label-2">Hepatic flow</h3><p><strong id="metric-2">-</strong> <span id="unit-2">l/min</span></p><small id="delta-2"></small></article>
-        <article><h3 id="metric-label-3">Cardiac output</h3><p><strong id="metric-3">-</strong> <span id="unit-3">l/min</span></p><small id="delta-3"></small></article>
+      <section class="display-controls" aria-labelledby="display-heading"><h2 id="display-heading">Flow display</h2>
+<label class="control" for="flow-scale"><span>Edge-width scale <output id="flow-scale-value" for="flow-scale">1.00×</output></span><input id="flow-scale" type="range" min="0.25" max="3" step="0.05" value="1"></label><p class="method">Width ∝ √|flow|. One scale for all vessels. Faded paths indicate zero flow.</p></section><details class="model-notes"><summary>Model &amp; numerical details</summary><p id="control-explanation" class="method">The pressure boundaries stay fixed. Portal and sinusoidal pressures, organ perfusion and total flow follow the resistance network.</p>
+        <p id="case-description" class="method"></p>
+        <p id="calculation-method" class="method"></p>
+<p id="conservation" class="method"></p>
+      <p class="method">Illustrative adult circulation. No collaterals, baroreflex or autoregulation.</p></details><details class="organ-table"><summary>All organ flows</summary><div class="table-scroll"><table>
+<thead><tr>
+<th scope="col">Organ</th>
+<th scope="col">Drainage</th>
+<th scope="col">Flow (l/min)</th>
+<th scope="col">Change</th>
+</tr></thead>
+<tbody id="organ-flows"></tbody>
+</table></div>
+<p id="table-method" class="method"></p></details>
+
+      </aside><section class="metrics" aria-label="Circulation readouts" aria-live="polite" aria-atomic="true">
+        <article><h3 id="metric-label-0">Portal pressure</h3>
+<p><strong id="metric-0">-</strong> <span id="unit-0">mmHg</span></p>
+<small id="delta-0"></small></article>
+        <article><h3 id="metric-label-1">Portal flow</h3>
+<p><strong id="metric-1">-</strong> <span id="unit-1">l/min</span></p>
+<small id="delta-1"></small></article>
+        <article><h3 id="metric-label-2">Hepatic flow</h3>
+<p><strong id="metric-2">-</strong> <span id="unit-2">l/min</span></p>
+<small id="delta-2"></small></article>
+        <article><h3 id="metric-label-3">Cardiac output</h3>
+<p><strong id="metric-3">-</strong> <span id="unit-3">l/min</span></p>
+<small id="delta-3"></small></article>
       </section>
 
-      <section class="panel" aria-labelledby="schematic-heading">
-        <div class="section-heading"><div><span class="eyebrow">Whole-body circulation</span><h2 id="schematic-heading">Follow the blood</h2></div><span class="method">Pressure: mmHg · flow: l/min</span></div>
-        <p id="schematic-description" class="explanation">Directed connections show the systemic branches and the liver's dual blood supply. Every edge uses the same flow-width scale.</p>
-        <div id="flow-playback" class="playback" hidden>
+      <section class="body-panel panel" aria-labelledby="schematic-heading"><div class="section-heading">
+<h2 id="schematic-heading">Whole-body perfusion</h2>
+<span id="individual-label" class="method">Male reference</span>
+</div>
+<div id="circulation-schematic" tabindex="0" role="region" aria-label="Anatomical circulation with instantaneous organ flows"></div>
+<div class="body-legend">
+<span class="arterial-key">Arterial</span><span class="venous-key">Venous</span><span class="portal-key">Portal</span><span class="hepatic-key">Hepatic</span><span>l/min · mmHg</span>
+</div>
+<div id="flow-playback" class="playback" hidden>
           <button id="play-flow" type="button" aria-pressed="false">Play</button>
           <label class="timeline" for="flow-time">Time in final 3 beats <input id="flow-time" type="range" min="0" max="2.4" step="0.001" value="0"><output id="flow-clock" for="flow-time" aria-live="off">0.00 s</output></label>
-          <label class="speed-label" for="flow-speed">Speed<select id="flow-speed"><option value="0.25">0.25×</option><option value="0.5" selected>0.5×</option><option value="1">1×</option><option value="2">2×</option></select></label>
+          <label class="speed-label" for="flow-speed">Speed<select id="flow-speed"><option value="0.25">0.25×</option>
+<option value="0.5" selected>0.5×</option>
+<option value="1">1×</option>
+<option value="2">2×</option></select></label>
         </div>
-        <div id="circulation-schematic" class="schematic-scroll" tabindex="0" role="region" aria-label="Circulation schematic; scroll horizontally on a small screen"></div>
-        <p class="method schematic-hint">Scroll horizontally to see the full circulation.</p>
-        <p class="method">Width follows √flow on one shared scale. A thin, faded edge indicates zero flow, including a closed cardiac valve. The labels give instantaneous values.</p>
-      </section>
-
-      <section id="pressure-results" aria-label="Pressure network results">
+        <p class="attribution">Anatomy: <a href="https://github.com/ebi-gene-expression-group/anatomogram" target="_blank" rel="noopener">EMBL-EBI anatomograms</a>, CC BY 4.0; pkpdsim physiology figures. Connections show model topology.</p></section><section id="pressure-results" aria-label="Pressure network results" class="results panel">
         <p id="pressure-insight" class="insight pressure-insight"></p>
-        <div class="panel"><h2>Hepatic resistance and upstream pressure</h2><p class="explanation">The curves keep the other controls at their current values. The markers show the selected hepatic resistance.</p><div id="resistance-chart" class="chart" role="img" aria-label="Portal and sinusoidal pressure against hepatic resistance"></div><div class="legend"><span class="portal-key">Portal vein</span><span class="hepatic-key">Sinusoidal node</span></div></div>
+        <div class="panel">
+<h2>Hepatic resistance and upstream pressure</h2>
+<div id="resistance-chart" class="chart" role="img" aria-label="Portal and sinusoidal pressure against hepatic resistance"></div>
+<div class="legend">
+<span class="portal-key">Portal vein</span><span class="hepatic-key">Sinusoidal node</span>
+</div>
+</div>
       </section>
 
-      <section id="heart-results" aria-label="Heartbeat results" hidden>
-        <div class="plot-toolbar"><p id="heart-insight" class="insight"></p><div class="mode-switch compact" role="group" aria-label="Waveform interval"><button type="button" data-window="response" aria-pressed="true">Full response</button><button type="button" data-window="beats" aria-pressed="false">Final 3 beats</button></div></div>
+      <section id="heart-results" aria-label="Heartbeat results" hidden class="results panel">
+        <div class="plot-toolbar">
+<p id="heart-insight" class="insight"></p>
+<div class="mode-switch compact" role="group" aria-label="Waveform interval">
+<button type="button" data-window="response" aria-pressed="false">Full response</button><button type="button" data-window="beats" aria-pressed="true">Final 3 beats</button>
+</div>
+</div>
         <div class="chart-grid">
-          <article class="panel"><h2>Systemic arterial pressure</h2><div id="arterial-chart" class="chart" role="img" aria-label="Systemic arterial pressure over time"></div></article>
-          <article class="panel"><h2>Portal pressure</h2><div id="portal-chart" class="chart" role="img" aria-label="Portal pressure over time"></div></article>
-          <article class="panel"><h2>Left ventricular pressure-volume loop</h2><div id="pv-chart" class="chart" role="img" aria-label="Left ventricular pressure versus volume during the final beat"></div></article>
-          <article class="panel"><h2>Aortic flow</h2><div id="flow-chart" class="chart" role="img" aria-label="Instantaneous aortic flow over time"></div></article>
+          <article><h3>Systemic arterial pressure</h3>
+<div id="arterial-chart" class="chart" role="img" aria-label="Systemic arterial pressure over time"></div></article>
+          <article><h3>Portal pressure</h3>
+<div id="portal-chart" class="chart" role="img" aria-label="Portal pressure over time"></div></article>
+          <article><h3>Left ventricular pressure-volume loop</h3>
+<div id="pv-chart" class="chart" role="img" aria-label="Left ventricular pressure versus volume during the final beat"></div></article>
+          <article><h3>Aortic flow</h3>
+<div id="flow-chart" class="chart" role="img" aria-label="Instantaneous aortic flow over time"></div></article>
         </div>
-        <div class="legend"><span class="baseline-key">Reference, no intervention</span><span class="condition-key">Selected example</span></div>
-        <p id="conservation" class="method"></p>
-      </section>
+        <div class="legend">
+<span class="baseline-key">Reference, no intervention</span><span class="condition-key">Selected example</span><span class="cursor-key">● Displayed instant</span>
+</div>
+        <p class="method">Click or drag a time course to inspect the final beats. Highlighted dots follow the body flows.</p></section>
 
-      <details class="panel"><summary>All organ flows</summary><div class="table-scroll"><table><thead><tr><th scope="col">Organ</th><th scope="col">Drainage</th><th scope="col">Flow (l/min)</th><th scope="col">Change</th></tr></thead><tbody id="organ-flows"></tbody></table></div><p id="table-method" class="method"></p></details>
-
-      <footer class="app-footer"><p id="calculation-method" class="method"></p><button id="download" type="button">Download CSV</button></footer>
-      <p class="scope">Illustrative adult human circulation. Increased hepatic resistance isolates one mechanism of portal hypertension. The examples have no collateral vessels, baroreflex or autoregulation.</p>
-    </div>
-  </main>
+      </div></main>
 </body>
 </html>

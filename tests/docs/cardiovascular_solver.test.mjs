@@ -9,8 +9,10 @@ import {createHeartSolver, heartRequest, normalizeHeartControls} from "../../doc
 
 const directory = new URL("../../docs/pbpk/examples/solver/", import.meta.url);
 runInThisContext(await readFile(new URL("sbmlsim-core.js", directory), "utf8"));
-const loadAsset = name => readFile(new URL(name, directory));
-const config = JSON.parse(await readFile(new URL("config.json", directory), "utf8"));
+const sex = process.env.PKPDSIM_HEART_TEST_SEX ?? "male";
+const modelDirectory = sex === "female" ? new URL("../female/solver/", directory) : directory;
+const loadAsset = name => readFile(new URL(name, ["engine.wasm", "mathlib.wasm"].includes(name) ? directory : modelDirectory));
+const config = JSON.parse(await readFile(new URL("config.json", modelDirectory), "utf8"));
 const host = globalThis.sbmlsimCore;
 
 test("heart requests preserve shared baseline, complete beats and requested controls", () => {
@@ -47,7 +49,7 @@ test("the browser worker solves arbitrary simultaneous resistance changes with I
       assert.ok(Math.abs(row[columns.Qha] + row[columns.Qpo] - row[columns.Qh]) < 3e-5);
     }
     if (process.env.PKPDSIM_HEART_TEST_OUTPUT) {
-      await writeFile(process.env.PKPDSIM_HEART_TEST_OUTPUT, JSON.stringify({controls, baseline, changed}));
+      await writeFile(process.env.PKPDSIM_HEART_TEST_OUTPUT, JSON.stringify({sex, controls, baseline, changed}));
     }
     const controller = new AbortController();
     const pending = solver.simulate({hepatic: 8}, {signal: controller.signal});
