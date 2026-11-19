@@ -1,0 +1,31 @@
+# The liver lobes of the adult rat, the regions of the MRI perfusion study after
+# portal vein ligation (CL, LLL, LML, RL, RML). Madrahimov 2006 fixes the
+# structure: the left lateral, the median and the right lobe together are the
+# 90 % hepatectomy, the upper caudate lobe brings it to 95 % and the lower
+# caudate lobe to 97 %, so the caudate lobes carry about 0.10 of the mass. The
+# split of the 0.90 into the three lobes (left lateral 0.30, median 0.40, right
+# 0.20) is the share the rat anatomy literature reports; the median lobe is
+# split evenly into its left and its right half, which no source gives
+# (`ModelChoice`). No arterial or portal supply fraction was found for any
+# species: a lobe without one is supplied in proportion to its mass, see
+# `pkpdsim.pbpk.lobes`.
+
+[cl]
+name = "caudate lobe"
+mass_fraction = { value = 0.10, unit = "dimensionless", source = "Madrahimov2006", notes = "derived: the 90 % hepatectomy removes the left lateral, the median and the right lobe, the upper caudate lobe brings it to 95 % and the lower caudate lobe to 97 %, leaving the paracaval parts; the caudate lobes are therefore about 0.10 of the liver mass, the paracaval parts of it about 0.03 (Aller 2009 identifies the caudate process as a sector of its own)" }
+
+[lll]
+name = "left lateral lobe"
+mass_fraction = { value = 0.30, unit = "dimensionless", source = "Madrahimov2006", notes = "the share the rat anatomy literature reports for the left lateral lobe; with the median lobe (0.40) and the right lobe (0.20) it gives the 90 % hepatectomy of the paper" }
+
+[lml]
+name = "left half of the median lobe"
+mass_fraction = { value = 0.20, unit = "dimensionless", source = "ModelChoice", notes = "the median lobe is 0.40 of the liver mass and the MRI regions of the portal vein ligation study split it into a left (LML) and a right (RML) half; no source gives the split, so it is even" }
+
+[rl]
+name = "right lobe"
+mass_fraction = { value = 0.20, unit = "dimensionless", source = "Madrahimov2006", notes = "the share the rat anatomy literature reports for the right lobe (0.19 to 0.22); with the left lateral (0.30) and the median lobe (0.40) it gives the 90 % hepatectomy of the paper" }
+
+[rml]
+name = "right half of the median lobe"
+mass_fraction = { value = 0.20, unit = "dimensionless", source = "ModelChoice", notes = "the median lobe is 0.40 of the liver mass and the MRI regions of the portal vein ligation study split it into a left (LML) and a right (RML) half; no source gives the split, so it is even" }

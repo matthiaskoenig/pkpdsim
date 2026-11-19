@@ -156,3 +156,9 @@ value = 5.3
 unit = "l"
 source = "ModelChoice"
 notes = "Reference total blood volume for the illustrative adult human compliance and ventricular-volume scaling CV_scale = Vblood/Vblood_ref; the individual's actual blood volume is the existing PBPK quantity."
+
+[defaults.habr_gain]
+value = 0.255
+unit = "dimensionless"
+source = "Lautt1985"
+notes = "Gain of the hepatic arterial buffer response: the fraction of a lost portal flow which the hepatic artery of the same territory compensates. Lautt 1985 measured 25.5 +- 2.7 % under adenosine mediated control in the cat (34 % with the adenosine uptake blocked by dipyridamole, 5 % with an adenosine antagonist); Lautt 1990 reports 44 +- 4 % over the whole range of portal flows when the passive pressure effect is included, which is the upper end of the plausible range. Rocheleau 1999 measured the response after a left portal vein ligation, the lobe case this parameter is used for."

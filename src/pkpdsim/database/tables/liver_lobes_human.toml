@@ -1,0 +1,46 @@
+# The Couinaud segments of the human liver. Mise 2014 measured the segment
+# volumes of 107 normal livers by three-dimensional perfusion based volumetry
+# (the portal branches identified, so a segment is its portal territory) and
+# reports segment VIII as the largest at a median of 26.1 % of the total liver
+# volume (range 11.1 to 38.0 %), the median volumes in the descending order
+# VIII, VII, IV, V, III, VI, II, I, and segments II and III each below 10 %.
+# Only the 0.261 of segment VIII and that order are taken from the abstract,
+# which is what was read; the medians of the other seven segments are in the
+# paper's table, which could not be retrieved (the publisher refuses an
+# automated fetch, 2026-11-19), so they are a `ModelChoice` which keeps the
+# published order, the published bound on II and III, and a sum of 1. They are
+# a gap of the table, see `docs/pbpk/lobes.md`. No arterial or portal supply
+# fraction was found: a segment without one is supplied in proportion to its
+# mass, which is the definition of a portal territory.
+
+[sg1]
+name = "segment I (caudate lobe)"
+mass_fraction = { value = 0.040, unit = "dimensionless", source = "ModelChoice", notes = "the smallest segment in the order of Mise 2014; a secondary reading of the paper's table reports a median of 4.0 %, which the order confirms but which was not read in the paper" }
+
+[sg2]
+name = "segment II (left lateral superior)"
+mass_fraction = { value = 0.069, unit = "dimensionless", source = "ModelChoice", notes = "Mise 2014: below 10 % of the total liver volume and, in the published order, between segment VI and segment I; no median was read" }
+
+[sg3]
+name = "segment III (left lateral inferior)"
+mass_fraction = { value = 0.095, unit = "dimensionless", source = "ModelChoice", notes = "Mise 2014: below 10 % of the total liver volume and, in the published order, between segment V and segment VI; no median was read" }
+
+[sg4]
+name = "segment IV (left medial)"
+mass_fraction = { value = 0.136, unit = "dimensionless", source = "ModelChoice", notes = "the third largest segment in the order of Mise 2014; a secondary reading of the paper's table reports a median of 13.6 %, which the order confirms but which was not read in the paper" }
+
+[sg5]
+name = "segment V (right anterior inferior)"
+mass_fraction = { value = 0.130, unit = "dimensionless", source = "ModelChoice", notes = "Mise 2014: in the published order between segment IV and segment III; no median was read" }
+
+[sg6]
+name = "segment VI (right posterior inferior)"
+mass_fraction = { value = 0.079, unit = "dimensionless", source = "ModelChoice", notes = "the third smallest segment in the order of Mise 2014; a secondary reading of the paper's table reports a median of 7.9 %, which the order confirms but which was not read in the paper" }
+
+[sg7]
+name = "segment VII (right posterior superior)"
+mass_fraction = { value = 0.190, unit = "dimensionless", source = "ModelChoice", notes = "the second largest segment in the order of Mise 2014; no median was read" }
+
+[sg8]
+name = "segment VIII (right anterior superior)"
+mass_fraction = { value = 0.261, unit = "dimensionless", source = "Mise2014", notes = "the largest segment, a median of 26.1 % of the total liver volume (range 11.1 to 38.0 %) in 107 normal livers" }
