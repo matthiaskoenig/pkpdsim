@@ -550,6 +550,38 @@ KINDS: dict[str, Kind] = {
     "zone_fraction": Kind(
         _P, _PHYS, requested="volume fraction of a zone of the liver"
     ),
+    # the lobes of the liver, perfused in parallel
+    "lobe_volume": Kind(
+        _P, "VOLUME_OF_COMPARTMENT", requested="volume of a lobe of the liver"
+    ),
+    "lobe_fraction": Kind(
+        _P, _PHYS, requested="volume fraction of a lobe of the liver"
+    ),
+    "lobe_supply_fraction": Kind(
+        _P,
+        "FRACTION_OF_BLOOD_FLOW_TO_A_COMPARTMENT",
+        requested="fraction of the hepatic blood flow to a lobe of the liver",
+    ),
+    "lobe_flow": Kind(
+        _P,
+        "BLOOD_FLOW_RATE_TO_COMPARTMENT",
+        requested="blood flow to a lobe of the liver",
+    ),
+    "lobe_perfusion": Kind(
+        _P, _PHYS, requested="blood flow per volume of a lobe of the liver"
+    ),
+    "lobe_patency": Kind(
+        _P,
+        _PHYS,
+        requested="patency of a vascular branch of a lobe of the liver "
+        "(1 open, 0 ligated)",
+    ),
+    "lobe_present": Kind(
+        _P, _PHYS, requested="presence of a lobe of the liver (1 in place, 0 resected)"
+    ),
+    "remnant_fraction": Kind(
+        _P, _PHYS, requested="share of the liver which is left after a resection"
+    ),
     "hematocrit": Kind(
         _P,
         "VOLUME_FRACTION_OF_RED_BLOOD_CELLS",
@@ -857,6 +889,7 @@ KINDS: dict[str, Kind] = {
     # observers and the outflow of the organs
     "outflow": Kind(_P, "TOTAL_VENOUS_CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
     "outflow_blood_cells": Kind(_P, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
+    "outflow_lobe": Kind(_P, "TOTAL_VENOUS_CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
     # a species of an organ which a PD component or an observer reads, exposed
     # by the organ
     "organ_concentration": Kind(_P, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),

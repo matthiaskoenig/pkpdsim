@@ -100,3 +100,8 @@ def test_the_flat_id_of_a_lobe_element() -> None:
 def test_lobe_flow_refuses_a_flow_which_is_no_hepatic_flow(flow: str) -> None:
     with pytest.raises(ValueError, match=flow):
         ids.lobe_flow(flow, "lll")
+
+
+def test_lobe_supply_fraction_ids() -> None:
+    assert ids.arterial_fraction("lll") == "f_ha_lll"
+    assert ids.portal_fraction("lll") == "f_po_lll"

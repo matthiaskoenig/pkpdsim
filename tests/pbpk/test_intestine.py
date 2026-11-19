@@ -660,9 +660,9 @@ def test_the_enteric_tablet_needs_the_segmented_intestine(tmp_path: Path) -> Non
 
 
 def test_variant_registry() -> None:
-    """The intestine has the standard, segmented and single lumen variants; unknown names raise."""
+    """The intestine has the standard, segmented and single lumen variants, the liver the lobes; unknown names raise."""
     assert names(Organ.SMALL_INTESTINE) == ["segmented", "single_lumen", "standard"]
-    assert names(Organ.LIVER) == ["standard", "zonated"]
+    assert names(Organ.LIVER) == ["lobes", "standard", "zonated"]
     with pytest.raises(ValueError, match=r"'lobular'.*'li'"):
         lookup(Organ.LIVER, "lobular")
     with pytest.raises(ValueError, match=r"'lobular'.*'li'"):

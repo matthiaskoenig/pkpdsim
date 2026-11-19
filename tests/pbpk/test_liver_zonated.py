@@ -247,7 +247,7 @@ def _x(r: roadrunner.RoadRunner, clint: float) -> float:
 
 def test_registry_has_zonated_liver(tmp_path: Path) -> None:
     """The liver has the variant `zonated`, 10 zones placed by volume."""
-    assert variants.names(Organ.LIVER) == ["standard", "zonated"]
+    assert variants.names(Organ.LIVER) == ["lobes", "standard", "zonated"]
     liver = variants.lookup(Organ.LIVER, "zonated")
     assert liver == ZonatedLiver(n_zones=10)
     path = _model(tmp_path, "registry", "zonated", [_linear(1.0)])

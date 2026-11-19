@@ -58,7 +58,7 @@ exchanges in each of its zones, which the blood flows through in series.
 
 import copy
 import itertools
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -226,6 +226,22 @@ class GutComponent(OrganComponent, Protocol):
         ...
 
 
+@runtime_checkable
+class BodyComponent(OrganComponent, Protocol):
+    """An organ component which needs parameters of the top model.
+
+    The segmented intestine and the lobed liver read parameters which the
+    body holds: the absorption of the intestine, the anatomy and the blood
+    flows of the lobes. The build asks every component for them before it
+    builds the organs, so the organ can read them through an input port
+    (`GutComponent` is such a component as well, through its own path).
+    """
+
+    def body_objects(self, definition: PBPKDefinition) -> list[Sbase]:
+        """Get the objects of the top model which the component reads."""
+        ...
+
+
 @dataclass(frozen=True)
 class StandardOrgan:
     """The standard organ with the collapsing of its parts.
@@ -290,9 +306,18 @@ class StandardBuilder(OrganBuilder):
     Attributes:
         zones: the zones of a zonated organ in the order of the blood flow,
             none for the organ without zones.
+        lobes: the lobes of a lobed liver, perfused in parallel, none for the
+            organ of one chain. A lobe has its own share of the volume
+            (`f_vol_<lobe>`), its own inflows and outflow (`Qha_<lobe>`,
+            `Qpo_<lobe>`, `Qh_<lobe>`) and its own outflow concentration;
+            the whole organ drains the flow weighted mix of them. The lobes
+            and the zones are the two axes of the liver: a site is a zone of
+            a lobe (`ids.site`), the lobes in parallel and the zones of a
+            lobe in series.
     """
 
     zones: tuple[str, ...] = ()
+    lobes: tuple[str, ...] = ()
 
     def build(self) -> tuple[ModelDefinition, Boundary]:
         """Build the model definition and the boundary."""
@@ -319,9 +344,54 @@ class StandardBuilder(OrganBuilder):
         )
 
     @property
+    def _chains(self) -> tuple[tuple[str | None, tuple[str | None, ...]], ...]:
+        """The chains of the organ: the lobe and its sites in the order of the blood flow.
+
+        One chain without lobes, one per lobe with them. The sites of a
+        chain are perfused in series (the zones along the sinusoid), the
+        chains in parallel.
+        """
+        zones: tuple[str | None, ...] = self.zones or (None,)
+        lobes: tuple[str | None, ...] = self.lobes or (None,)
+        return tuple(
+            (lobe, tuple(ids.site(lobe, zone) for zone in zones)) for lobe in lobes
+        )
+
+    @property
     def _each_zone(self) -> tuple[str | None, ...]:
-        """The zones in the order of the blood flow, `(None,)` for the organ without zones."""
-        return self.zones or (None,)
+        """Every site of the organ, `(None,)` for the organ of one chain and no zones."""
+        return tuple(site for _, sites in self._chains for site in sites)
+
+    def _lobe_of(self, site: str | None) -> str | None:
+        """The lobe a site belongs to, `None` for an organ without lobes."""
+        if site is None or not self.lobes:
+            return None
+        for lobe in self.lobes:
+            if site == lobe or site.startswith(f"{lobe}_"):
+                return lobe
+        raise ValueError(f"Site '{site}' is in none of the lobes {list(self.lobes)}.")
+
+    def _lobe_fraction(self, lobe: str) -> str:
+        """The share of the organ volume of a lobe, the input `f_vol_<lobe>`."""
+        return self._input(
+            ids.lobe_volume_fraction(lobe),
+            U.dimensionless,
+            f"volume fraction of lobe {lobe}",
+            "The share of the volume of the organ which this lobe holds; it "
+            "follows the lobe volume when the anatomy of the liver changes "
+            "during a simulation.",
+        )
+
+    def _chain_flows(
+        self, inflows: list[tuple[Pool, str]], out_flow: str, lobe: str | None
+    ) -> tuple[list[tuple[Pool, str]], str]:
+        """The inflows and the outflow of one chain: those of the organ, or of a lobe."""
+        if lobe is None:
+            return inflows, out_flow
+        return (
+            [(pool, ids.lobe_flow(flow, lobe)) for pool, flow in inflows],
+            ids.lobe_flow(out_flow, lobe),
+        )
 
     def _zone_fraction(self) -> str:
         """The volume fraction of a zone, `f_zone = 1/n` of `n` zones of equal volume."""
@@ -338,10 +408,21 @@ class StandardBuilder(OrganBuilder):
         )
 
     def _share(self, quantity: str, zone: str | None) -> str:
-        """The share of a zone of a volume or an exchange of the organ, without zone all of it."""
+        """The share of a site of a volume or an exchange of the organ.
+
+        A zone has `f_zone` (`1/n`) of it, a lobe its volume share
+        `f_vol_<lobe>`, a zone of a lobe the product; the organ of one chain
+        without zones has all of it.
+        """
         if zone is None:
             return quantity
-        return f"{quantity} * {self._zone_fraction()}"
+        factors = [quantity]
+        lobe = self._lobe_of(zone)
+        if lobe is not None:
+            factors.append(self._lobe_fraction(lobe))
+        if self.zones:
+            factors.append(self._zone_fraction())
+        return " * ".join(factors)
 
     def _flows(self, s: Substance) -> tuple[list[tuple[Pool, str]], str]:
         """The inflows (pool, flow) of a substance into the organ and the flow of its outflow."""
@@ -504,31 +585,8 @@ class StandardBuilder(OrganBuilder):
             for part in built_parts(parts):
                 self._species(part, s, parts, zone)
         k_organ = self._k_organ(s, parts) if parts.tissue == "organ" else None
-        last = self._each_zone[-1]
-        cout = self._leaving(s, Part.PLASMA, last, k_organ)
         out = ids.outflow_conc(s.sid)
-        self._rule(
-            out,
-            cout,
-            U.mM,
-            f"outflow plasma concentration {s.sid} {label(self.organ)} [mM]",
-            "Plasma concentration of the blood leaving the organ.",
-            port=Port(f"{out}_port", portType=PortType.OUTPUT_PORT),
-            kind="outflow",
-        )
-        self.outputs[out] = ids.organ_outflow(self.organ, s.sid)
-        if parts.blood_cells:
-            out_bc = ids.outflow_conc_bc(s.sid)
-            self._rule(
-                out_bc,
-                self._leaving(s, Part.BLOOD_CELLS, last, k_organ),
-                U.mM,
-                f"outflow blood cell concentration {s.sid} {label(self.organ)} [mM]",
-                "Blood cell concentration of the blood leaving the organ.",
-                port=Port(f"{out_bc}_port", portType=PortType.OUTPUT_PORT),
-                kind="outflow_blood_cells",
-            )
-            self.outputs[out_bc] = ids.organ_outflow_bc(self.organ, s.sid)
+        self._outflow(s, parts, k_organ)
         filters = self.organ is Organ.KIDNEY and s.excretion.urine
         self._blood_flows(
             s, parts, k_organ, self._filtrate(s, fu, out) if filters else None
@@ -544,6 +602,90 @@ class StandardBuilder(OrganBuilder):
             elif parts.tissue == "full":
                 self._full(s, fu, zone)
             self._unbound_observers(s, parts, zone)
+
+    def _outflow(self, s: Substance, parts: Parts, k_organ: str | None) -> None:
+        """The concentrations of the blood leaving the organ, plasma and blood cells.
+
+        Without lobes the organ drains the last site of its one chain. A
+        lobed liver drains every lobe out of the last site of its chain, so
+        each lobe gets its own outflow concentration `Cout_<lobe>_<s>` and
+        the organ drains the flow weighted mix of them, which is what the
+        body receives under the unchanged id `Cout_<s>`.
+        """
+        carried: list[tuple[Part, str, str, str, Callable[[Organ, str], str]]] = [
+            (
+                Part.PLASMA,
+                ids.outflow_conc(s.sid),
+                "plasma",
+                "outflow",
+                ids.organ_outflow,
+            )
+        ]
+        if parts.blood_cells:
+            carried.append(
+                (
+                    Part.BLOOD_CELLS,
+                    ids.outflow_conc_bc(s.sid),
+                    "blood cell",
+                    "outflow_blood_cells",
+                    ids.organ_outflow_bc,
+                )
+            )
+        # the flows of the organ are read for the mix of the lobes only: an
+        # organ without lobes must not gain an input it does not use (the
+        # segmented intestine builds its blood flows itself)
+        out_flow = self._flows(s)[1] if self.lobes else None
+        for part, out, what, kind, body in carried:
+            if out_flow is not None:
+                mix = self._outflow_mix(s, part, k_organ, out_flow, what)
+            else:
+                mix = self._leaving(s, part, self._chains[0][1][-1], k_organ)
+            self._rule(
+                out,
+                mix,
+                U.mM,
+                f"outflow {what} concentration {s.sid} {label(self.organ)} [mM]",
+                f"{what.capitalize()} concentration of the blood leaving the organ."
+                + (
+                    " The flow weighted mix of the lobes, which is what the "
+                    "body receives."
+                    if self.lobes
+                    else ""
+                ),
+                port=Port(f"{out}_port", portType=PortType.OUTPUT_PORT),
+                kind=kind,
+            )
+            self.outputs[out] = body(self.organ, s.sid)
+
+    def _outflow_mix(
+        self,
+        s: Substance,
+        part: Part,
+        k_organ: str | None,
+        out_flow: str,
+        what: str,
+    ) -> str:
+        """The flow weighted mix of the outflow concentrations of the lobes.
+
+        Each lobe drains its own concentration `Cout_<lobe>_<s>` (a rule of
+        the last site of its chain) at its own flow, so the organ drains
+        `sum(Qh_<lobe>*Cout_<lobe>_<s>)/Qh`.
+        """
+        conc = ids.outflow_conc if part is Part.PLASMA else ids.outflow_conc_bc
+        terms: list[str] = []
+        for lobe, sites in self._chains:
+            assert lobe is not None
+            out = conc(s.sid, lobe)
+            self._rule(
+                out,
+                self._leaving(s, part, sites[-1], k_organ),
+                U.mM,
+                f"outflow {what} concentration {s.sid} lobe {lobe} [mM]",
+                f"{what.capitalize()} concentration of the blood leaving lobe {lobe}.",
+                kind="outflow_lobe",
+            )
+            terms.append(f"{self._flow(ids.lobe_flow(out_flow, lobe))} * {out}")
+        return f"({' + '.join(terms)}) / {self._flow(out_flow)}"
 
     def _leaving(
         self, s: Substance, part: Part, zone: str | None, k_organ: str | None
@@ -661,7 +803,47 @@ class StandardBuilder(OrganBuilder):
                 "The fraction of the liver inflow which bypasses the liver.",
             )
             perfused = f"({ONE} - {f_shunt}) * "
-        first, last = self._each_zone[0], self._each_zone[-1]
+        for lobe, sites in self._chains:
+            self._chain_blood_flows(
+                s,
+                parts,
+                k_organ,
+                filtrate if lobe is None else None,
+                carried,
+                inflows,
+                out_flow,
+                out_pool,
+                perfused,
+                f_shunt,
+                lobe,
+                sites,
+            )
+
+    def _chain_blood_flows(
+        self,
+        s: Substance,
+        parts: Parts,
+        k_organ: str | None,
+        filtrate: str | None,
+        carried: list[tuple[Part, str, Part]],
+        organ_inflows: list[tuple[Pool, str]],
+        organ_out_flow: str,
+        out_pool: Pool,
+        perfused: str,
+        f_shunt: str | None,
+        lobe: str | None,
+        sites: tuple[str | None, ...],
+    ) -> None:
+        """The inflow, the series flow and the outflow of one chain of the organ.
+
+        The chain of the organ without lobes, or the chain of one lobe: it is
+        fed from the pools at its own flows, its sites are perfused in series
+        and it drains at its own outflow concentration. The chains are
+        parallel, so no reaction crosses from one lobe into another.
+        """
+        inflows, out_flow = self._chain_flows(organ_inflows, organ_out_flow, lobe)
+        first, last = sites[0], sites[-1]
+        where = "" if lobe is None else f" of lobe {lobe}"
         for part, share, local_part in carried:
             what = "" if part is Part.PLASMA else " blood cells"
             local = ids.species(local_part, s.sid, first)
@@ -670,24 +852,25 @@ class StandardBuilder(OrganBuilder):
                 c = self._pool_species(pool, part, s, parts)
                 rate = f"{self._flow(flow)} * {share} * {c}"
                 self._reaction(
-                    ids.inflow_reaction(pool, part, s.sid),
+                    ids.inflow_reaction(pool, part, s.sid, lobe),
                     f"{c} -> {local}",
                     f"{perfused}{rate}",
-                    f"inflow {s.sid}{what} from {pool.name.lower()} pool",
+                    f"inflow {s.sid}{what} from {pool.name.lower()} pool{where}",
                     kind="blood_flow",
                     pool=pool,
                 )
                 if f_shunt is not None:
                     self._reaction(
-                        ids.shunt_reaction(pool, part, s.sid),
+                        ids.shunt_reaction(pool, part, s.sid, lobe),
                         f"{c} -> {out}",
                         f"{f_shunt} * {rate}",
                         f"shunt {s.sid}{what} from {pool.name.lower()} pool past "
-                        f"the liver into {out_pool.name.lower()} pool",
+                        f"the liver{where} into {out_pool.name.lower()} pool",
                         kind="blood_flow",
                         pool=pool,
                     )
-            for upstream, downstream in itertools.pairwise(self.zones):
+            for upstream, downstream in itertools.pairwise(sites):
+                assert upstream is not None
                 self._reaction(
                     ids.sinusoid_reaction(part, s.sid, upstream),
                     f"{ids.species(local_part, s.sid, upstream)} -> "
@@ -697,19 +880,16 @@ class StandardBuilder(OrganBuilder):
                     f"flow {s.sid}{what} from zone {upstream} into zone {downstream}",
                     kind="blood_flow",
                 )
-            leaving = (
-                ids.outflow_conc(s.sid)
-                if part is Part.PLASMA
-                else ids.outflow_conc_bc(s.sid)
-            )
+            conc = ids.outflow_conc if part is Part.PLASMA else ids.outflow_conc_bc
+            leaving = conc(s.sid, lobe)
             rate = f"{perfused}{self._flow(out_flow)} * {share} * {leaving}"
             if part is Part.PLASMA and filtrate is not None:
                 rate = f"{rate} - {filtrate}"
             self._reaction(
-                ids.outflow_reaction(part, s.sid),
+                ids.outflow_reaction(part, s.sid, lobe),
                 f"{ids.species(local_part, s.sid, last)} -> {out}",
                 rate,
-                f"outflow {s.sid}{what} into {out_pool.name.lower()} pool",
+                f"outflow {s.sid}{what}{where} into {out_pool.name.lower()} pool",
                 kind="blood_flow",
                 pool=out_pool,
             )

@@ -115,7 +115,13 @@ from pkpdsim.pbpk.observers import (
     observer_objects,
     readout_ids,
 )
-from pkpdsim.pbpk.organ import Boundary, GutComponent, OrganComponent, OrganContext
+from pkpdsim.pbpk.organ import (
+    BodyComponent,
+    Boundary,
+    GutComponent,
+    OrganComponent,
+    OrganContext,
+)
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.parts import parts_for
 from pkpdsim.pbpk.pd import PDComponent, ports
@@ -639,6 +645,12 @@ def _body(
     top.add(sink_objects(definition, lumen=gut is not None))
     if gut is not None:
         top.add(gut.body_objects(definition))
+    for organ in organs:
+        component = organ_component(definition, organ)
+        if isinstance(component, GutComponent):
+            continue
+        if isinstance(component, BodyComponent):
+            top.add(component.body_objects(definition))
     top.routes()
 
     if definition.readouts and gut is None:

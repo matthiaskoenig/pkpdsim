@@ -102,6 +102,7 @@ __all__ = [
     "arm_free",
     "arm_weight",
     "arterial_conductance",
+    "arterial_fraction",
     "axial_reaction",
     "baseline",
     "bile",
@@ -230,6 +231,7 @@ __all__ = [
     "pool_species",
     "pool_volume",
     "portal_conductance",
+    "portal_fraction",
     "product_fraction",
     "product_reaction",
     "ps",
@@ -604,6 +606,16 @@ def lobe_flow(flow: str, lobe: str) -> str:
             f"'{flow}' is no hepatic flow; the hepatic flows are {list(HEPATIC_FLOWS)}."
         )
     return f"{flow}_{lobe}"
+
+
+def arterial_fraction(lobe: str) -> str:
+    """The id of the reference share of the hepatic artery inflow of a lobe, `f_ha_<lobe>`."""
+    return f"f_ha_{lobe}"
+
+
+def portal_fraction(lobe: str) -> str:
+    """The id of the reference share of the portal vein inflow of a lobe, `f_po_<lobe>`."""
+    return f"f_po_{lobe}"
 
 
 def lobe_perfusion(lobe: str) -> str:
