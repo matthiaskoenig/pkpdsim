@@ -1661,7 +1661,8 @@ def species_of(s: str, ids: Iterable[str]) -> list[str]:
         The ids which are an organ species (of a zone as well), a slow
         pool of a tissue, a pool species, a blood cell pool species, a lumen,
         undissolved or mucosa species, a tubule species or the depot of a
-        depot route (`Aim_<s>`) of `s`, in the order of `ids`.
+        depot route (`Aim_<s>`) of `s`, in the order of `ids`. This includes
+        the additional blood reservoirs of the optional dynamic heart.
     """
     depots = "|".join(_DEPOT_TOKENS.values())
     pattern = re.compile(
@@ -1669,6 +1670,7 @@ def species_of(s: str, ids: Iterable[str]) -> list[str]:
         r"|slow|pla|fet)"
         rf"|(?:Clumen|Cmu|Asolid)(?:_(?:{_SEGMENTS}))?"
         rf"|Ctub_(?:{_TUBULE})"
+        rf"|CV_C_(?:pa|pv|lv|rv)(?:_{Part.BLOOD_CELLS.value})?"
         rf"|A(?:{depots}))_{re.escape(s)}"
     )
     return [i for i in ids if pattern.fullmatch(i.rsplit("__", 1)[-1])]

@@ -59,6 +59,7 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 import libsbml
 from sbmlutils.factory import (
     PORT_SUFFIX,
+    AlgebraicRule,
     AssignmentRule,
     Compartment,
     InitialAssignment,
@@ -85,6 +86,14 @@ from sbmlutils.validation import ValidationOptions, validate_doc
 from pkpdsim.pbpk import distribution, ids, variants
 from pkpdsim.pbpk.adipose import StartValue, adipose_dynamic, adipose_objects
 from pkpdsim.pbpk.annotation import annotate, initial_assignment, model_annotations
+from pkpdsim.pbpk.cardiovascular import (
+    DynamicHeart,
+    PressureFlow,
+    circulation_boundary,
+    circulation_dynamic,
+    circulation_physiology,
+    circulation_transport,
+)
 from pkpdsim.pbpk.chemistry import Membrane, Metabolism, Transport
 from pkpdsim.pbpk.circadian import circadian_ids, circadian_objects
 from pkpdsim.pbpk.data import cite
@@ -610,6 +619,12 @@ def _body(
         definition, solved_values = _solved(definition, plan, organs)
     top = _Top(definition)
     top.steady = plan
+    if isinstance(definition.variants.circulation, PressureFlow) and not isinstance(
+        definition.variants.circulation, DynamicHeart
+    ):
+        top.generated_formula_ids = {
+            str(p.sid) for p in solved_values if isinstance(p, Parameter)
+        } | {ids.baseline(sid) for sid in plan.solved}
     top.organs = organs
     top.gut = gut.replaces if gut is not None else ()
     top.parameters()
@@ -620,6 +635,7 @@ def _body(
         top.substance(s)
     for pool in Pool:
         top.pool(pool)
+    top.add(circulation_transport(definition))
     top.add(sink_objects(definition, lumen=gut is not None))
     if gut is not None:
         top.add(gut.body_objects(definition))
@@ -642,6 +658,10 @@ def _body(
         inputs = top.inputs()
         md, boundary = organ_component(definition, organ).build(
             organ_context(definition, organ, inputs, plan)
+        )
+        boundary = Boundary(
+            circulation_boundary(definition, organ, boundary.replacements),
+            boundary.outputs,
         )
         if any(md.sid == other.sid for other in model_definitions):
             raise ValueError(f"Two organs build the model definition '{md.sid}'.")
@@ -725,6 +745,7 @@ def _body(
             *(o for o in outputs if o not in definition.dynamic),
             *(f for f in rhythms if f not in definition.dynamic),
             *(b for b in adipose_dynamic(definition) if b not in definition.dynamic),
+            *circulation_dynamic(definition),
         ),
         top.objects,
         model_definitions,
@@ -1541,6 +1562,7 @@ class _Top:
             *pregnancy_objects(definition),
             *adipose_objects(definition),
         ]
+        circulation_physiology(definition, self.objects)
         self.known: set[str] = {
             str(o.sid) for o in self.objects if isinstance(o, Parameter)
         }
@@ -1552,6 +1574,9 @@ class _Top:
         #: the generated steady state, the built organs and the organs of the
         #: intestine of a variant (the starts of the pools)
         self.steady = SteadyPlan()
+        #: Library-generated initial-state solutions may read the consistent
+        #: initial flows of a pressure-driven circulation.
+        self.generated_formula_ids: set[str] = set()
         self.organs: Sequence[Organ] = ()
         self.gut: Sequence[Organ] = ()
 
@@ -1616,6 +1641,10 @@ class _Top:
     def formulas(self) -> None:
         """Give every `Formula` of the top model its initial assignment.
 
+        Generated steady-state solutions of a pressure-driven circulation
+        may read its consistent initial flows. They remain initial snapshots
+        when a later intervention changes the circulation.
+
         Raises:
             ValueError: if a formula reads an id which is no element of the
                 top model, or a species or an observer, naming every such id.
@@ -1630,19 +1659,36 @@ class _Top:
             if s.baseline is not None
         }
         downstream = self._pd_downstream(local) if baselines else set()
+        generated_inputs = dict(top)
+        for sid in circulation_dynamic(self.definition):
+            if sid in top and sid not in downstream:
+                generated_inputs[sid] = ("parameter", top[sid][1])
         problems: list[str] = []
         assignments: list[Sbase] = []
         for o in [*self.objects, *local]:
             if not isinstance(o, FormulaParameter):
                 continue
             where = f"the formula of '{o.sid}' (`{o.formula.expression}`)"
+            generated = str(o.sid) in self.generated_formula_ids
+            inputs = generated_inputs if generated else top
             if str(o.sid) in baselines:
                 problems += self._baseline_problems(
-                    where, o.formula.expression, top, downstream
+                    where, o.formula.expression, inputs, downstream
                 )
             else:
-                problems += formula_problems(where, o.formula.expression, top)
-            assignments.append(formula_assignment(o))
+                problems += formula_problems(where, o.formula.expression, inputs)
+            assignment = formula_assignment(o)
+            if generated:
+                # These solve the initial chemical state. A later pressure
+                # intervention must not rewrite its reference baseline.
+                assignment = StartValue(
+                    assignment.symbol,
+                    assignment.value,
+                    assignment.unit,
+                    name=assignment.name,
+                    sboTerm=assignment.sboTerm,
+                )
+            assignments.append(assignment)
         problems += _formula_cycles([*self.objects, *local])
         if problems:
             raise ValueError(
@@ -1657,7 +1703,8 @@ class _Top:
         A PD output changes during the simulation and may read the species
         (an effect of the arm vein concentration); the initial assignments
         of the top model and the formulas which read it, directly or through
-        each other, follow it (they become rules, `_dynamic`).
+        explicit rules and implicit pressure balances, follow it (they become
+        rules, `_dynamic`). A generated chemical start must not depend on them.
         """
         down = {o for pd in self.definition.pd for o in pd.outputs.values()}
         if not down:
@@ -1672,6 +1719,38 @@ class _Top:
             for o in [*self.objects, *local]
             if isinstance(o, FormulaParameter)
         }
+        reads |= {
+            str(o.variable): _symbols(o.value)
+            for o in self.objects
+            if isinstance(o, AssignmentRule)
+        }
+        ruled = {
+            str(o.variable)
+            for o in self.objects
+            if isinstance(o, AssignmentRule | RateRule)
+        }
+        algebraic_candidates = {
+            str(o.sid)
+            for o in self.objects
+            if isinstance(o, Parameter | Compartment)
+            and not o.constant
+            and o.replacedBy is None
+            and str(o.sid) not in ruled
+        }
+        for residual in self.objects:
+            if not isinstance(residual, AlgebraicRule):
+                continue
+            # Expand explicit flows in a balance to expose its implicit
+            # pressure unknowns. Otherwise a PD change to a resistance would
+            # never reach a pressure hidden behind an assignment rule.
+            expanded = _symbols(residual.value)
+            pending = list(expanded)
+            while pending:
+                dependencies = reads.get(pending.pop(), set()) - expanded
+                expanded.update(dependencies)
+                pending.extend(dependencies)
+            for sid in expanded & algebraic_candidates:
+                reads.setdefault(sid, set()).update(expanded - {sid})
         changed = True
         while changed:
             changed = False

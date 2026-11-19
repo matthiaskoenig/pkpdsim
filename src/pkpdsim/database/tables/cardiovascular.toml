@@ -1,0 +1,158 @@
+# Illustrative adult human defaults for the optional 0D circulation variants.
+# These are model choices, not a reproduced or fitted clinical parameter set.
+# Organ resistances are calibrated in SBML from the PBPK individual's flow
+# fractions and cardiac output; they are not fixed numbers of this table.
+# Pressures: mmHg; volume: l; time: min; resistance: mmHg*min/l.
+# Compliances and ventricular volumes below are reference values; DynamicHeart
+# scales them with CV_scale = Vblood/Vblood_ref. Ventricular elastance and valve
+# resistance scale inversely so a change of body size preserves pressures.
+
+[defaults.P_ar]
+value = 95.0
+unit = "mmHg"
+source = "ModelChoice"
+notes = "Reference systemic arterial pressure; a prescribed boundary in PressureFlow and an initial pressure in DynamicHeart."
+
+[defaults.P_ve]
+value = 5.0
+unit = "mmHg"
+source = "ModelChoice"
+notes = "Reference systemic venous pressure, relative to the same external pressure as every vascular node."
+
+[defaults.P_po]
+value = 10.0
+unit = "mmHg"
+source = "ModelChoice"
+notes = "Reference portal pressure used to calibrate the splanchnic organ resistances and portal-to-sinusoidal resistance; the simulated portal pressure is solved."
+
+[defaults.P_li]
+value = 8.0
+unit = "mmHg"
+source = "ModelChoice"
+notes = "Reference hepatic sinusoidal pressure used to calibrate the hepatic arterial and hepatic outflow resistances; the simulated sinusoidal pressure is solved."
+
+[defaults.P_pa]
+value = 15.0
+unit = "mmHg"
+source = "ModelChoice"
+notes = "Initial pulmonary arterial pressure and reference upstream pressure for pulmonary resistance calibration."
+
+[defaults.P_pv]
+value = 8.0
+unit = "mmHg"
+source = "ModelChoice"
+notes = "Initial pulmonary venous pressure and reference downstream pressure for pulmonary resistance calibration."
+
+[defaults.HR]
+value = 75.0
+unit = "1/min"
+source = "ModelChoice"
+notes = "Reference heart rate of the illustrative human heart; the heart phase is integrated so a changing heart rate does not reset the cardiac cycle."
+
+[defaults.systole]
+value = 0.35
+unit = "dimensionless"
+source = "ModelChoice"
+notes = "Fraction of a cardiac cycle occupied by the raised-cosine ventricular activation; not a reproduction of an experimental activation curve."
+
+[defaults.C_ar]
+value = 0.0015
+unit = "l/mmHg"
+source = "ModelChoice"
+notes = "Systemic arterial compliance of the illustrative adult human circulation."
+
+[defaults.C_ve]
+value = 0.1
+unit = "l/mmHg"
+source = "ModelChoice"
+notes = "Systemic venous compliance; this compliant reservoir buffers redistribution of central blood volume."
+
+[defaults.C_po]
+value = 0.0003
+unit = "l/mmHg"
+source = "ModelChoice"
+notes = "Portal venous compliance scaled to the small explicit PBPK portal pool, not to the entire splanchnic venous bed; portal storage permits a transient difference between splanchnic inflow and hepatic portal outflow."
+
+[defaults.C_pa]
+value = 0.005
+unit = "l/mmHg"
+source = "ModelChoice"
+notes = "Pulmonary arterial compliance of the illustrative adult human circulation."
+
+[defaults.C_pv]
+value = 0.025
+unit = "l/mmHg"
+source = "ModelChoice"
+notes = "Pulmonary venous compliance of the illustrative adult human circulation."
+
+[defaults.E_lv_min]
+value = 60.0
+unit = "mmHg/l"
+source = "ModelChoice"
+notes = "Left ventricular minimum elastance, equivalent to 0.06 mmHg/ml; the time-varying elastance method follows Suga1974 but this number is a model choice."
+
+[defaults.E_lv_max]
+value = 2500.0
+unit = "mmHg/l"
+source = "ModelChoice"
+notes = "Left ventricular maximum elastance, equivalent to 2.5 mmHg/ml; illustrative contractility, not a fitted clinical value."
+
+[defaults.E_rv_min]
+value = 30.0
+unit = "mmHg/l"
+source = "ModelChoice"
+notes = "Right ventricular minimum elastance, equivalent to 0.03 mmHg/ml."
+
+[defaults.E_rv_max]
+value = 800.0
+unit = "mmHg/l"
+source = "ModelChoice"
+notes = "Right ventricular maximum elastance, equivalent to 0.8 mmHg/ml."
+
+[defaults.V0_lv]
+value = 0.01
+unit = "l"
+source = "ModelChoice"
+notes = "Left ventricular volume intercept in P = E(t)*(V - V0); not the minimum admissible chamber volume."
+
+[defaults.V0_rv]
+value = 0.01
+unit = "l"
+source = "ModelChoice"
+notes = "Right ventricular volume intercept in P = E(t)*(V - V0)."
+
+[defaults.V_lv]
+value = 0.12
+unit = "l"
+source = "ModelChoice"
+notes = "Initial left ventricular blood volume; the complete closed loop must be allowed to settle before interpreting periodic beats."
+
+[defaults.V_rv]
+value = 0.12
+unit = "l"
+source = "ModelChoice"
+notes = "Initial right ventricular blood volume; not a periodic-state guarantee."
+
+[defaults.R_valve]
+value = 0.08
+unit = "mmHg*min/l"
+source = "ModelChoice"
+notes = "Resistance of each ideal diode valve when open; closed valves have zero flow. No leaflet dynamics or inertance is represented."
+
+[defaults.f_pa]
+value = 0.08
+unit = "dimensionless"
+source = "ModelChoice"
+notes = "Fraction of the original systemic venous pool reserved for the pulmonary arterial reservoir in DynamicHeart; this volume is subtracted from the systemic venous pool."
+
+[defaults.f_pv]
+value = 0.22
+unit = "dimensionless"
+source = "ModelChoice"
+notes = "Fraction of the original systemic venous pool reserved for the pulmonary venous reservoir in DynamicHeart; pulmonary and ventricular starting volumes are reallocated rather than added to total blood volume."
+
+[defaults.Vblood_ref]
+value = 5.3
+unit = "l"
+source = "ModelChoice"
+notes = "Reference total blood volume for the illustrative adult human compliance and ventricular-volume scaling CV_scale = Vblood/Vblood_ref; the individual's actual blood volume is the existing PBPK quantity."

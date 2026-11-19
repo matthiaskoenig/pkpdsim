@@ -46,10 +46,12 @@ from pathlib import Path
 
 from sbmlsim import Q
 from sbmlsim.distrib import UNCERTAINTY_DIMENSION
+from sbmlsim.engine import Engine
 from sbmlsim.simulation import Scan, Simulation
 from sbmlsim.simulation.definition import Value as Change
 from sbmlsim.simulation.sampling.references import references
 from sbmlsim.simulation.scan import DimensionKind
+from sbmlsim.simulator import Simulator
 from sbmlsim.units import Quantity
 
 from pkpdsim.pbpk import ids
@@ -349,11 +351,26 @@ def _individual_values(
     """Read the kidney values after the individual's pre-initialization."""
     quantities = flat_model(model_path).quantities
     model = loaded_model(model_path)
-    values = references(
-        model,
-        quantities,
-        Simulation(end=1, time_unit="min", preinit_changes=_thawed(changes)),
-    )
+    if model.engine is Engine.CORE:
+        # sbmlsim's sampling references are intentionally read in roadrunner,
+        # which cannot load algebraic rules. IDA supplies the consistent
+        # initial values directly, without equilibrating a pulsatile heart.
+        initial = Simulator(engine=model.engine, n_workers=1).simulate(
+            model,
+            Simulation(
+                end=1e-9,
+                time_unit="min",
+                times=[0.0],
+                preinit_changes=_thawed(changes),
+            ),
+        )
+        values = {sid: float(initial[sid][0]) for sid in quantities}
+    else:
+        values = references(
+            model,
+            quantities,
+            Simulation(end=1, time_unit="min", preinit_changes=_thawed(changes)),
+        )
     numbers = {
         sid: float(value.magnitude) if isinstance(value, Quantity) else value
         for sid, value in values.items()

@@ -8,6 +8,7 @@ from sbmlutils.factory import Creator
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.adipose import Adipose
+from pkpdsim.pbpk.cardiovascular import PressureFlow, check_circulation
 from pkpdsim.pbpk.chemistry import (
     CustomReaction,
     Metabolism,
@@ -98,9 +99,12 @@ class Variants:
             are resolved from the variant registry when the model is built.
             The organs may be given as `Organ` members, their values or their
             names (`"li"`, `"liver"`), normalised to `Organ` members.
+        circulation: an optional pressure-driven circulation (`PressureFlow`
+            or `DynamicHeart`); None retains the fractional-perfusion model.
     """
 
     organs: Mapping[Organ, str | OrganComponent] = field(default_factory=dict)
+    circulation: PressureFlow | None = None
 
     def __post_init__(self) -> None:
         """Normalise the organs to `Organ` members."""
@@ -334,7 +338,8 @@ class PBPKDefinition:
                 lambda x: x.sid,
             ),
             variants=Variants(
-                organs=_merge_variants(sid, [d.variants for d in definitions])
+                organs=_merge_variants(sid, [d.variants for d in definitions]),
+                circulation=_merge_circulation(sid, definitions),
             ),
             routes=_union(
                 sid,
@@ -462,6 +467,7 @@ class PBPKDefinition:
         Raises:
             ValueError: with all problems found, naming the offending ids.
         """
+        check_circulation(self)
         problems: list[str] = []
         problems += self._check_substances()
         known = {s.sid for s in self.substances}
@@ -943,6 +949,24 @@ def _creators(definitions: Iterable[PBPKDefinition]) -> list[Creator]:
     same person when all their fields are equal.
     """
     return list(dict.fromkeys(c for d in definitions for c in d.creators))
+
+
+def _merge_circulation(
+    sid: str, definitions: Sequence[PBPKDefinition]
+) -> PressureFlow | None:
+    """Merge compatible circulation requirements; an omitted choice adds none."""
+    choices = [
+        d.variants.circulation
+        for d in definitions
+        if d.variants.circulation is not None
+    ]
+    if choices and any(
+        not equal_by_value(choices[0], choice) for choice in choices[1:]
+    ):
+        raise ValueError(
+            f"Combine '{sid}': the definitions choose different circulations."
+        )
+    return choices[0] if choices else None
 
 
 def _merge_variants(

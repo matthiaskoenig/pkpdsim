@@ -122,7 +122,7 @@ def growing_states(
             _GROWING[key] = ()
             return ()
         model = loaded_model(path)
-        simulator = Simulator(n_workers=1)
+        simulator = Simulator(n_workers=1, engine=model.engine)
         initial = simulator.run(
             model, Simulation(end=1, preinit_changes=dict(condition))
         )

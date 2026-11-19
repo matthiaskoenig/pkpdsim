@@ -31,6 +31,10 @@ nav = [
     { "Adipose tissue and obesity" = "pbpk/adipose.md" },
     { "Standard organ" = "pbpk/organ.md" },
     { "Organ variants" = "pbpk/variants.md" },
+    { "Cardiovascular circulation" = [
+      { "Model" = "pbpk/cardiovascular.md" },
+      { "Interactive examples" = "pbpk/cardiovascular_examples.md" },
+    ] },
     { "Zonated liver" = "zonation.md" },
     { "Machine perfusion" = "perfusion.md" },
     { "Substances" = "pbpk/substances.md" },
