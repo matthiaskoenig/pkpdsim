@@ -46,6 +46,23 @@ doi = "10.1103/RevModPhys.93.025010"
 [ModelChoice]
 citation = "Choice of a library of pkpdsim (PBPK or machine perfusion), not a value of the literature; the notes of the value give the reasoning."
 
+[Suga1974]
+citation = "Suga H, Sagawa K. Instantaneous pressure-volume relationships and their ratio in the excised, supported canine left ventricle. Circ Res 35(1):117-126, 1974."
+doi = "10.1161/01.RES.35.1.117"
+
+[Levitt2012]
+citation = "Levitt DG, Levitt MD. Quantitative modeling of the physiology of ascites in portal hypertension. BMC Gastroenterol 12:26, 2012."
+doi = "10.1186/1471-230X-12-26"
+
+[SvZeroDSolver]
+citation = "SimVascular. svZeroDSolver: a C++ lumped-parameter solver for blood flow and pressure in hemodynamic networks. https://github.com/SimVascular/svZeroDSolver and https://simvascular.github.io/svZeroDSolver/ (accessed 2026-11-19)."
+
+[ModularCirc]
+citation = "Balmus M and contributors. ModularCirc: modular Python project for modelling the cardiovascular system based on lumped parameter models. https://github.com/alan-turing-institute/ModularCirc (accessed 2026-11-19)."
+
+[Circulation]
+citation = "ComputationalPhysiology. circulation: cardiac circulation models. https://github.com/ComputationalPhysiology/circulation (accessed 2026-11-19)."
+
 [Schiller2005]
 citation = "Schiller C, Fröhlich CP, Giessmann T, Siegmund W, Mönnikes H, Hosten N, Weitschies W. Intestinal fluid volumes and transit of dosage forms as assessed by magnetic resonance imaging. Aliment Pharmacol Ther 22(10):971-979, 2005."
 doi = "10.1111/j.1365-2036.2005.02683.x"

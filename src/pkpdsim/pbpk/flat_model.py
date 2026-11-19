@@ -7,8 +7,7 @@ drains, the reactions, the filtered substances and the ids the flows of the
 kidney depend on. `flat_model` parses the file once per process (by its path
 and modification time, so a file which is built again is read again) and
 gives all of it as a `FlatModel`; `loaded_model` compiles the model once
-(roadrunner at LLJIT `O0`, the fastest compilation, since its simulations
-only reach a steady state or evaluate the initial assignments) with the
+(roadrunner at LLJIT `O0`, or the sbmlsim core engine for algebraic rules) with the
 selections of both, so a model with two builds compiles each build once for
 both checks. `math_names` is the one walker of the names a formula of the
 model reads.
@@ -24,7 +23,9 @@ from functools import lru_cache
 from pathlib import Path
 
 import libsbml
+from sbmlsim.model.model_core import CoreSBMLModel
 from sbmlsim.model.model_roadrunner import RoadrunnerSBMLModel
+from sbmlsim.model.model_sbml import SBMLModel
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.organs import Organ, Part
@@ -125,8 +126,9 @@ class FlatModel:
         quantities: the ids of the flows of the validity of the kidney
             outflow and `GFR_base` which the model has.
         inputs: the ids which the quantities depend on, through initial
-            assignments and assignment rules (themselves included): the
+            assignments, assignment rules and algebraic constraints: the
             changes of an individual.
+        algebraic: whether the model requires a DAE solver.
     """
 
     species: frozenset[str]
@@ -140,6 +142,7 @@ class FlatModel:
     water: bool
     quantities: tuple[str, ...]
     inputs: frozenset[str]
+    algebraic: bool
 
     @property
     def selections(self) -> tuple[str, ...]:
@@ -160,8 +163,11 @@ def flat_model(model_path: Path) -> FlatModel:
     return _read(path, path.stat().st_mtime_ns)
 
 
-def loaded_model(model_path: Path) -> RoadrunnerSBMLModel:
-    """Get a flat model file compiled once per process, at `O0`.
+def loaded_model(model_path: Path) -> SBMLModel:
+    """Get a flat model file compiled once per process in a compatible engine.
+
+    Algebraic rules require the core engine and its IDA solver. Other models
+    retain roadrunner at `O0`.
 
     The selections are those of the equilibration and of the validity of the
     kidney outflow (`FlatModel.selections`); the four models used last stay
@@ -178,11 +184,17 @@ def loaded_model(model_path: Path) -> RoadrunnerSBMLModel:
 
 
 @lru_cache(maxsize=4)
-def _loaded(model_path: Path, mtime_ns: int) -> RoadrunnerSBMLModel:
+def _loaded(model_path: Path, mtime_ns: int) -> SBMLModel:
     """Load a model, `mtime_ns` a key of the cache."""
+    description = _read(model_path, mtime_ns)
+    if description.algebraic:
+        return CoreSBMLModel(
+            source=model_path,
+            selections=list(description.selections),
+        )
     return RoadrunnerSBMLModel(
         source=model_path,
-        selections=list(_read(model_path, mtime_ns).selections),
+        selections=list(description.selections),
         jit_optimization="O0",
     )
 
@@ -221,6 +233,7 @@ def _read(model_path: Path, mtime_ns: int) -> FlatModel:
         water=water,
         quantities=quantities,
         inputs=_dependencies(model, quantities),
+        algebraic=any(rule.isAlgebraic() for rule in model.getListOfRules()),
     )
 
 
@@ -283,7 +296,7 @@ def _kidney(
 
 
 def _dependencies(model: libsbml.Model, roots: Iterable[str]) -> frozenset[str]:
-    """The ids which the roots depend on through initial assignments and rules."""
+    """The ids the roots depend on through explicit and implicit equations."""
     reads: dict[str, set[str]] = {}
     for assignment in model.getListOfInitialAssignments():
         reads.setdefault(assignment.getSymbol(), set()).update(
@@ -294,6 +307,10 @@ def _dependencies(model: libsbml.Model, roots: Iterable[str]) -> frozenset[str]:
             reads.setdefault(rule.getVariable(), set()).update(
                 math_names(rule.getMath())
             )
+        elif rule.isAlgebraic():
+            names = math_names(rule.getMath())
+            for sid in names:
+                reads.setdefault(sid, set()).update(names - {sid})
     seen: set[str] = set()
     stack = list(roots)
     while stack:

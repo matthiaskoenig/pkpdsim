@@ -3,3 +3,9 @@
 tests/data/pkdb_data/**/*.tsv text eol=lf
 tests/data/pkdb_data/**/*.json text eol=lf
 tests/data/pkdb_data/**/*.md text eol=lf
+
+# Browser reference models and runtime sources are fingerprinted byte for byte.
+docs/pbpk/examples/** text eol=lf
+docs/pbpk/examples/solver/*.wasm binary
+# Preserve the upstream notice, including its one whitespace-only line.
+docs/pbpk/examples/solver/THIRD_PARTY.md whitespace=-blank-at-eol

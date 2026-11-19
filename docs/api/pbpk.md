@@ -30,6 +30,14 @@ The PBPK library, see [PBPK library](../pbpk/index.md): the package and the clas
 
 ::: pkpdsim.pbpk.pd
 
+## cardiovascular
+
+The optional circulation variants are described in [Cardiovascular circulation](../pbpk/cardiovascular.md).
+
+::: pkpdsim.pbpk.cardiovascular
+    options:
+      members: [PressureFlow, DynamicHeart, CVU]
+
 ## builder
 
 ::: pkpdsim.pbpk.builder

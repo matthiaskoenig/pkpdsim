@@ -1,5 +1,7 @@
 # Organ variants
 
+The optional [cardiovascular circulation variants](cardiovascular.md) are chosen separately with `Variants(circulation=PressureFlow())` or `Variants(circulation=DynamicHeart())`. They drive the same whole-body organs with pressure-dependent flows; the default remains fractional perfusion.
+
 An organ variant is an alternative component for an organ with the boundary of the standard organ: blood in and blood out (plasma and blood cells, per substance), the flow, the organ volume, the hematocrit and the parameters of the substances and proteins it reads. The circulation sees nothing else, so swapping a variant changes nothing outside the organ: not the other organs, not the observers, not the experiments. A variant places the chemistry of its organ into its parts, so the chemistry is written once per organ whatever variant the model chooses.
 
 ## Catalogue

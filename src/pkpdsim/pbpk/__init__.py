@@ -21,6 +21,7 @@ from pkpdsim.pbpk.adipose import (
 )
 from pkpdsim.pbpk.archive import create_archive, sex_definition
 from pkpdsim.pbpk.builder import BuildResult, build, compose
+from pkpdsim.pbpk.cardiovascular import DynamicHeart, PressureFlow
 from pkpdsim.pbpk.chemistry import (
     LINEAR,
     MM,
@@ -170,6 +171,7 @@ __all__ = [
     "Depot",
     "Direction",
     "DoseDependentDissolution",
+    "DynamicHeart",
     "Equilibration",
     "Erythrocytes",
     "Excretion",
@@ -201,6 +203,7 @@ __all__ = [
     "Parts",
     "Pool",
     "Pregnancy",
+    "PressureFlow",
     "Protein",
     "Q",
     "RateOf",

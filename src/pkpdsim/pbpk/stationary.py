@@ -1142,7 +1142,8 @@ def check_built(plan: SteadyPlan, flat_path: Path) -> None:
     the baseline (the formulas of `pkpdsim.pbpk.steady_state`).
 
     The model is the one of the cache of the library (`loaded_model` of
-    `pkpdsim.pbpk.flat_model`), compiled at `O0` once per process: the build
+    `pkpdsim.pbpk.flat_model`), compiled once per process in a compatible
+    engine: the build
     has just written the flat model, so the check compiles it and the
     equilibration and the validity of the kidney outflow take it from the
     cache instead of compiling it a second time (a compile of a model of the
@@ -1157,17 +1158,28 @@ def check_built(plan: SteadyPlan, flat_path: Path) -> None:
     """
     if not plan.pinned:
         return
-    # a factory without pinned substances compiles no model, so roadrunner,
-    # which `flat_model` imports, is imported here
+    # A factory without pinned substances imports no simulation engine.
+    from sbmlsim.model import RoadrunnerSBMLModel
+
     from pkpdsim.pbpk.flat_model import loaded_model
 
-    r = loaded_model(flat_path).r_loaded
-    rates = list(r.getRatesOfChange())
-    state = {r.model.getStateVectorId(i): rates[i] for i in range(len(rates))}
+    model = loaded_model(flat_path)
+    if isinstance(model, RoadrunnerSBMLModel):
+        r = model.r_loaded
+        rates = list(r.getRatesOfChange())
+        state = {r.model.getStateVectorId(i): rates[i] for i in range(len(rates))}
+        amounts = {
+            sid: float(r.model[ids.pool_species(Pool.VENOUS, sid)])
+            for sid in plan.pinned
+        }
+        balances = {
+            sid: (amounts[sid], state.get(ids.pool_species(Pool.VENOUS, sid), 0.0))
+            for sid in plan.pinned
+        }
+    else:
+        balances = _core_venous_balances(flat_path, plan.pinned)
     for sid in sorted(plan.pinned):
-        venous = ids.pool_species(Pool.VENOUS, sid)
-        amount = r.model[venous]
-        rate = state.get(venous, 0.0)
+        amount, rate = balances[sid]
         relative = abs(rate) / amount if amount > 0 else abs(rate)
         if relative > IMBALANCE_LIMIT:
             warnings.warn(
@@ -1179,3 +1191,51 @@ def check_built(plan: SteadyPlan, flat_path: Path) -> None:
                 SteadyStateWarning,
                 stacklevel=3,
             )
+
+
+def _core_venous_balances(
+    flat_path: Path, substances: Iterable[str]
+) -> dict[str, tuple[float, float]]:
+    """Read exact reaction balances at the consistent initial state of a DAE.
+
+    Summing the stoichiometric reaction rates avoids a finite-difference
+    estimate, whose numerical error could exceed ``IMBALANCE_LIMIT``.
+    """
+    from sbmlsim.model import AbstractModel
+    from sbmlsim.simulation import Simulation
+    from sbmlsim.simulator import Simulator
+
+    doc = libsbml.readSBMLFromFile(str(flat_path))
+    model = doc.getModel()
+    venous = {sid: ids.pool_species(Pool.VENOUS, sid) for sid in substances}
+    coefficients: dict[str, dict[str, float]] = {sid: {} for sid in venous}
+    for reaction in model.getListOfReactions():
+        for sid, species in venous.items():
+            coefficient = sum(
+                reference.getStoichiometry()
+                for reference in reaction.getListOfProducts()
+                if reference.getSpecies() == species
+            ) - sum(
+                reference.getStoichiometry()
+                for reference in reaction.getListOfReactants()
+                if reference.getSpecies() == species
+            )
+            if coefficient:
+                coefficients[sid][reaction.getId()] = coefficient
+    reactions = {rid for terms in coefficients.values() for rid in terms}
+    result = Simulator(engine="core", n_workers=1).simulate(
+        AbstractModel(
+            source=flat_path, selections=[*venous.values(), *sorted(reactions)]
+        ),
+        Simulation(end=1e-9, times=[0.0]),
+    )
+    return {
+        sid: (
+            float(result[species][0]),
+            sum(
+                coefficient * float(result[rid][0])
+                for rid, coefficient in coefficients[sid].items()
+            ),
+        )
+        for sid, species in venous.items()
+    }
