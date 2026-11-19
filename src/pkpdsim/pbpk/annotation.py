@@ -587,6 +587,17 @@ KINDS: dict[str, Kind] = {
     "remnant_fraction": Kind(
         _P, _PHYS, requested="share of the liver which is left after a resection"
     ),
+    "lobe_pressure": Kind(
+        _P, _PHYS, requested="blood pressure in the sinusoids of a lobe of the liver"
+    ),
+    "lobe_resistance": Kind(
+        _P,
+        _PHYS,
+        requested="vascular resistance of a branch of a lobe of the liver",
+    ),
+    "buffer_response": Kind(
+        _P, _PHYS, requested="gain of the hepatic arterial buffer response"
+    ),
     "hematocrit": Kind(
         _P,
         "VOLUME_FRACTION_OF_RED_BLOOD_CELLS",

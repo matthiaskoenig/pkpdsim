@@ -54,6 +54,7 @@ __all__ = [
     "GUT_VASCULAR_FRACTION",
     "GUT_VOLUME",
     "GUT_WALL_FLOW",
+    "HABR_GAIN",
     "HCT",
     "HEIGHT",
     "HEPATIC_FLOWS",
@@ -111,6 +112,7 @@ __all__ = [
     "bile_reaction",
     "blood",
     "bp",
+    "buffer_factor",
     "colon_absorption_factor",
     "compartment",
     "condition_factor",
@@ -188,12 +190,17 @@ __all__ = [
     "kps",
     "kslow",
     "kstab",
+    "lobe_balance",
     "lobe_flow",
     "lobe_functional",
     "lobe_growth",
+    "lobe_outflow",
     "lobe_perfusion",
     "lobe_present",
+    "lobe_pressure",
+    "lobe_reference_flow",
     "lobe_reference_fraction",
+    "lobe_resistance",
     "lobe_shunt",
     "lobe_volume",
     "lobe_volume_fraction",
@@ -482,6 +489,13 @@ flow: proximal tubule, loop of Henle, distal tubule and collecting duct."""
 PS_VAS = "PS_vas"
 """The local id of the exchange between plasma and interstitium of an organ."""
 
+HABR_GAIN = "habr_gain"
+"""The gain of the hepatic arterial buffer response.
+
+The fraction of a lost portal inflow of a lobe which the hepatic artery of
+that lobe compensates (`pkpdsim.pbpk.lobes.HABR`, `cardiovascular.toml`).
+"""
+
 
 def impairment_factor(pid: str) -> str:
     """The id of the factor of all impairments on a quantity, `fimp_GFR`.
@@ -663,6 +677,87 @@ def portal_fraction(lobe: str) -> str:
 def lobe_perfusion(lobe: str) -> str:
     """The id of the perfusion per volume of a lobe, `q_<lobe>` [1/min]."""
     return f"q_{lobe}"
+
+
+def lobe_pressure(lobe: str) -> str:
+    """The id of the sinusoidal pressure of a lobe, `CV_P_li_<lobe>` [mmHg].
+
+    The node of the lobe of the pressure driven circulation, which the
+    balance of its three branches solves. A lobe whose both branches are
+    closed has no inflow, so its node sits at the venous pressure.
+    """
+    return f"CV_P_li_{lobe}"
+
+
+def lobe_resistance(flow: str, lobe: str) -> str:
+    """The id of the resistance of a branch of a lobe, `CV_R_ha_<lobe>` [mmHg*min/l].
+
+    Args:
+        flow: the whole liver flow of the branch, `QHA` (the hepatic artery),
+            `QPO` (the portal vein) or `QH` (the hepatic vein).
+        lobe: the token of the lobe.
+
+    Returns:
+        The resistance of the branch of the lobe.
+
+    Raises:
+        ValueError: for a flow which is not a hepatic flow of the liver.
+    """
+    if flow not in HEPATIC_FLOWS:
+        raise ValueError(
+            f"'{flow}' is no hepatic flow; the hepatic flows are {list(HEPATIC_FLOWS)}."
+        )
+    return f"CV_R_{flow.removeprefix('Q')}_{lobe}"
+
+
+def lobe_balance(lobe: str) -> str:
+    """The id of the volume balance of the node of a lobe, `CV_hepatic_balance_<lobe>`."""
+    return f"CV_hepatic_balance_{lobe}"
+
+
+def buffer_factor(lobe: str) -> str:
+    """The id of the hepatic arterial buffer response of a lobe, `f_habr_<lobe>`.
+
+    The factor on the conductance of the hepatic artery branch of the lobe:
+    1 while the lobe has its reference portal inflow and more when it lost
+    part of it (`pkpdsim.pbpk.lobes.HABR`).
+    """
+    return f"f_habr_{lobe}"
+
+
+def lobe_reference_flow(flow: str, lobe: str) -> str:
+    """The id of the reference flow of a branch of a lobe, `Qha_ref_<lobe>` [l/min].
+
+    The flow of the branch of the intact, unimpaired individual, which the
+    resistance of the branch is calibrated from and which the buffer
+    response measures a loss against.
+
+    Args:
+        flow: the whole liver flow of the branch, `QHA`, `QPO` or `QH`.
+        lobe: the token of the lobe.
+
+    Returns:
+        The reference flow of the branch of the lobe.
+
+    Raises:
+        ValueError: for a flow which is not a hepatic flow of the liver.
+    """
+    if flow not in HEPATIC_FLOWS:
+        raise ValueError(
+            f"'{flow}' is no hepatic flow; the hepatic flows are {list(HEPATIC_FLOWS)}."
+        )
+    return f"{flow}_ref_{lobe}"
+
+
+def lobe_outflow(organ: Organ, lobe: str, s: str) -> str:
+    """The id of the plasma concentration leaving a lobe, `Cout_li_<lobe>_<s>`.
+
+    The organ drains the flow weighted mix of its lobes under the unchanged
+    id `organ_outflow`; this is the concentration of the one lobe, which a
+    study of a regional intervention reads and computes the exposure of a
+    lobe from.
+    """
+    return f"Cout_{organ.value}_{lobe}_{s}"
 
 
 def arterial_conductance(lobe: str) -> str:

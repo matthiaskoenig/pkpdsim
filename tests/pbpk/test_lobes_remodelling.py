@@ -104,15 +104,36 @@ def test_the_flow_driven_driver_makes_the_lobe_volume_a_state(tmp_path: Path) ->
         assert ids.lobe_volume_fraction(token) in assignments
 
 
+def _patency() -> set[str]:
+    """The quantities an intervention changes, which are always dynamic."""
+    return {
+        name(token)
+        for token in RAT_TOKENS
+        for name in (
+            ids.arterial_conductance,
+            ids.portal_conductance,
+            ids.lobe_present,
+        )
+    }
+
+
 def test_lobes_dynamic_names_the_lobe_volumes() -> None:
+    """With a driver the volumes move too, so everything which reads them follows."""
     liver = LobedLiver(remodelling=FlowDriven())
-    assert set(lobes_dynamic(_definition(liver))) == {
+    assert set(lobes_dynamic(_definition(liver))) == _patency() | {
         ids.lobe_volume(t) for t in RAT_TOKENS
     }
 
 
-def test_lobes_dynamic_is_empty_without_a_driver() -> None:
-    assert lobes_dynamic(_definition(LobedLiver())) == ()
+def test_lobes_dynamic_names_the_patency_without_a_driver() -> None:
+    """An intervention changes these whether or not the anatomy follows it.
+
+    A ligation between two phases of a timecourse only moves the flows if the
+    flows are assignment rules, which they are because these are the seeds of
+    the dynamic quantities of the build; without a driver the volumes of the
+    lobes stay constants of the individual.
+    """
+    assert set(lobes_dynamic(_definition(LobedLiver()))) == _patency()
     assert lobes_dynamic(_definition(None)) == ()
 
 

@@ -30,6 +30,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from sbmlutils.factory import (
+    AlgebraicRule,
     AssignmentRule,
     InitialAssignment,
     ModelDefinition,
@@ -40,9 +41,10 @@ from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.annotation import annotate
+from pkpdsim.pbpk.cardiovascular import CVU
 from pkpdsim.pbpk.lobes import HABR, Lobe, Remodelling, check_lobes, lobe_table
 from pkpdsim.pbpk.organ import Boundary, OrganContext, StandardOrgan
-from pkpdsim.pbpk.organs import Organ
+from pkpdsim.pbpk.organs import PORTAL_ORGANS, Organ
 from pkpdsim.pbpk.placement import built_parts
 from pkpdsim.pbpk.remodelling import VREMODELLED, remodelling_sink, sink_objects
 from pkpdsim.pbpk.substance import Substance
@@ -157,7 +159,10 @@ class LobedLiver:
         lobes = self.lobe_set(definition.species)
         if len(lobes) < 2:
             return []
-        objects = lobe_objects(lobes)
+        pressure = definition.variants.circulation is not None
+        objects = lobe_objects(lobes, pressure=pressure)
+        if pressure:
+            objects += pressure_objects(lobes, self.habr)
         if self.remodelling is not None:
             objects += self.remodelling.objects(lobes, definition.species)
             objects += sink_objects(definition)
@@ -396,7 +401,7 @@ def _flows(lobes: Sequence[Lobe]) -> list[Sbase]:
     return objects
 
 
-def lobe_objects(lobes: Sequence[Lobe]) -> list[Sbase]:
+def lobe_objects(lobes: Sequence[Lobe], *, pressure: bool = False) -> list[Sbase]:
     """Get the objects of the top model of a lobe set.
 
     The shares of the volume and of the inflows, the patency of the branches,
@@ -405,6 +410,10 @@ def lobe_objects(lobes: Sequence[Lobe]) -> list[Sbase]:
 
     Args:
         lobes: the lobes, a checked set.
+        pressure: whether the flows come from the pressure driven circulation
+            (`pressure_objects`) instead of the shares of the inflows of the
+            liver; the flows are then variables of the network and this
+            function leaves them to it.
 
     Returns:
         The objects.
@@ -478,9 +487,11 @@ def lobe_objects(lobes: Sequence[Lobe]) -> list[Sbase]:
                     "lobe receives; the lobe flows sum to the flow of the "
                     "liver.",
                     "lobe_flow",
+                    constant=not pressure,
                 )
             )
-    objects += _flows(lobes)
+    if not pressure:
+        objects += _flows(lobes)
     for lobe in lobes:
         objects.append(
             _parameter(
@@ -663,3 +674,256 @@ class LobedBuilder(ZonatedBuilder):
         lobe = self._lobe_of(site)
         assert lobe is not None
         return site[len(lobe) + 1 :]
+
+
+def _reference_flows(lobes: Sequence[Lobe]) -> list[Sbase]:
+    """The flows of the branches of the lobes of the intact individual.
+
+    The reference flows of the whole liver are the flow fractions of the
+    individual times its base cardiac output, which is what the resistances
+    of the circulation are calibrated from (`pkpdsim.pbpk.cardiovascular`);
+    the reference flow of a branch of a lobe is its reference share of those.
+    They are constants of the individual: the resistance of a branch is
+    calibrated from them and the buffer response measures the loss of a
+    portal inflow against them, so neither follows the solution of the
+    network.
+    """
+    portal = " + ".join(
+        f"{ids.flow_fraction(o)} * {ids.CO_BASE}" for o in Organ if o in PORTAL_ORGANS
+    )
+    arterial = f"{ids.flow_fraction(Organ.LIVER)} * {ids.CO_BASE}"
+    whole = {
+        ids.QHA: arterial,
+        ids.QPO: portal,
+        ids.QH: f"{arterial} + {portal}",
+    }
+    share = {
+        ids.QHA: ids.arterial_fraction,
+        ids.QPO: ids.portal_fraction,
+        ids.QH: ids.lobe_reference_fraction,
+    }
+    objects: list[Sbase] = []
+    for flow, formula in whole.items():
+        for lobe in lobes:
+            sid = ids.lobe_reference_flow(flow, lobe.token)
+            objects.append(
+                _parameter(
+                    sid,
+                    1.0,
+                    U.l_per_min,
+                    f"reference blood flow {flow} of {lobe.name} [l/min]",
+                    "The flow of the branch of the lobe of the intact, "
+                    "unimpaired individual: the resistance of the branch is "
+                    "calibrated from it and the buffer response measures a "
+                    "lost portal inflow against it.",
+                    "lobe_flow",
+                )
+            )
+            objects.append(
+                InitialAssignment(
+                    sid, f"{share[flow](lobe.token)} * ({formula})", U.l_per_min
+                )
+            )
+    return objects
+
+
+def _resistances(lobes: Sequence[Lobe]) -> list[Sbase]:
+    """The resistances of the three branches of every lobe.
+
+    Each is calibrated from the reference pressure drop over the branch and
+    the reference flow through it, as the resistance of an organ of the
+    circulation is, so a lobe carries its reference share of the inflow at
+    the reference pressures and the network agrees with the supply fraction
+    mode at baseline.
+    """
+    drop = {
+        ids.QHA: "CV_P_ar_ref - CV_P_li_ref",
+        ids.QPO: "CV_P_po_ref - CV_P_li_ref",
+        ids.QH: "CV_P_li_ref - CV_P_ve_ref",
+    }
+    objects: list[Sbase] = []
+    for flow, difference in drop.items():
+        for lobe in lobes:
+            sid = ids.lobe_resistance(flow, lobe.token)
+            reference = ids.lobe_reference_flow(flow, lobe.token)
+            objects.append(
+                _parameter(
+                    sid,
+                    1.0,
+                    CVU.resistance,
+                    f"resistance of the {flow} branch of {lobe.name} [mmHg*min/l]",
+                    f"`{sid} = ({difference})/{reference}`: the resistance "
+                    "which carries the reference flow of the branch at the "
+                    "reference pressures of the circulation.",
+                    "lobe_resistance",
+                )
+            )
+            objects.append(
+                InitialAssignment(sid, f"({difference})/{reference}", CVU.resistance)
+            )
+    return objects
+
+
+def _buffer(lobes: Sequence[Lobe], habr: HABR | None) -> list[Sbase]:
+    """The hepatic arterial buffer response of every lobe.
+
+    The factor on the conductance of the hepatic artery branch: a lobe which
+    lost part of its portal inflow gains `gain` times the lost flow in its
+    artery, up to `maximum`. Without a response the factor is the constant 1,
+    so the artery of a deportalised lobe only follows the pressure of its
+    node.
+    """
+    objects: list[Sbase] = []
+    if habr is not None:
+        objects.append(
+            annotate(
+                value_parameter(
+                    ids.HABR_GAIN,
+                    habr.gain,
+                    U.dimensionless,
+                    "gain of the hepatic arterial buffer response",
+                    SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+                    "The fraction of a lost portal inflow of a lobe which the "
+                    "hepatic artery of that lobe compensates.",
+                ),
+                kind="buffer_response",
+            )
+        )
+    for lobe in lobes:
+        sid = ids.buffer_factor(lobe.token)
+        objects.append(
+            _parameter(
+                sid,
+                1.0,
+                U.dimensionless,
+                f"hepatic arterial buffer response of {lobe.name}",
+                "The factor on the conductance of the hepatic artery branch "
+                "of the lobe: 1 at its reference portal inflow and more when "
+                "it lost part of it.",
+                "buffer_response",
+                constant=habr is None,
+            )
+        )
+        if habr is None:
+            continue
+        lost = (
+            f"max(0 l_per_min, {ids.lobe_reference_flow(ids.QPO, lobe.token)} - "
+            f"{ids.lobe_flow(ids.QPO, lobe.token)})"
+        )
+        objects.append(
+            AssignmentRule(
+                sid,
+                f"min({habr.maximum} dimensionless, 1 dimensionless + "
+                f"{ids.HABR_GAIN} * {lost} / "
+                f"{ids.lobe_reference_flow(ids.QHA, lobe.token)})",
+                U.dimensionless,
+            )
+        )
+    return objects
+
+
+def pressure_objects(lobes: Sequence[Lobe], habr: HABR | None) -> list[Sbase]:
+    """Get the per lobe vascular network of the pressure driven circulation.
+
+    One sinusoidal node per lobe with three branches to it, the hepatic
+    artery, the portal vein and the hepatic vein, whose volume balance solves
+    the pressure of the lobe; the flows of the liver are the sums of the lobe
+    flows and the sinusoidal pressure of the liver is their flow weighted
+    mean, so the ids the rest of the model reads are unchanged. The splanchnic
+    bed therefore delivers its blood into a liver with one branch fewer after
+    a ligation and the portal pressure rises, which a prescribed flow cannot
+    show.
+
+    The outflow of a lobe is deliberately not clamped at a positive pressure
+    difference, as the branches of the whole liver circulation are: the
+    balance is then linear in the pressure of the lobe and has the one
+    solution `P_ve + (Qha + Qpo) * R_h`, so a lobe whose both branches are
+    closed sits at the venous pressure and carries no flow instead of leaving
+    the solver an under determined node. The two inflows are never negative,
+    so the outflow never is either.
+
+    Args:
+        lobes: the lobes, a checked set.
+        habr: the hepatic arterial buffer response, `None` for a model
+            without one.
+
+    Returns:
+        The objects of the top model.
+    """
+    objects: list[Sbase] = _reference_flows(lobes)
+    objects += _resistances(lobes)
+    objects += _buffer(lobes, habr)
+    for lobe in lobes:
+        node = ids.lobe_pressure(lobe.token)
+        objects.append(
+            _parameter(
+                node,
+                8.0,
+                CVU.mmHg,
+                f"sinusoidal pressure of {lobe.name} [mmHg]",
+                "The node of the lobe: the pressure which the volume balance "
+                "of its three branches solves. A lobe whose both branches "
+                "are closed has no inflow and sits at the venous pressure.",
+                "lobe_pressure",
+                constant=False,
+            )
+        )
+        objects.append(InitialAssignment(node, "CV_P_li_ref", CVU.mmHg))
+        arterial = (
+            f"max(CV_P_ar - {node}, 0 mmHg) * "
+            f"{ids.arterial_conductance(lobe.token)} * "
+            f"{ids.buffer_factor(lobe.token)} * "
+            f"{ids.impairment_factor(ids.organ_flow(Organ.LIVER))} / "
+            f"({ids.lobe_resistance(ids.QHA, lobe.token)} * "
+            f"CV_fR_{Organ.LIVER.value} * CV_fR_systemic)"
+        )
+        portal = (
+            f"max(CV_P_po - {node}, 0 mmHg) * "
+            f"{ids.portal_conductance(lobe.token)} / "
+            f"({ids.lobe_resistance(ids.QPO, lobe.token)} * CV_fR_portal)"
+        )
+        hepatic = (
+            f"({node} - CV_P_ve) / "
+            f"({ids.lobe_resistance(ids.QH, lobe.token)} * CV_fR_hepatic)"
+        )
+        for flow, formula in (
+            (ids.QHA, arterial),
+            (ids.QPO, portal),
+            (ids.QH, hepatic),
+        ):
+            objects.append(
+                AssignmentRule(ids.lobe_flow(flow, lobe.token), formula, U.l_per_min)
+            )
+        objects.append(
+            AlgebraicRule(
+                ids.lobe_balance(lobe.token),
+                f"{ids.lobe_flow(ids.QHA, lobe.token)} + "
+                f"{ids.lobe_flow(ids.QPO, lobe.token)} - "
+                f"{ids.lobe_flow(ids.QH, lobe.token)}",
+                U.l_per_min,
+                name=f"volume balance of the node of {lobe.name}",
+            )
+        )
+    for flow in ids.HEPATIC_FLOWS:
+        objects.append(
+            AssignmentRule(
+                flow,
+                " + ".join(ids.lobe_flow(flow, lobe.token) for lobe in lobes),
+                U.l_per_min,
+            )
+        )
+    # the arterial inflow of the liver is the organ flow of the liver, which
+    # the cardiac output and the transport of the body read
+    objects.append(AssignmentRule(ids.organ_flow(Organ.LIVER), ids.QHA, U.l_per_min))
+    weighted = " + ".join(
+        f"{ids.lobe_flow(ids.QH, lobe.token)} * {ids.lobe_pressure(lobe.token)}"
+        for lobe in lobes
+    )
+    objects.append(
+        AssignmentRule(
+            "CV_P_li",
+            f"({weighted}) / max({ids.QH}, {_TINY} l_per_min)",
+            CVU.mmHg,
+        )
+    )
+    return objects
