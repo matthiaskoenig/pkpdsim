@@ -681,9 +681,13 @@ class StandardBuilder(OrganBuilder):
                 self._leaving(s, part, sites[-1], k_organ),
                 U.mM,
                 f"outflow {what} concentration {s.sid} lobe {lobe} [mM]",
-                f"{what.capitalize()} concentration of the blood leaving lobe {lobe}.",
+                f"{what.capitalize()} concentration of the blood leaving lobe "
+                f"{lobe}; the exposure of the lobe is its area, which a study "
+                "of a regional intervention reads.",
+                port=Port(f"{out}_port", portType=PortType.OUTPUT_PORT),
                 kind="outflow_lobe",
             )
+            self.outputs[out] = ids.lobe_outflow(self.organ, lobe, s.sid)
             terms.append(f"{self._flow(ids.lobe_flow(out_flow, lobe))} * {out}")
         # a liver whose every branch is closed has no flow at all: the guard
         # makes the mix 0 instead of undefined, and nothing leaves the organ
