@@ -182,7 +182,9 @@ class Readout:
     """One timecourse of the model which a place of the figure reports.
 
     Attributes:
-        id: the id of the selection in the compiled model (`LI__Cpl_api`).
+        id: the id of the selection in the compiled model (`LI__Cpl_api`), as
+            the id scheme gives it; it is not checked against a compiled model,
+            the consumer filters the ids the model does not contain.
         label: what it is, in words (`apixaban, liver plasma`).
         unit: the unit the model uses for it (`mmole/liter`).
         kind: `concentration`, `amount`, `rate` or `flux`.
@@ -214,7 +216,12 @@ _RATE = unit_text(U.mmole_per_min)
 
 
 def _compartments(organ: Organ, sid: str, name: str, form: str) -> tuple[Readout, ...]:
-    """The readouts of a substance in an organ, by the tissue form of the substance."""
+    """The readouts of a substance in an organ, by the tissue form of the substance.
+
+    Known limit: the ids are those of an organ without zones. A zonated organ
+    (`OrganContent.variant` `zonated, N zones`) has the zone in its ids
+    (`ids.species(..., zone=)`, `LI__Cpl_z1_api`), which are not given here.
+    """
     title = TITLES.get(organ.value, organ.value)
 
     def conc(part: Part, text: str, *, unbound: bool = False) -> Readout:
@@ -295,7 +302,10 @@ def readouts(
     (`URI`, `INH`, `SLW`), a route and a decoration have no readout. An organ
     reports the compartments of every substance it shows. Ids are built with
     `pkpdsim.pbpk.ids`, the keys with the helpers of the figure writer
-    (`substance_key`, `line_key`).
+    (`substance_key`, `line_key`). The ids are what the id scheme gives, not
+    checked against a compiled model: the consumer filters the ids the model
+    does not contain (a zonated organ, whose ids carry a zone, is not
+    supported, see `_compartments`).
 
     Args:
         content: the content of the definition.

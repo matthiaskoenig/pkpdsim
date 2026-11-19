@@ -70,7 +70,18 @@ def test_the_three_ways_to_point_at_the_sample_agree() -> None:
     want = ["Carm_api", "Carm_free_api", "Carm_blood_api"]
     for key in ("sub:api", "blood/sub:api"):
         assert [r.id for r in groups[key].readouts] == want
-    assert [r.id for r in groups["sample"].readouts][:3] == want
+    content = ModelContent.of(seven_substances())
+    every = [
+        i
+        for sub in content.substances
+        for i in (
+            f"Carm_{sub.sid}",
+            f"Carm_free_{sub.sid}",
+            f"Carm_blood_{sub.sid}",
+        )
+    ]
+    assert [r.id for r in groups["sample"].readouts] == every
+    assert [r.id for r in groups["blood"].readouts] == every
 
 
 def test_the_urine_reports_the_amount_and_the_rate() -> None:
@@ -131,3 +142,22 @@ def test_every_key_path_of_the_drawn_figure_has_a_group(tmp_path: Path) -> None:
     assert paths
     missing = paths - set(_groups())
     assert not missing
+
+
+def test_a_zonated_organ_reports_the_ids_without_a_zone() -> None:
+    """Known limit: a zonated liver has zone ids (`LI__Cpl_z1_api`), not given here."""
+    content = ModelContent.of(seven_substances())
+    assert "zonated" in (content.organs["li"].variant or "")
+    got = [r.id for r in _groups()["li/sub:api"].readouts]
+    assert got[0] == "LI__Cpl_api"
+    assert not any("_z1_" in i for i in got)
+
+
+def test_the_vein_of_the_blood_line_follows_the_figure() -> None:
+    content = ModelContent.of(seven_substances())
+    human = readouts(content)
+    rat = readouts(content, vein="tail vein")
+    line = "blood/txt:OBS: {}: the observer Carm of every substance"
+    assert line.format("arm vein") in human
+    assert line.format("tail vein") in rat
+    assert line.format("arm vein") not in rat
