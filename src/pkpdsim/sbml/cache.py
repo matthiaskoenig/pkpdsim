@@ -58,14 +58,26 @@ def cache_key(
     return _digest(settings.encode() + b"\0" + _normalized(comp))
 
 
-def cache_path(output_dir: Path, sid: str, key: str) -> Path | None:
-    """Use a per-output cache unless a shared directory or 'off' is set."""
+def cache_root() -> Path:
+    """Keep the cached pairs of a user under the cache folder of the platform.
+
+    `XDG_CACHE_HOME` or `~/.cache`, as sbmlsim keeps its own caches, so that a
+    build writes nothing into the directory of the models, which a model
+    package tracks and compares against a rebuild.
+    """
+    configured = os.environ.get("XDG_CACHE_HOME")
+    base = Path(configured).expanduser() if configured else Path.home() / ".cache"
+    return base / "pkpdsim" / "build"
+
+
+def cache_path(key: str) -> Path | None:
+    """Use the cache of the user unless a shared directory or 'off' is set."""
     configured = os.environ.get("PKPDSIM_BUILD_CACHE")
     if configured == "off":
         return None
     if configured:
         return Path(configured).expanduser() / f"{key}.zip"
-    return output_dir / ".pkpdsim-cache" / f"{sid}.zip"
+    return cache_root() / f"{key}.zip"
 
 
 def read_cache(path: Path, key: str, comp: bytes) -> tuple[bytes, bytes] | None:
