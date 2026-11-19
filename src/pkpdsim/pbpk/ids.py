@@ -36,6 +36,7 @@ __all__ = [
     "F_FUNCTIONAL",
     "F_MUCOSA_FLOW",
     "F_MUCOSA_VOLUME",
+    "F_REMNANT",
     "F_RENAL_FUNCTION",
     "F_SHUNT",
     "F_TUBULAR",
@@ -55,6 +56,7 @@ __all__ = [
     "GUT_WALL_FLOW",
     "HCT",
     "HEIGHT",
+    "HEPATIC_FLOWS",
     "HF_SEVERITY",
     "K_BILE",
     "K_BW",
@@ -79,6 +81,7 @@ __all__ = [
     "VBILE",
     "VBLOOD",
     "VFECES",
+    "VLI_REF",
     "VLUMEN",
     "VURINE",
     "V_FETUS",
@@ -98,6 +101,7 @@ __all__ = [
     "arm_blood",
     "arm_free",
     "arm_weight",
+    "arterial_conductance",
     "axial_reaction",
     "baseline",
     "bile",
@@ -181,6 +185,13 @@ __all__ = [
     "kps",
     "kslow",
     "kstab",
+    "lobe_flow",
+    "lobe_functional",
+    "lobe_perfusion",
+    "lobe_present",
+    "lobe_shunt",
+    "lobe_volume",
+    "lobe_volume_fraction",
     "lumen",
     "lumen_amount",
     "lumen_conversion_rate",
@@ -218,6 +229,7 @@ __all__ = [
     "pool_fraction",
     "pool_species",
     "pool_volume",
+    "portal_conductance",
     "product_fraction",
     "product_reaction",
     "ps",
@@ -233,6 +245,7 @@ __all__ = [
     "segment_process",
     "shunt_reaction",
     "sinusoid_reaction",
+    "site",
     "slow_reaction",
     "slow_species",
     "sol_dose",
@@ -355,6 +368,8 @@ QPO = "Qpo"
 """The portal venous blood flow."""
 QH = "Qh"
 """The total liver blood flow."""
+HEPATIC_FLOWS = (QHA, QPO, QH)
+"""The blood flows of the liver which a lobe has its own share of (`lobe_flow`)."""
 F_RENAL_FUNCTION = "f_renal_function"
 """The renal function relative to normal."""
 F_CARDIAC_FUNCTION = "f_cardiac_function"
@@ -375,6 +390,10 @@ EGFR = "eGFR"
 """The GFR per 1.73 m2 body surface area of the renal function, which gives the CKD stage."""
 F_ZONE = "f_zone"
 """The volume fraction of a zone of a zonated organ, `1/n` of `n` zones."""
+VLI_REF = "Vli_ref"
+"""The liver volume the physiology derives from the body weight, which the lobes share."""
+F_REMNANT = "f_remnant"
+"""The share of the reference liver volume which is left: 1 intact, `1 - resected`."""
 VBILE = "Vbile"
 """The volume of the bile, the compartment of `Cbile_<s>`."""
 VURINE = "Vurine"
@@ -512,9 +531,101 @@ def zone(i: int) -> str:
     return f"z{i}"
 
 
+def site(lobe: str | None, zone: str | None) -> str | None:
+    """The token of a place in the liver: a lobe, a zone, or a zone of a lobe.
+
+    The lobe and the zone are the two spatial axes of the liver: the lobes
+    are perfused in parallel, the zones of a lobe in series along its
+    sinusoid. The composite token carries both, `lll_z3`, and is the token
+    every zone keyed id takes (`compartment`, `species`, `exchange_reaction`,
+    `sinusoid_reaction`, `placement_weight`), so a second axis costs those
+    ids nothing. A liver of one lobe has no lobe token and a liver of one
+    zone no zone token, so the ids of a model without lobes do not move.
+
+    Args:
+        lobe: the token of the lobe, `None` for a liver of one lobe.
+        zone: the token of the zone, `None` for a lobe which is not zonated.
+
+    Returns:
+        The composite token, or `None` for the liver of one lobe and one zone.
+    """
+    if lobe is None:
+        return zone
+    if zone is None:
+        return lobe
+    return f"{lobe}_{zone}"
+
+
 def _zoned(prefix: str, zone: str | None, s: str | None = None) -> str:
     """An id of an organ part in a zone, `<prefix>_<zone>_<s>`, without zone `<prefix>_<s>`."""
     return "_".join(p for p in (prefix, zone, s) if p is not None)
+
+
+def lobe_volume(lobe: str) -> str:
+    """The id of the volume of a lobe of the liver, `Vli_<lobe>` [l]."""
+    return f"{organ_volume(Organ.LIVER)}_{lobe}"
+
+
+def lobe_volume_fraction(lobe: str) -> str:
+    """The id of the reference share of the liver volume of a lobe, `f_vol_<lobe>`."""
+    return f"f_vol_{lobe}"
+
+
+def lobe_present(lobe: str) -> str:
+    """The id of the switch of a lobe, `f_present_<lobe>`: 1 in place, 0 resected."""
+    return f"f_present_{lobe}"
+
+
+def lobe_functional(lobe: str) -> str:
+    """The id of the functional fraction of the tissue of a lobe, `f_functional_<lobe>`."""
+    return f"{F_FUNCTIONAL}_{lobe}"
+
+
+def lobe_shunt(lobe: str) -> str:
+    """The id of the portosystemic shunt of a lobe, `f_shunt_<lobe>`."""
+    return f"{F_SHUNT}_{lobe}"
+
+
+def lobe_flow(flow: str, lobe: str) -> str:
+    """The id of a hepatic blood flow of a lobe, `Qha_<lobe>`, `Qpo_<lobe>`, `Qh_<lobe>`.
+
+    Args:
+        flow: the whole liver flow, `QHA`, `QPO` or `QH`.
+        lobe: the token of the lobe.
+
+    Returns:
+        The flow of the lobe.
+
+    Raises:
+        ValueError: for a flow which is not a hepatic flow of the liver.
+    """
+    if flow not in HEPATIC_FLOWS:
+        raise ValueError(
+            f"'{flow}' is no hepatic flow; the hepatic flows are {list(HEPATIC_FLOWS)}."
+        )
+    return f"{flow}_{lobe}"
+
+
+def lobe_perfusion(lobe: str) -> str:
+    """The id of the perfusion per volume of a lobe, `q_<lobe>` [1/min]."""
+    return f"q_{lobe}"
+
+
+def arterial_conductance(lobe: str) -> str:
+    """The id of the patency of the hepatic artery branch of a lobe, `g_ha_<lobe>`.
+
+    1 is the open branch, 0 the ligated one. An occlusion acts on the
+    conductance and never on a resistance, so no rate law divides by zero.
+    """
+    return f"g_ha_{lobe}"
+
+
+def portal_conductance(lobe: str) -> str:
+    """The id of the patency of the portal vein branch of a lobe, `g_po_<lobe>`.
+
+    1 is the open branch, 0 the ligated one (portal vein ligation).
+    """
+    return f"g_po_{lobe}"
 
 
 def compartment(part: Part, zone: str | None = None) -> str:
@@ -527,7 +638,7 @@ def species(part: Part, s: str, zone: str | None = None) -> str:
     return _zoned(f"C{part.value}", zone, s)
 
 
-def zonal_mean(part: Part, s: str, periportal: bool) -> str:
+def zonal_mean(part: Part, s: str, periportal: bool, lobe: str | None = None) -> str:
     """The local id of a mean over a third of a zonated organ, `Cpl_pp_<s>`.
 
     The mean concentration of `s` in a part of the first (periportal, `pp`)
@@ -536,7 +647,8 @@ def zonal_mean(part: Part, s: str, periportal: bool) -> str:
     third weighted by their overlap with it. The tokens cannot be a zone
     (`z1` to `z<n>`), so a mean is no species of a zone.
     """
-    return _zoned(f"C{part.value}", "pp" if periportal else "pc", s)
+    third = "pp" if periportal else "pc"
+    return _zoned(f"C{part.value}", site(lobe, third), s)
 
 
 def pool_compartment(pool: Pool, part: Part) -> str:
@@ -735,25 +847,32 @@ def organ_outflow_bc(organ: Organ, s: str) -> str:
     return f"Cout_{organ.value}_{Part.BLOOD_CELLS.value}_{s}"
 
 
-def inflow_reaction(pool: Pool, part: Part, s: str) -> str:
+def inflow_reaction(pool: Pool, part: Part, s: str, site: str | None = None) -> str:
     """The local id of the inflow of `s` from a pool into an organ, `J_in_ar_pl_<s>`.
 
     `part` is the part of the blood which carries it, plasma or blood cells.
+    A lobed liver has one inflow per lobe, into the first site of its chain,
+    so the id carries that site: `J_in_ar_pl_<s>_lll_z1`.
     """
-    return f"J_in_{pool.value}_{part.value}_{s}"
+    return _zoned(f"J_in_{pool.value}_{part.value}_{s}", site)
 
 
-def outflow_reaction(part: Part, s: str) -> str:
-    """The local id of the outflow of `s` from an organ into its pool, `J_out_pl_<s>`."""
-    return f"J_out_{part.value}_{s}"
+def outflow_reaction(part: Part, s: str, site: str | None = None) -> str:
+    """The local id of the outflow of `s` from an organ into its pool, `J_out_pl_<s>`.
+
+    A lobed liver drains each lobe out of the last site of its chain, so the
+    id carries that site: `J_out_pl_<s>_lll_z3`.
+    """
+    return _zoned(f"J_out_{part.value}_{s}", site)
 
 
-def shunt_reaction(pool: Pool, part: Part, s: str) -> str:
+def shunt_reaction(pool: Pool, part: Part, s: str, site: str | None = None) -> str:
     """The local id of the shunt of `s` from a pool past the liver, `J_shunt_po_pl_<s>`.
 
     `part` is the part of the blood which carries it, plasma or blood cells.
+    A lobed liver shunts the inflow of each lobe, so the id carries its site.
     """
-    return f"J_shunt_{pool.value}_{part.value}_{s}"
+    return _zoned(f"J_shunt_{pool.value}_{part.value}_{s}", site)
 
 
 def filtration_reaction(s: str) -> str:
@@ -788,14 +907,19 @@ def axial_reaction(part: Part, s: str, zone: str) -> str:
     return f"D_{zone}_{part.value}_{s}"
 
 
-def outflow_conc(s: str) -> str:
-    """The local id of the concentration leaving an organ, `Cout_<s>`."""
-    return f"Cout_{s}"
+def outflow_conc(s: str, lobe: str | None = None) -> str:
+    """The local id of the concentration leaving an organ, `Cout_<s>`.
+
+    A lobed liver has one per lobe, `Cout_<lobe>_<s>`; the whole liver
+    `Cout_<s>` is then the flow weighted mix of them, which is what the body
+    receives.
+    """
+    return _zoned("Cout", lobe, s)
 
 
-def outflow_conc_bc(s: str) -> str:
+def outflow_conc_bc(s: str, lobe: str | None = None) -> str:
     """The local id of the blood cell concentration leaving an organ, `Cout_bc_<s>`."""
-    return f"Cout_{Part.BLOOD_CELLS.value}_{s}"
+    return _zoned(f"Cout_{Part.BLOOD_CELLS.value}", lobe, s)
 
 
 def mr(s: str) -> str:
