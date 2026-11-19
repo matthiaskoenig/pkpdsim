@@ -59,6 +59,7 @@ __all__ = [
     "html_snippet",
     "interactive_figure",
     "readouts",
+    "write_readouts",
 ]
 
 REPOSITORY = "https://github.com/matthiaskoenig/pkpdsim"
@@ -394,6 +395,50 @@ def readouts(
     for key in ("bladder", "gallbladder", "uterus"):
         add(key, key)
     return out
+
+
+CONTRACT = "figurereadouts/1"
+"""The version of the payload of the sidecar `write_readouts` writes."""
+
+
+def write_readouts(content: ModelContent, svg: Path, *, vein: str = "arm vein") -> Path:
+    """Write the readouts of the keys of a figure beside it, for other tools.
+
+    The sidecar `<svg stem>.readouts.json` is `{"contract": "figurereadouts/1",
+    "model": <sid>, "keys": {<path>: {"label": str, "readouts": [{"id",
+    "label", "unit", "kind"}]}}}`, the paths and groups of `readouts`, so a
+    reader of the SVG needs no import of pkpdsim: it joins the `data-k` of the
+    ancestors of a clicked element into a path and looks it up. Every path the
+    figure draws is a key (a decoration has no readouts). The ids are those of
+    the id scheme and are not checked against a compiled model, the reader
+    filters the ones its model lacks.
+
+    Args:
+        content: the content of the model the figure shows.
+        svg: the SVG file of the figure.
+        vein: the sampling site named in the figure (`readouts`), the vein of
+            the animal of an animal figure.
+
+    Returns:
+        The path of the sidecar.
+    """
+    payload = {
+        "contract": CONTRACT,
+        "model": content.sid,
+        "keys": {
+            key: {
+                "label": group.label,
+                "readouts": [
+                    {"id": r.id, "label": r.label, "unit": r.unit, "kind": r.kind}
+                    for r in group.readouts
+                ],
+            }
+            for key, group in readouts(content, vein=vein).items()
+        },
+    }
+    path = svg.with_suffix(".readouts.json")
+    path.write_text(json.dumps(payload, indent=1) + "\n", encoding="utf-8")
+    return path
 
 
 def _script_json(value: object) -> str:

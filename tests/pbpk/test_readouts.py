@@ -1,15 +1,18 @@
 """The readouts of every key of a model figure."""
 
+import json
 from pathlib import Path
 from xml.etree import ElementTree
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.organs import Organ
+from pkpdsim.pbpk.visual.anatomy import anatomy_figure
 from pkpdsim.pbpk.visual.content import ModelContent
 from pkpdsim.pbpk.visual.interactive import (
     ReadoutGroup,
     interactive_figure,
     readouts,
+    write_readouts,
 )
 
 from .test_figure import seven_substances
@@ -161,3 +164,55 @@ def test_the_vein_of_the_blood_line_follows_the_figure() -> None:
     assert line.format("arm vein") in human
     assert line.format("tail vein") in rat
     assert line.format("arm vein") not in rat
+
+
+def _key_paths_of(svg: Path) -> set[str]:
+    """The paths of the data-k of every element, the ancestors joined by `/`."""
+    paths: set[str] = set()
+
+    def walk(node: ElementTree.Element, prefix: tuple[str, ...]) -> None:
+        key = node.get("data-k")
+        here = (*prefix, key) if key is not None else prefix
+        if key is not None:
+            paths.add("/".join(here))
+        for child in node:
+            walk(child, here)
+
+    walk(ElementTree.parse(svg).getroot(), ())
+    return paths
+
+
+def test_every_key_the_figure_draws_is_a_key_of_the_sidecar(tmp_path: Path) -> None:
+    definition = seven_substances()
+    svg = anatomy_figure(definition, tmp_path / "m_body.svg")
+    sidecar = write_readouts(ModelContent.of(definition), svg)
+    assert sidecar.name == "m_body.readouts.json"
+    payload = json.loads(sidecar.read_text())
+    assert payload["contract"] == "figurereadouts/1"
+    assert payload["model"] == definition.sid
+    drawn = _key_paths_of(svg)
+    assert len(drawn) > 20
+    assert any("/" in k for k in drawn)
+    assert drawn <= set(payload["keys"])  # a dead hotspot is a defect
+    group = payload["keys"]["li"]
+    assert set(group) == {"label", "readouts"}
+    assert all(set(r) == {"id", "label", "unit", "kind"} for r in group["readouts"])
+
+
+def test_the_sidecar_follows_the_vein_of_an_animal_figure(tmp_path: Path) -> None:
+    content = ModelContent.of(seven_substances())
+    sidecar = write_readouts(content, tmp_path / "m.svg", vein="tail vein")
+    keys = json.loads(sidecar.read_text())["keys"]
+    assert any(k.startswith("blood/txt:OBS: tail vein") for k in keys)
+    assert not any("arm vein" in k for k in keys)
+
+
+def test_the_archive_writes_the_sidecar_beside_the_anatomy_figure(
+    tmp_path: Path,
+) -> None:
+    from .test_archive import _create
+
+    _create(tmp_path)
+    sidecar = tmp_path / "models" / "simple_body.readouts.json"
+    assert json.loads(sidecar.read_text())["model"] == "simple"
+    assert not (tmp_path / "models" / "simple.readouts.json").exists()
