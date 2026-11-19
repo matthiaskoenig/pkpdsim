@@ -70,7 +70,6 @@ __all__ = [
     "QH",
     "QHA",
     "QPO",
-    "Q_LIVER_REF",
     "Q_PLACENTA",
     "SAT",
     "SV_TIS",
@@ -192,7 +191,6 @@ __all__ = [
     "kstab",
     "lobe_balance",
     "lobe_flow",
-    "lobe_functional",
     "lobe_growth",
     "lobe_outflow",
     "lobe_perfusion",
@@ -201,7 +199,6 @@ __all__ = [
     "lobe_reference_flow",
     "lobe_reference_fraction",
     "lobe_resistance",
-    "lobe_shunt",
     "lobe_volume",
     "lobe_volume_fraction",
     "lumen",
@@ -410,8 +407,6 @@ VLI_REF = "Vli_ref"
 VLI_LOBES = "Vli_lobes"
 """The id of the sum of the volumes of the lobes, the liver which is there."""
 
-Q_LIVER_REF = "q_li_ref"
-"""The id of the reference perfusion per volume of the liver, `Qh/Vli`."""
 """The liver volume the physiology derives from the body weight, which the lobes share."""
 F_REMNANT = "f_remnant"
 """The share of the reference liver volume which is left: 1 intact, `1 - resected`."""
@@ -602,16 +597,6 @@ def lobe_volume_fraction(lobe: str) -> str:
 def lobe_present(lobe: str) -> str:
     """The id of the switch of a lobe, `f_present_<lobe>`: 1 in place, 0 resected."""
     return f"f_present_{lobe}"
-
-
-def lobe_functional(lobe: str) -> str:
-    """The id of the functional fraction of the tissue of a lobe, `f_functional_<lobe>`."""
-    return f"{F_FUNCTIONAL}_{lobe}"
-
-
-def lobe_shunt(lobe: str) -> str:
-    """The id of the portosystemic shunt of a lobe, `f_shunt_<lobe>`."""
-    return f"{F_SHUNT}_{lobe}"
 
 
 def lobe_flow(flow: str, lobe: str) -> str:

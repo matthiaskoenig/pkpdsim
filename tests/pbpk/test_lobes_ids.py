@@ -23,8 +23,6 @@ def test_lobe_anatomy_ids() -> None:
     assert ids.lobe_volume("lll") == "Vli_lll"
     assert ids.lobe_volume_fraction("lll") == "f_vol_lll"
     assert ids.lobe_present("lll") == "f_present_lll"
-    assert ids.lobe_functional("lll") == "f_functional_lll"
-    assert ids.lobe_shunt("lll") == "f_shunt_lll"
 
 
 def test_lobe_flow_ids() -> None:
@@ -111,7 +109,6 @@ def test_lobe_remodelling_ids() -> None:
     assert ids.lobe_reference_fraction("lll") == "f_vol_ref_lll"
     assert ids.lobe_growth("lll") == "dVli_lll"
     assert ids.VLI_LOBES == "Vli_lobes"
-    assert ids.Q_LIVER_REF == "q_li_ref"
 
 
 def test_remodelling_reaction_id() -> None:

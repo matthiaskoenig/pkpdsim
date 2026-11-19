@@ -12,7 +12,12 @@ edit_uri = "edit/develop/docs/"
 
 # the diagrams of the PBPK library, see `docs/stylesheets/pbpk.css`
 extra_css = ["stylesheets/pbpk.css"]
-extra_javascript = ["javascripts/figures.js"]
+# the equations of the PBPK pages, rendered by MathJax (`docs/javascripts/mathjax.js`)
+extra_javascript = [
+  "javascripts/figures.js",
+  "javascripts/mathjax.js",
+  "https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js",
+]
 
 nav = [
   { "Home" = "index.md" },
@@ -31,6 +36,7 @@ nav = [
     { "Adipose tissue and obesity" = "pbpk/adipose.md" },
     { "Standard organ" = "pbpk/organ.md" },
     { "Organ variants" = "pbpk/variants.md" },
+    { "Liver lobes" = "pbpk/lobes.md" },
     { "Cardiovascular circulation" = [
       { "Model" = "pbpk/cardiovascular.md" },
       { "Interactive examples" = "pbpk/cardiovascular_examples.md" },
@@ -90,6 +96,7 @@ nav = [
     { "pbpk regional absorption" = "api/pbpk_regional.md" },
     { "pbpk kidney validity" = "api/pbpk_kidney_validity.md" },
     { "pbpk impairment" = "api/pbpk_impairment.md" },
+    { "pbpk liver lobes" = "api/pbpk_lobes.md" },
     { "pbpk ids and data" = "api/pbpk_ids.md" },
     { "pbpk figures" = "api/pbpk_visual.md" },
     { "zonation" = "api/zonation.md" },
@@ -183,6 +190,7 @@ footnotes = {}
 md_in_html = {}
 tables = {}
 toc.permalink = true
+pymdownx.arithmatex = { generic = true }
 pymdownx.betterem = {}
 pymdownx.caret = {}
 pymdownx.details = {}
