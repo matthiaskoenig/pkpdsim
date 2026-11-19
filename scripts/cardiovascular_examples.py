@@ -299,17 +299,26 @@ def export_browser_model(path: Path, output: Path) -> None:
     that generated the reference trajectories, not a separately pinned copy.
     """
     output.mkdir(parents=True, exist_ok=True)
-    compiled = sbmlsim_core.compile_sbml(path.read_text(encoding="utf-8"))
+    # Canonical LF text keeps exports and fingerprints independent of the host OS.
+    sbml = path.read_text(encoding="utf-8")
+    compiled = sbmlsim_core.compile_sbml(sbml)
     (output / "model.wasm").write_bytes(compiled.wasm)
     (output / "model.json").write_text(
         json.dumps(compiled.description, separators=(",", ":"), allow_nan=False) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
-    shutil.copyfile(path, output / "model.xml")
+    (output / "model.xml").write_text(sbml, encoding="utf-8", newline="\n")
     for name, wasm in sbmlsim_core.runtime_wasm().items():
         (output / f"{name}.wasm").write_bytes(wasm)
-    (output / "sbmlsim-core.js").write_text(core_web.script(), encoding="utf-8")
-    (output / "THIRD_PARTY.md").write_text(sbmlsim_core.THIRD_PARTY, encoding="utf-8")
+    (output / "sbmlsim-core.js").write_text(
+        core_web.script().replace("\r\n", "\n"), encoding="utf-8", newline="\n"
+    )
+    (output / "THIRD_PARTY.md").write_text(
+        sbmlsim_core.THIRD_PARTY.replace("\r\n", "\n"),
+        encoding="utf-8",
+        newline="\n",
+    )
     package = distribution("sbmlsim-core")
     license_file = next(
         file for file in package.files or () if str(file).endswith("licenses/LICENSE")
@@ -319,7 +328,7 @@ def export_browser_model(path: Path, output: Path) -> None:
         "generated_by": "scripts/cardiovascular_examples.py",
         "engine": "SUNDIALS IDA",
         "sbmlsim_core_version": version("sbmlsim-core"),
-        "sbml_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "sbml_sha256": hashlib.sha256(sbml.encode("utf-8")).hexdigest(),
         "columns": list(COLUMNS),
         "start": 0.0,
         "end": END,
@@ -340,6 +349,7 @@ def export_browser_model(path: Path, output: Path) -> None:
     (output / "config.json").write_text(
         json.dumps(config, separators=(",", ":"), allow_nan=False) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
 
 
@@ -362,7 +372,8 @@ def generate(*, browser_output: Path | None = None) -> dict[str, Any]:
         if browser_output is not None:
             export_browser_model(heart.flat_path, browser_output)
         fingerprint = hashlib.sha256(
-            pressure.flat_path.read_bytes() + heart.flat_path.read_bytes()
+            pressure.flat_path.read_text(encoding="utf-8").encode("utf-8")
+            + heart.flat_path.read_text(encoding="utf-8").encode("utf-8")
         ).hexdigest()
         return {
             "schema_version": 1,
@@ -408,6 +419,7 @@ def write(output: Path = OUTPUT) -> None:
         json.dumps(data, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
         + "\n",
         encoding="utf-8",
+        newline="\n",
     )
 
 

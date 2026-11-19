@@ -51,11 +51,37 @@ def test_browser_runtime_is_exported_from_the_installed_core_release() -> None:
     )
     for name, wasm in sbmlsim_core.runtime_wasm().items():
         assert (ASSETS / f"{name}.wasm").read_bytes() == wasm
-    assert (ASSETS / "sbmlsim-core.js").read_text(encoding="utf-8") == web.script()
+    assert (ASSETS / "sbmlsim-core.js").read_text(
+        encoding="utf-8"
+    ) == web.script().replace("\r\n", "\n")
     assert (ASSETS / "THIRD_PARTY.md").read_text(
         encoding="utf-8"
-    ) == sbmlsim_core.THIRD_PARTY
+    ) == sbmlsim_core.THIRD_PARTY.replace("\r\n", "\n")
     assert (ASSETS / "LICENSE").is_file()
+
+
+@pytest.mark.parametrize("newline", ["\n", "\r\n"], ids=["LF", "CRLF"])
+def test_browser_export_has_portable_text_and_fingerprints(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, newline: str
+) -> None:
+    source = tmp_path / "heart.xml"
+    source.write_bytes(
+        (ASSETS / "model.xml")
+        .read_text(encoding="utf-8")
+        .replace("\n", newline)
+        .encode()
+    )
+    script = web.script().replace("\r\n", "\n").replace("\n", newline)
+    monkeypatch.setattr(web, "script", lambda: script)
+    monkeypatch.setattr(
+        sbmlsim_core,
+        "THIRD_PARTY",
+        sbmlsim_core.THIRD_PARTY.replace("\r\n", "\n").replace("\n", newline),
+    )
+    output = tmp_path / "export"
+    GENERATOR["export_browser_model"](source, output)
+    for name in ("model.xml", "config.json", "sbmlsim-core.js", "THIRD_PARTY.md"):
+        assert (output / name).read_bytes() == (ASSETS / name).read_bytes(), name
 
 
 def test_slider_worker_matches_a_fresh_python_ida_solution(

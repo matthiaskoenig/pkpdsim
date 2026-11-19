@@ -70,7 +70,8 @@ def test_data_names_its_solver_units_and_reproducible_source(
     assert provenance["units"]["time"] == "s"
     assert provenance["units"]["CV_V_lv"] == "ml"
     fingerprint = hashlib.sha256(
-        sbml["pressure"].read_bytes() + sbml["heart"].read_bytes()
+        sbml["pressure"].read_text(encoding="utf-8").encode("utf-8")
+        + sbml["heart"].read_text(encoding="utf-8").encode("utf-8")
     ).hexdigest()
     assert provenance["sbml_sha256"] == fingerprint, (
         "Reference models changed: run `uv run python scripts/cardiovascular_examples.py`"
