@@ -25,9 +25,8 @@ less. With the pressure driven circulation the flows come from per lobe
 vascular branches instead, through the same ids.
 """
 
-import copy
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from sbmlutils.factory import (
@@ -41,13 +40,11 @@ from sbmlutils.metadata import SBO
 
 from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.annotation import annotate
-from pkpdsim.pbpk.chemistry import CustomReaction
 from pkpdsim.pbpk.lobes import HABR, Lobe, Remodelling, check_lobes, lobe_table
-from pkpdsim.pbpk.organ import Boundary, OrganContext, StandardBuilder, StandardOrgan
+from pkpdsim.pbpk.organ import Boundary, OrganContext, StandardOrgan
 from pkpdsim.pbpk.organs import Organ
-from pkpdsim.pbpk.placement import place, zone_ids
 from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
+from pkpdsim.pbpk.variants.liver_zonated import ZonatedBuilder, ZonatedLiver
 from pkpdsim.sbml.parameters import value_parameter
 
 if TYPE_CHECKING:
@@ -206,15 +203,26 @@ def _check_sites(n_lobes: int, n_zones: int) -> None:
 
 
 def _parameter(
-    pid: str, v: float, unit: object, name: str, text: str, kind: str
+    pid: str,
+    v: float,
+    unit: object,
+    name: str,
+    text: str,
+    kind: str,
+    *,
+    constant: bool = True,
 ) -> Parameter:
-    """A constant parameter of the body of the lobes, annotated by its kind."""
+    """A parameter of the body of the lobes, annotated by its kind.
+
+    `constant=False` for a parameter an assignment rule follows during the
+    simulation (the perfusion of a lobe, the remnant fraction of the liver).
+    """
     return annotate(
         Parameter(
             pid,
             v,
             unit,  # ty: ignore[invalid-argument-type]
-            constant=True,
+            constant=constant,
             name=name,
             sboTerm=_SBO_PARAMETER,
             notes=text,
@@ -418,6 +426,7 @@ def lobe_objects(lobes: Sequence[Lobe]) -> list[Sbase]:
                 "the quantity a lobe is hyperperfused or hypoperfused in, "
                 "and the stimulus of the remodelling.",
                 "lobe_perfusion",
+                constant=False,
             )
         )
         objects.append(
@@ -437,6 +446,7 @@ def lobe_objects(lobes: Sequence[Lobe]) -> list[Sbase]:
             "and a resection of the lobes of half the mass leaves 0.5. It is "
             "the quantity the hepatectomy studies report as the remnant.",
             "remnant_fraction",
+            constant=False,
         )
     )
     objects.append(
@@ -453,8 +463,14 @@ def lobe_objects(lobes: Sequence[Lobe]) -> list[Sbase]:
     return objects
 
 
-class LobedBuilder(StandardBuilder):
-    """The SBML objects of the lobed liver: the standard liver in lobes in parallel."""
+class LobedBuilder(ZonatedBuilder):
+    """The SBML objects of the lobed liver: the chains of the lobes in parallel.
+
+    It is the builder of the zonated liver with a second axis: the lobes are
+    the parallel chains, the zones the steps along each chain, and a site
+    (`ids.site`) carries both. A lumped lobed liver has no zone token, as the
+    zonated liver of one lobe has no lobe token.
+    """
 
     def __init__(
         self, ctx: OrganContext, liver: LobedLiver, lobes: Sequence[Lobe]
@@ -465,99 +481,45 @@ class LobedBuilder(StandardBuilder):
             ctx: the context of the liver.
             liver: the component.
             lobes: the resolved lobes.
+
+        Raises:
+            ValueError: for another organ than the liver, or whatever the
+                zonated liver refuses (a process it cannot place, a species
+                without the geometry of the sinusoid).
         """
-        super().__init__(ctx, liver.name)
+        zonation = liver.zonation if liver.zonation is not None else ZonatedLiver()
+        super().__init__(ctx, replace(zonation, name=liver.name))
+        if liver.zonation is None:
+            # the lumped lobes are the chains of one site, which carries the
+            # lobe and no zone, as the liver of one zone carries none
+            self.zones = ()
         self.liver = liver
-        self.lobes = tuple(lobe.token for lobe in lobes)
         self.lobe_set = tuple(lobes)
+        self.lobes = tuple(lobe.token for lobe in lobes)
 
     def _notes(self) -> str:
         """The notes of the model definition."""
+        where = (
+            "lumped"
+            if not self.zones
+            else f"in the {len(self.zones)} zones of its sinusoid"
+        )
         return (
-            f"The liver in the lobes {list(self.lobes)}, perfused in "
-            "parallel: each lobe holds its share of the volume, is fed at its "
-            "own hepatic artery and portal vein flows and drains at its own "
-            "concentration; the organ drains the flow weighted mix of them."
+            f"The liver in the lobes {list(self.lobes)}, perfused in parallel, "
+            f"each {where}: a lobe holds its share of the volume and of the "
+            "capacity of the liver, is fed at its own hepatic artery and "
+            "portal vein flows and drains at its own concentration; the organ "
+            "drains the flow weighted mix of the lobes."
         )
 
-    def _site_capacity(self, capacity: str | None, site: str | None) -> str | None:
-        """The share of the capacity of the liver which a site holds.
+    def _zone_of(self, site: str | None) -> str:
+        """The zone of a site, the lobe token stripped.
 
-        The functional fraction of the liver times the share of the volume of
-        the site: the lobe holds its share, so the capacities of the sites
-        sum to the capacity of the organ.
+        The porosity of the endothelium and the relative abundance of a
+        profile are quantities of the zone and of no lobe, so the lobes share
+        one set of them.
         """
-        factors = [capacity] if capacity is not None else []
+        assert site is not None
         lobe = self._lobe_of(site)
-        if lobe is not None:
-            factors.append(self._lobe_fraction(lobe))
-        if not factors:
-            return None
-        return " * ".join(factors)
-
-    def _chemistry(self) -> None:
-        """The processes of the liver in every site, each with its share of the capacity.
-
-        A metabolism and a transport are placed in every site with the share
-        of the capacity of that site; a custom reaction is placed in every
-        site with its own rate law over the ids of the site, and the
-        constants of the rate law and the species it brings itself are
-        created once for the liver.
-
-        Raises:
-            ValueError: if a species of a custom reaction has the id of a
-                species of a site of the liver already.
-        """
-        processes = self._processes()
-        self._proteins_and_sinks(processes)
-        customs = [p for p in processes if isinstance(p, CustomReaction)]
-        placed = [p for p in processes if not isinstance(p, CustomReaction)]
-        capacity = self._process_capacity() if placed else None
-        for p in placed:
-            for site in self._each_zone:
-                for reaction in place(
-                    p,
-                    self.ctx,
-                    self.ctx.parts,
-                    self._site_capacity(capacity, site),
-                    site,
-                ):
-                    for par in reaction.pars:
-                        self.parameters.setdefault(str(par.sid), par)
-                    reaction.pars = []
-                    self.reactions.append(reaction)
-        for p in customs:
-            self._custom_species(p)
-            for k, site in enumerate(self._each_zone):
-                for reaction in place(p, self.ctx, self.ctx.parts, None, site):
-                    if k:
-                        # the constants of the rate law belong to the liver,
-                        # not to a site: they come with the first reaction
-                        reaction.pars = []
-                    self.reactions.append(reaction)
-
-    def _custom_species(self, p: CustomReaction) -> None:
-        """The species a custom reaction brings itself, one per site.
-
-        Raises:
-            ValueError: if a species of the site has the id of a species of
-                the liver already.
-        """
-        for site in self._each_zone:
-            assert site is not None
-            mapping = zone_ids(self.ctx, self.ctx.parts, site)
-            for sp in p.species:
-                sid = ids.segment_process(str(sp.sid), site)
-                if sid in self.species:
-                    raise ValueError(
-                        f"Custom reaction '{p.sid}': species '{sid}' is a species "
-                        f"of the site {site} of the liver already."
-                    )
-                species = copy.copy(sp)
-                species.sid = sid
-                compartment = str(sp.compartment)
-                species.compartment = mapping.get(compartment, compartment)
-                self.species[sid] = annotate(
-                    species,
-                    "custom_amount" if sp.hasOnlySubstanceUnits else "custom_species",
-                )
+        assert lobe is not None
+        return site[len(lobe) + 1 :]
