@@ -22,17 +22,28 @@ them on its index page.
 import json
 import re
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 from xml.sax.saxutils import escape
 
 from pkpdsim import __version__
+from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.definition import PBPKDefinition
 from pkpdsim.pbpk.figure import schematic_svg
-from pkpdsim.pbpk.visual.anatomy import TITLES
+from pkpdsim.pbpk.organs import Organ, Part
+from pkpdsim.pbpk.units import U
+from pkpdsim.pbpk.visual.anatomy import (
+    OBSERVER_TEXT,
+    TITLES,
+    line_key,
+    substance_key,
+)
 from pkpdsim.pbpk.visual.animal import figure_of, reference_volumes
 from pkpdsim.pbpk.visual.body import reference_body
 from pkpdsim.pbpk.visual.content import ModelContent
 from pkpdsim.pbpk.visual.resources import anatomy
+from pkpdsim.sbml.values import unit_text
 from pkpdsim.sex import Sex
 
 __all__ = [
@@ -40,11 +51,14 @@ __all__ = [
     "ICON_CREDIT",
     "LIBRARY",
     "REPOSITORY",
+    "Readout",
+    "ReadoutGroup",
     "cards",
     "figure_credit",
     "html_page",
     "html_snippet",
     "interactive_figure",
+    "readouts",
 ]
 
 REPOSITORY = "https://github.com/matthiaskoenig/pkpdsim"
@@ -160,6 +174,215 @@ def cards(
     ]
     for k in ("bladder", "gallbladder", "uterus"):
         out[k] = [f"<b>{k}</b>", "anatomy of the drawing, no organ of the model"]
+    return out
+
+
+@dataclass(frozen=True)
+class Readout:
+    """One timecourse of the model which a place of the figure reports.
+
+    Attributes:
+        id: the id of the selection in the compiled model (`LI__Cpl_api`).
+        label: what it is, in words (`apixaban, liver plasma`).
+        unit: the unit the model uses for it (`mmole/liter`).
+        kind: `concentration`, `amount`, `rate` or `flux`.
+    """
+
+    id: str
+    label: str
+    unit: str
+    kind: Literal["concentration", "amount", "rate", "flux"]
+
+
+@dataclass(frozen=True)
+class ReadoutGroup:
+    """What a key of the figure reports: its label and its readouts.
+
+    Attributes:
+        label: the name of the place, for the heading of its panel.
+        readouts: the timecourses of the place, empty for a decoration of the
+            drawing or a place of the model which carries no timecourse.
+    """
+
+    label: str
+    readouts: tuple[Readout, ...]
+
+
+_CONC = unit_text(U.mM)
+_AMOUNT = unit_text(U.mmole)
+_RATE = unit_text(U.mmole_per_min)
+
+
+def _compartments(organ: Organ, sid: str, name: str, form: str) -> tuple[Readout, ...]:
+    """The readouts of a substance in an organ, by the tissue form of the substance."""
+    title = TITLES.get(organ.value, organ.value)
+
+    def conc(part: Part, text: str, *, unbound: bool = False) -> Readout:
+        local = ids.unbound(part, sid) if unbound else ids.species(part, sid)
+        return Readout(
+            ids.flat(organ, local), f"{name}, {title} {text}", _CONC, "concentration"
+        )
+
+    out = [conc(Part.PLASMA, "plasma")]
+    if form == "organ":
+        out.append(conc(Part.ORGAN, "organ"))
+    elif form == "merged":
+        out += [
+            conc(Part.TISSUE, "tissue"),
+            conc(Part.TISSUE, "tissue unbound", unbound=True),
+        ]
+    elif form == "full":
+        out += [
+            conc(Part.INTERSTITIAL, "interstitium"),
+            conc(Part.INTRACELLULAR, "cells"),
+            conc(Part.INTERSTITIAL, "interstitium unbound", unbound=True),
+            conc(Part.INTRACELLULAR, "cells unbound", unbound=True),
+        ]
+    return tuple(out)
+
+
+def _sample(sid: str, name: str) -> tuple[Readout, ...]:
+    """The readouts of a substance at the sampling site, the arm vein."""
+    return (
+        Readout(ids.arm(sid), f"{name}, plasma (sample)", _CONC, "concentration"),
+        Readout(ids.arm_free(sid), f"{name}, unbound (sample)", _CONC, "concentration"),
+        Readout(ids.arm_blood(sid), f"{name}, blood (sample)", _CONC, "concentration"),
+    )
+
+
+def _urine(sid: str, name: str) -> tuple[Readout, ...]:
+    """The readouts of a substance in the urine, the amount and the rate."""
+    return (
+        Readout(ids.urine(sid), f"{name}, urine amount", _AMOUNT, "amount"),
+        Readout(ids.urine_rate(sid), f"{name}, urine rate", _RATE, "rate"),
+    )
+
+
+def _feces(sid: str, name: str) -> tuple[Readout, ...]:
+    """The readouts of a substance in the feces, the amount and the rate."""
+    return (
+        Readout(ids.feces(sid), f"{name}, feces amount", _AMOUNT, "amount"),
+        Readout(ids.feces_rate(sid), f"{name}, feces rate", _RATE, "rate"),
+    )
+
+
+def _lumen(sid: str, name: str) -> tuple[Readout, ...]:
+    """The readout of the dissolved amount of a substance in the lumen."""
+    return (Readout(ids.lumen_amount(sid), f"{name}, lumen amount", _AMOUNT, "amount"),)
+
+
+def readouts(
+    content: ModelContent, *, vein: str = "arm vein"
+) -> dict[str, ReadoutGroup]:
+    """The timecourses which every key of the figure reports.
+
+    The keys are the paths of the `data-k` keys of the figure from the outside
+    in, joined by `/`, as the nesting of its SVG gives them: an organ (`li`),
+    a substance of an organ (`li/sub:gli`), a process line of an organ
+    (`li/txt:MET: ...`), the blood sample (`blood`, `blood/sub:gli`,
+    `blood/txt:OBS: ...`), the legend chip of a substance (`sub:gli`), the
+    sample icon (`sample`), the lumen, the urine and the feces with their
+    substances, the routes and the decorations of the drawing (`bladder`).
+    The three ways to point at a substance where it is sampled (`sub:<sid>`,
+    `sample`, `blood/sub:<sid>`) give the same readouts, the arm vein
+    observers.
+
+    The compartments of a substance in an organ follow its tissue form
+    (`OrganContent.parts`): the plasma, then for `organ` the one species, for
+    `merged` the tissue and its unbound form, for `full` the interstitium and
+    the cells with both unbound forms. A process line reports the flux of its
+    reaction (`flat(organ, process.sid)`); a line which carries no process
+    (`URI`, `INH`, `SLW`), a route and a decoration have no readout. An organ
+    reports the compartments of every substance it shows. Ids are built with
+    `pkpdsim.pbpk.ids`, the keys with the helpers of the figure writer
+    (`substance_key`, `line_key`).
+
+    Args:
+        content: the content of the definition.
+        vein: the name of the sampling site in the line of the blood sample,
+            `arm vein` of the human figure, that of the animal figures their
+            own (`VEINS`).
+
+    Returns:
+        The group of every key, by the key path.
+    """
+    names = {s.sid: s.name or s.sid for s in content.substances}
+    out: dict[str, ReadoutGroup] = {}
+
+    def add(key: str, label: str, items: tuple[Readout, ...] = ()) -> None:
+        out[key] = ReadoutGroup(label, items)
+
+    def chips(
+        base: str,
+        label: str,
+        sids: Sequence[str],
+        per: Mapping[str, tuple[Readout, ...]],
+    ) -> None:
+        """Add the group of a place and its substance chips."""
+        add(base, label, tuple(r for s in sids for r in per[s]))
+        for s in sids:
+            add(f"{base}/{substance_key(s)}", f"{names[s]}, {label}", per[s])
+
+    for key, org in content.organs.items():
+        organ = Organ(key)
+        title = TITLES.get(key, key)
+        shown = [c.sid for c in org.chips]
+        per = {
+            s: _compartments(organ, s, names[s], org.parts.get(s, "none"))
+            for s in shown
+        }
+        chips(key, title, shown, per)
+        flux = [p for p in content.processes if p.organ == key]
+        for p, (badge, text) in zip(flux, org.lines, strict=False):
+            add(
+                f"{key}/{line_key(badge, text)}",
+                f"{p.sid}, {title}",
+                (
+                    Readout(
+                        ids.flat(organ, p.sid),
+                        f"{p.sid}, {title} flux",
+                        _RATE,
+                        "flux",
+                    ),
+                ),
+            )
+        for badge, text in org.lines[len(flux) :]:
+            add(f"{key}/{line_key(badge, text)}", title)
+
+    sampled = {s.sid: _sample(s.sid, names[s.sid]) for s in content.substances}
+    chips("blood", "blood sample", list(sampled), sampled)
+    out["blood/" + line_key("OBS", OBSERVER_TEXT.replace("arm vein", vein, 1))] = out[
+        "blood"
+    ]
+    add("sample", "blood sample", out["blood"].readouts)
+    for s, items in sampled.items():
+        add(substance_key(s), names[s], items)
+
+    lumen = {s: _lumen(s, names[s]) for s in content.luminal}
+    chips("lumen", "intestinal lumen", content.luminal, lumen)
+    for badge, text in content.lumen_lines:
+        add(f"lumen/{line_key(badge, text)}", "intestinal lumen")
+    chips(
+        "urine", "urine", content.urine, {s: _urine(s, names[s]) for s in content.urine}
+    )
+    chips(
+        "feces",
+        "feces",
+        content.luminal,
+        {s: _feces(s, names[s]) for s in content.luminal},
+    )
+
+    for key in ("iv", "route:iv"):
+        add(key, "intravenous dose")
+    for kind, sid in content.routes:
+        if kind == "iv":
+            add(
+                "iv/" + line_key("IV", f"{sid} into the venous blood"),
+                "intravenous dose",
+            )
+    add("route:oral", "oral dose")
+    for key in ("bladder", "gallbladder", "uterus"):
+        add(key, key)
     return out
 
 

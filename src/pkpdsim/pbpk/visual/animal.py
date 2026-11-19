@@ -21,7 +21,7 @@ from xml.sax.saxutils import escape
 import numpy as np
 
 from pkpdsim.pbpk.visual import icons, palette
-from pkpdsim.pbpk.visual.anatomy import FONT, AnatomyFigure, _curve
+from pkpdsim.pbpk.visual.anatomy import FONT, AnatomyFigure, _curve, substance_key
 from pkpdsim.pbpk.visual.body import path
 from pkpdsim.pbpk.visual.content import ModelContent
 from pkpdsim.pbpk.visual.resources import Anatomy, anatomy
@@ -386,7 +386,7 @@ class AnimalFigure(AnatomyFigure):
                 if x + w > width:
                     x, y = 6.0, y + 18
                 header.append(
-                    f'<g data-k="sub:{escape(s.sid)}"><circle cx="{x + 5:.1f}" cy="{y - 4:.1f}" r="5" fill="{s.color}"/>'
+                    f'<g data-k="{escape(substance_key(s.sid))}"><circle cx="{x + 5:.1f}" cy="{y - 4:.1f}" r="5" fill="{s.color}"/>'
                     f'<text x="{x + 14:.1f}" y="{y:.1f}" class="sub"><tspan font-weight="600">{escape(s.sid)}</tspan> {escape(s.name)}</text></g>'
                 )
                 x += w
