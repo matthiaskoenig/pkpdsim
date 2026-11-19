@@ -1,3 +1,9 @@
+---
+hide:
+  - navigation
+  - toc
+---
+
 # Pressure-driven cardiovascular circulation
 
 The optional circulation variants replace the prescribed organ flows with a 0D cardiovascular network. The organs, chemistry and administration routes are those of the whole-body PBPK model. `Variants(circulation=PressureFlow())` solves the steady resistive network between prescribed arterial and venous pressures; `Variants(circulation=DynamicHeart())` adds a closed systemic and pulmonary loop with ventricular pumping and vascular storage. With no circulation choice the existing fractional-perfusion model is unchanged.

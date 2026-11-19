@@ -294,6 +294,12 @@ test("the app shares sliders, solves combined controls, replays flow widths and 
     assert.equal(workerCount, 2, "A cached male result must not be replaced by the female result");
     assert.notEqual(byId.get("metric-1").textContent, femaleOutput);
     assertFiniteCharts();
+    window.innerWidth = 1186; window.parent.innerHeight = 900;
+    byId.get("flow-scale").dispatch("input");
+    assert.equal(messages.at(-1).height, 780, "A wide documentation frame should fill its available viewport height");
+    window.innerWidth = 390;
+    byId.get("flow-scale").dispatch("input");
+    assert.equal(messages.at(-1).height, 1100, "Narrow frames should follow the natural content height");
     assert.equal(errors.length, 1, "Only the intentional first loading failure should be logged");
   } finally {
     windowEvents.dispatch("pagehide");

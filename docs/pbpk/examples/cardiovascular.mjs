@@ -372,7 +372,11 @@ function render() {
 let previousHeight = 0;
 function resizeFrame() {
   if (window.parent === window) return;
-  const height = Math.ceil($("app").getBoundingClientRect().height);
+  let height = Math.ceil($("app").getBoundingClientRect().height);
+  if (window.innerWidth > 850) {
+    try { height = Math.max(620, Math.min(850, window.parent.innerHeight - 120)); }
+    catch { /* A cross-origin host keeps the app's current viewport height. */ }
+  }
   if (Math.abs(height - previousHeight) < 2) return;
   previousHeight = height;
   window.parent.postMessage({pkpdFigure: true, height}, window.location.origin);
