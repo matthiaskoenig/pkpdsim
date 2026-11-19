@@ -172,13 +172,19 @@ vascular_effect = PDComponent(
         model_units=MODEL_UNITS,
         objects=[
             Parameter(
-                "C_drug", 0.0, U.mM, constant=False,
+                "C_drug",
+                0.0,
+                U.mM,
+                constant=False,
                 port=Port("C_drug_port", portType=PortType.INPUT_PORT),
             ),
             Parameter("Emax", 0.5, U.dimensionless),
             Parameter("EC50", 0.001, U.mM),
             Parameter(
-                "factor", None, U.dimensionless, constant=False,
+                "factor",
+                None,
+                U.dimensionless,
+                constant=False,
                 port=Port("factor_port", portType=PortType.OUTPUT_PORT),
             ),
             AssignmentRule(
@@ -244,8 +250,16 @@ heart_built = build(heart_definition, Path("models"))
 heart_model = AbstractModel(
     source=heart_built.flat_path,
     selections=[
-        "time", "CO", "Qlu", "Qh", "CV_P_ar", "CV_P_po",
-        "CV_V_lv", "CV_V_blood_total", "Vblood", "CV_fR_systemic",
+        "time",
+        "CO",
+        "Qlu",
+        "Qh",
+        "CV_P_ar",
+        "CV_P_po",
+        "CV_V_lv",
+        "CV_V_blood_total",
+        "Vblood",
+        "CV_fR_systemic",
     ],
 )
 heart_rate = 75.0
@@ -269,21 +283,29 @@ heart_result = heart_solver.simulate(
     ),
 )
 
+
 def beat_mean(column, first_cycle, last_cycle):
     time = heart_result["time"]
     first, last = first_cycle * cycle, last_cycle * cycle
     mask = (time >= first - 1e-10) & (time <= last + 1e-10)
     return np.trapezoid(heart_result[column][mask], time[mask]) / (last - first)
 
+
 # Compare complete beats before the resistance step, then after its transient.
-print("mean CO before/after resistance step [l/min]:",
-      beat_mean("CO", 60, 70), beat_mean("CO", 100, 110))
+print(
+    "mean CO before/after resistance step [l/min]:",
+    beat_mean("CO", 60, 70),
+    beat_mean("CO", 100, 110),
+)
 print("mean lung flow before step [l/min]:", beat_mean("Qlu", 60, 70))
 print("stroke volume before step [ml]:", 1000 * beat_mean("CO", 60, 70) / heart_rate)
-print("adjacent beat mean CO [l/min]:",
-      beat_mean("CO", 68, 69), beat_mean("CO", 69, 70))
-print("maximum total blood volume drift [l]:",
-      np.max(np.abs(heart_result["CV_V_blood_total"] - heart_result["Vblood"])))
+print(
+    "adjacent beat mean CO [l/min]:", beat_mean("CO", 68, 69), beat_mean("CO", 69, 70)
+)
+print(
+    "maximum total blood volume drift [l]:",
+    np.max(np.abs(heart_result["CV_V_blood_total"] - heart_result["Vblood"])),
+)
 ```
 
 The adjacent beat means help assess settling; compare the complete waveforms as well before choosing a settling interval for a new condition. The beat mean of `CO` is the pumped output and its integral over one beat is the stroke volume. The mean lung and aortic flows approach each other in a periodic state, while their instantaneous waveforms differ. The interval used for the resistance comparison ends before the drug is given, so the mechanical resistance step can be distinguished from the subsequent pharmacodynamic response.
@@ -298,7 +320,9 @@ For the commands and experiments of a [model package](../models.md), choose the 
 from sbmlsim.project import SimulatorSettings
 
 cardiovascular_solver = SimulatorSettings(
-    engine="core", absolute_tolerance=1e-10, relative_tolerance=1e-8,
+    engine="core",
+    absolute_tolerance=1e-10,
+    relative_tolerance=1e-8,
 )
 ```
 
