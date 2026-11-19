@@ -4,10 +4,10 @@
 # 90 % hepatectomy, the upper caudate lobe brings it to 95 % and the lower
 # caudate lobe to 97 %, so the caudate lobes carry about 0.10 of the mass. The
 # split of the 0.90 into the three lobes (left lateral 0.30, median 0.40, right
-# 0.20) is the share the rat anatomy literature reports; the median lobe is
-# split evenly into its left and its right half, which no source gives
-# (`ModelChoice`). No arterial or portal supply fraction was found for any
-# species: a lobe without one is supplied in proportion to its mass, see
+# 0.20) is the conventional split of the rat liver and no number of the paper,
+# which gives their sum; it is a `ModelChoice`, as is the even split of the
+# median lobe into its left and its right half. No arterial or portal supply
+# fraction was found for any species: a lobe without one is supplied in proportion to its mass, see
 # `pkpdsim.pbpk.lobes`.
 
 [cl]
@@ -16,7 +16,7 @@ mass_fraction = { value = 0.10, unit = "dimensionless", source = "Madrahimov2006
 
 [lll]
 name = "left lateral lobe"
-mass_fraction = { value = 0.30, unit = "dimensionless", source = "Madrahimov2006", notes = "the share the rat anatomy literature reports for the left lateral lobe; with the median lobe (0.40) and the right lobe (0.20) it gives the 90 % hepatectomy of the paper" }
+mass_fraction = { value = 0.30, unit = "dimensionless", source = "ModelChoice", notes = "the conventional share of the left lateral lobe of the rat liver; Madrahimov 2006 gives the sum of the three lobes (the 90 % hepatectomy) and not the split, so the 0.30 with the median lobe (0.40) and the right lobe (0.20) is a model choice which reproduces that sum" }
 
 [lml]
 name = "left half of the median lobe"
@@ -24,7 +24,7 @@ mass_fraction = { value = 0.20, unit = "dimensionless", source = "ModelChoice", 
 
 [rl]
 name = "right lobe"
-mass_fraction = { value = 0.20, unit = "dimensionless", source = "Madrahimov2006", notes = "the share the rat anatomy literature reports for the right lobe (0.19 to 0.22); with the left lateral (0.30) and the median lobe (0.40) it gives the 90 % hepatectomy of the paper" }
+mass_fraction = { value = 0.20, unit = "dimensionless", source = "ModelChoice", notes = "the conventional share of the right lobe of the rat liver (0.19 to 0.22 is reported); Madrahimov 2006 gives the sum of the three lobes (the 90 % hepatectomy) and not the split, so the 0.20 with the left lateral (0.30) and the median lobe (0.40) is a model choice which reproduces that sum" }
 
 [rml]
 name = "right half of the median lobe"

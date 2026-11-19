@@ -34,13 +34,15 @@ from pkpdsim.pbpk import (
     PBPKDefinition,
     PressureFlow,
     Route,
+    U,
     Variants,
     ids,
 )
 from pkpdsim.pbpk.builder import build
 from pkpdsim.pbpk.interventions import ArterialLigation, Intervention, PortalLigation
-from pkpdsim.pbpk.lobes import HABR
+from pkpdsim.pbpk.lobes import HABR, Lobe
 from pkpdsim.pbpk.remodelling import FlowDriven
+from pkpdsim.pbpk.values import Value
 from pkpdsim.pbpk.variants.liver_lobes import LobedLiver
 from pkpdsim.species import Species
 
@@ -346,3 +348,78 @@ def test_the_gain_of_the_buffer_response_is_a_parameter_of_the_lobes(
     ).read_text()
     assert f'id="{ids.HABR_GAIN}"' in lobed
     assert 'id="CV_habr_gain"' not in lobed
+
+
+def _share(value: float) -> Value:
+    """A share of a test lobe set."""
+    return Value(value, U.dimensionless, "ModelChoice")
+
+
+def _asymmetric() -> tuple[Lobe, ...]:
+    """Two lobes of the same mass whose supplies are the other way round."""
+    return (
+        Lobe(
+            token="a",
+            name="lobe a",
+            mass_fraction=_share(0.5),
+            arterial_fraction=_share(0.8),
+            portal_fraction=_share(0.2),
+        ),
+        Lobe(
+            token="b",
+            name="lobe b",
+            mass_fraction=_share(0.5),
+            arterial_fraction=_share(0.2),
+            portal_fraction=_share(0.8),
+        ),
+    )
+
+
+def test_the_hepatic_reference_of_a_lobe_is_what_its_branches_bring(
+    tmp_path: Path,
+) -> None:
+    """`Qh_ref_<lobe>` is the sum of the two inflow references of the lobe.
+
+    The resistance of the hepatic branch is calibrated from it, so a lobe set
+    whose supply fractions are not its mass fractions gets a network which
+    does not balance at the reference pressures unless the hepatic reference
+    is what the artery and the portal vein of that lobe actually bring.
+    """
+    liver = LobedLiver(lobes=_asymmetric())
+    path = _model(tmp_path, liver, PressureFlow())
+    tokens = ("a", "b")
+    selections = [
+        ids.lobe_reference_flow(flow, token)
+        for flow in ids.HEPATIC_FLOWS
+        for token in tokens
+    ] + [ids.lobe_flow(flow, token) for flow in ids.HEPATIC_FLOWS for token in tokens]
+    v = _solved(path, selections)
+    for token in tokens:
+        assert v[ids.lobe_reference_flow(ids.QH, token)] == pytest.approx(
+            v[ids.lobe_reference_flow(ids.QHA, token)]
+            + v[ids.lobe_reference_flow(ids.QPO, token)],
+            rel=1e-9,
+        )
+    # the network then runs the lobes at the shares the table prescribes
+    for flow, share in ((ids.QHA, "arterial"), (ids.QPO, "portal")):
+        total = sum(v[ids.lobe_flow(flow, token)] for token in tokens)
+        expected = {"arterial": (0.8, 0.2), "portal": (0.2, 0.8)}[share]
+        for token, want in zip(tokens, expected, strict=True):
+            assert v[ids.lobe_flow(flow, token)] / total == pytest.approx(
+                want, rel=1e-6
+            )
+
+
+def test_a_buffer_response_without_a_circulation_is_refused(tmp_path: Path) -> None:
+    """A model which asks for the buffer response and gets nothing is worse
+    than a refusal.
+
+    The response acts on the conductance of the arterial branch of a lobe in
+    the pressure network; with the supply fractions the inflow of the liver is
+    prescribed and the response has nothing to act on, so the combination is
+    refused and names what to add.
+    """
+    with pytest.raises(ValueError, match="PressureFlow"):
+        build(_definition(LobedLiver(habr=HABR()), None), tmp_path)
+    # the lobes without a buffer response are fine without a circulation
+    build(_definition(LobedLiver(), None), tmp_path / "plain")

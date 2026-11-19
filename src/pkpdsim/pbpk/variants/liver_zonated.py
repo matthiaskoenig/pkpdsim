@@ -904,6 +904,7 @@ class ZonatedBuilder(StandardBuilder):
         """
         n = len(self.zones)
         for part in built_parts(self.ctx.parts[s.sid]):
+            self._whole_zonal_means(s, part)
             for lobe, sites in self._chains:
                 of_zones = [ids.species(part, s.sid, site) for site in sites]
                 where = "" if lobe is None else f" of lobe {lobe}"
@@ -922,6 +923,37 @@ class ZonatedBuilder(StandardBuilder):
                         "zones and nothing reads it.",
                         kind="organ_concentration",
                     )
+
+    def _whole_zonal_means(self, s: Substance, part: Part) -> None:
+        """The two means over the whole liver of a lobed liver.
+
+        The means of the lobes weighted by the volume each lobe has of the
+        liver, `f_vol_<lobe>` of a lobe which is gone being 0: a model which
+        reads `Cpl_pp_<s>` of a zonated liver reads the same id of a lobed
+        one, which is what the whole organ reports. A liver without lobes has
+        the means over its zones under these ids and needs none of this.
+        """
+        if not self.lobes:
+            return
+        for periportal in (True, False):
+            third = "periportal" if periportal else "pericentral"
+            weights = [(self._lobe_fraction(lobe), lobe) for lobe in self.lobes]
+            formula = " + ".join(
+                f"{weight} * {ids.zonal_mean(part, s.sid, periportal, lobe)}"
+                for weight, lobe in weights
+            )
+            self._rule(
+                ids.zonal_mean(part, s.sid, periportal),
+                formula,
+                U.mM,
+                f"{third} mean {s.sid} {_PART_NAMES[part]} of the liver",
+                f"Mean concentration of {s.sid} in the {_PART_NAMES[part]} "
+                f"of the {third} third of the sinusoid over the whole liver, "
+                "the mean of every lobe weighted by the volume the lobe has "
+                "of the liver (`f_vol_<lobe>`, 0 for a lobe which is gone). "
+                "It reads the means of the lobes and nothing reads it.",
+                kind="organ_concentration",
+            )
 
     def _axial_diffusion(self, s: Substance) -> None:
         """The diffusion of a substance along the sinusoid, between consecutive zones.

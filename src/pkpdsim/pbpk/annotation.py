@@ -575,6 +575,17 @@ KINDS: dict[str, Kind] = {
     "lobe_perfusion": Kind(
         _P, _PHYS, requested="blood flow per volume of a lobe of the liver"
     ),
+    "lobe_growth": Kind(
+        _P,
+        _PHYS,
+        requested="rate of change of the volume of a lobe of the liver "
+        "(positive hypertrophy, negative atrophy)",
+    ),
+    "remodelling_time": Kind(
+        _P,
+        _PHYS,
+        requested="time constant of the remodelling of a lobe of the liver",
+    ),
     "lobe_patency": Kind(
         _P,
         _PHYS,

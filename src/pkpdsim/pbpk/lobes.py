@@ -132,9 +132,11 @@ def check_lobes(lobes: Sequence[Lobe]) -> tuple[Lobe, ...]:
 
     Raises:
         ValueError: for an empty set, a token which is no lower case
-            identifier, a repeated token, a negative share, mass fractions
-            which do not sum to 1, or supply fractions which do not sum to 1
-            when any lobe gives them.
+            identifier, a token which carries an underscore (it would not be
+            told from the site `<lobe>_<zone>` of another lobe), a repeated
+            token, a negative share of the mass or of an inflow, mass
+            fractions which do not sum to 1, or supply fractions which do not
+            sum to 1 when any lobe gives them.
     """
     if not lobes:
         raise ValueError("A liver needs at least one lobe.")
@@ -144,14 +146,25 @@ def check_lobes(lobes: Sequence[Lobe]) -> tuple[Lobe, ...]:
             raise ValueError(f"Lobe '{lobe.token}': the token must be an identifier.")
         if lobe.token != lobe.token.lower():
             raise ValueError(f"Lobe '{lobe.token}': the token must be lower case.")
+        if "_" in lobe.token:
+            raise ValueError(
+                f"Lobe '{lobe.token}': the token must carry no underscore, "
+                "which joins a lobe and a zone into the site `<lobe>_<zone>`."
+            )
         if lobe.token in seen:
             raise ValueError(f"Lobe '{lobe.token}' is given twice.")
         seen.add(lobe.token)
-        if lobe.mass_fraction.value < 0.0:
-            raise ValueError(
-                f"Lobe '{lobe.token}': the mass fraction "
-                f"{lobe.mass_fraction.value} is negative."
-            )
+        shares = (
+            ("mass", lobe.mass_fraction),
+            ("arterial", lobe.arterial_fraction),
+            ("portal", lobe.portal_fraction),
+        )
+        for what, share in shares:
+            if share is not None and share.value < 0.0:
+                raise ValueError(
+                    f"Lobe '{lobe.token}': the {what} fraction "
+                    f"{share.value} is negative."
+                )
     _check_sum("mass", [lobe.mass_fraction.value for lobe in lobes])
     if any(lobe.arterial_fraction is not None for lobe in lobes):
         _check_sum("arterial", [lobe.arterial_share() for lobe in lobes])
@@ -225,11 +238,15 @@ class HABR:
 
     The hepatic artery of a territory whose portal inflow falls dilates, so a
     deportalised lobe is not simply ischaemic. The conductance of the arterial
-    branch of a lobe rises with the share of its portal flow which is missing,
-    `1 + gain*max(0, 1 - Qpo_<lobe>/Qpo_<lobe>_ref)`, capped at `maximum`.
-    Without a buffer response (`None` in the lobed liver, the default) the
-    arterial branches do not react, which is what a model without lobes does
-    today.
+    branch of a lobe rises with the portal flow which is missing, measured
+    against the arterial reference of the lobe (Lautt: the artery compensates
+    a fraction of the *lost portal flow*):
+    `1 + gain*max(0, Qpo_ref_<lobe> - Qpo_<lobe>)/Qha_ref_<lobe>`, capped at
+    `maximum`. Without a buffer response (`None` in the lobed liver, the
+    default) the arterial branches do not react, which is what a model
+    without lobes does today. The response acts on a conductance, so it needs
+    the pressure driven circulation (`PressureFlow`); a lobed liver which
+    asks for it without one is refused at the definition.
 
     Attributes:
         gain: the fraction of a lost portal flow the artery compensates,

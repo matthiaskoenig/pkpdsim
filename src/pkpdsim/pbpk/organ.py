@@ -669,10 +669,15 @@ class StandardBuilder(OrganBuilder):
 
         Each lobe drains its own concentration `Cout_<lobe>_<s>` (a rule of
         the last site of its chain) at its own flow, so the organ drains
-        `sum(Qh_<lobe>*Cout_<lobe>_<s>)/Qh`.
+        `sum(Qh_<lobe>*Cout_<lobe>_<s>)/sum(Qh_<lobe>)`. The weights of the
+        mix are its own denominator and not the flow of the organ: the two
+        agree while a branch of each kind is open, and with the supply
+        fractions they do not when every branch of one kind is closed, which
+        is a liver perfused by one of its two inflows alone.
         """
         conc = ids.outflow_conc if part is Part.PLASMA else ids.outflow_conc_bc
         terms: list[str] = []
+        weights: list[str] = []
         for lobe, sites in self._chains:
             assert lobe is not None
             out = conc(s.sid, lobe)
@@ -688,11 +693,14 @@ class StandardBuilder(OrganBuilder):
                 kind="outflow_lobe",
             )
             self.outputs[out] = ids.lobe_outflow(self.organ, lobe, s.sid)
-            terms.append(f"{self._flow(ids.lobe_flow(out_flow, lobe))} * {out}")
+            flow = self._flow(ids.lobe_flow(out_flow, lobe))
+            terms.append(f"{flow} * {out}")
+            weights.append(flow)
         # a liver whose every branch is closed has no flow at all: the guard
         # makes the mix 0 instead of undefined, and nothing leaves the organ
         # at a flow of 0 either way
-        return f"({' + '.join(terms)}) / max({self._flow(out_flow)}, 1e-12 l_per_min)"
+        total = " + ".join(weights)
+        return f"({' + '.join(terms)}) / max({total}, 1e-12 l_per_min)"
 
     def _leaving(
         self, s: Substance, part: Part, zone: str | None, k_organ: str | None
@@ -1401,11 +1409,14 @@ class StandardBuilder(OrganBuilder):
 
         The pool of its inflow, the mix of the hepatic artery and the portal
         vein of the liver; in a zone the plasma leaving the zone upstream.
+        The upstream of a site is taken along the chain of its own lobe: the
+        chains are perfused in parallel, so the first site of every lobe
+        starts at the mix and no lobe starts at the lobe beside it.
         """
-        zones = self._each_zone
+        sites = self._sites_of(zone)
         parts = self.ctx.parts[s.sid]
-        if zone is not None and zone != zones[0]:
-            upstream = zones[zones.index(zone) - 1]
+        if zone is not None and zone != sites[0]:
+            upstream = sites[sites.index(zone) - 1]
             k_organ = ids.k_organ(s.sid) if parts.tissue == "organ" else None
             return self._leaving(s, Part.PLASMA, upstream, k_organ)
         inflows, out_flow = self._flows(s)
@@ -1421,6 +1432,14 @@ class StandardBuilder(OrganBuilder):
             for pool, flow in inflows
         )
         return f"({mix}) / {self._flow(out_flow)}"
+
+    def _sites_of(self, site: str | None) -> tuple[str | None, ...]:
+        """The sites of the chain a site belongs to, in the order of the blood flow."""
+        lobe = self._lobe_of(site)
+        for chain, sites in self._chains:
+            if chain == lobe:
+                return sites
+        raise ValueError(f"Site '{site}' is in no chain of the organ.")
 
     def _steady_plasma(self, s: Substance, zone: str | None) -> str:
         """The plasma of the organ (of a zone) at its steady state.

@@ -84,7 +84,7 @@ That mix is also the equivalence of the variant: when every lobe is supplied in 
 | `f_present_<lobe>` | 1 is the lobe in place, 0 the resected one, which has no capacity and no growth |
 | `g_ha_<lobe>`, `g_po_<lobe>` | the patency of the hepatic artery and the portal vein branch, 1 open and 0 ligated |
 | `f_ha_<lobe>`, `f_po_<lobe>` | the reference shares of the two inflows, the share of the mass where no source gives one |
-| `Qha_<lobe>`, `Qpo_<lobe>`, `Qh_<lobe>` | the blood flows of the lobe (l/min), which sum to `Qha`, `Qpo` and `Qh` |
+| `Qha_<lobe>`, `Qpo_<lobe>`, `Qh_<lobe>` | the blood flows of the lobe (l/min), which sum to `Qha`, `Qpo` and `Qh` while a branch of that kind is open |
 | `q_<lobe>` | `Qh_<lobe>/Vli_<lobe>`, the perfusion per volume: the stimulus of the remodelling |
 | `dVli_<lobe>` | the growth of the lobe (l/min), which a driver of the remodelling sets |
 | `Vli_ref`, `Vli_lobes`, `f_remnant` | the intact liver, the liver which is there and their ratio |
@@ -211,7 +211,7 @@ and each resistance `CV_R_ha_<lobe>`, `CV_R_po_<lobe>` and `CV_R_h_<lobe>` is ca
 
 The hepatic outflow of a lobe is deliberately written without the `max(..., 0 mmHg)` of the whole liver branch: the balance is then linear in the pressure of the lobe and has the one solution `P_li_lobe = P_ve + (Qha_lobe + Qpo_lobe) * R_h_lobe`, so a lobe whose both branches are closed sits at the venous pressure and carries no flow instead of leaving the solver an under determined node. The inflows are never negative, so the outflow never is either.
 
-One occlusion has no solution on the network: closing the portal branch of *every* lobe leaves the splanchnic bed nowhere to drain, because the portal junction balance sends the flow of the portal organs into the liver, so the solver fails at the initial conditions. The same occlusion is simply a liver without portal inflow with prescribed flows. A model of a total portal occlusion therefore needs the supply fraction mode or a portosystemic shunt, which the lobes do not have yet.
+One occlusion has no solution on the network: closing the portal branch of *every* lobe leaves the splanchnic bed nowhere to drain, because the portal junction balance sends the flow of the portal organs into the liver, so the solver fails at the initial conditions. The supply fraction mode takes the same occlusion without failing, and what it then says is not a model of anything: the portal pool has one outlet in the body, so with every branch closed the splanchnic organs fill a dead end, the whole dose ends up in the portal vein and the systemic exposure goes to 0 (`test_a_total_portal_occlusion_strands_the_drug_in_the_portal_vein`). A total portal occlusion is a liver perfused by collaterals, so it needs the portosystemic shunt of the gaps below, and neither mode has it. Occlude the branches of some of the lobes, which is what a portal vein ligation is.
 
 ### The hepatic arterial buffer response
 
@@ -222,7 +222,7 @@ f_{habr,l} = \min\left(f_{max},\;
 1 + \mathrm{gain}\,\frac{\max(0,\,Q_{po,l}^{ref} - Q_{po,l})}{Q_{ha,l}^{ref}}\right),
 \]
 
-so a lobe which loses a part of its portal flow gains `gain` times that flow in its artery, up to the ceiling. The default gain is the measured 25.5 % of Lautt 1985 (`liver_remodelling.toml`, `habr_gain`), and the response is off unless a model asks for it, because a prescribed flow model has no arterial conductance to act on.
+so a lobe which loses a part of its portal flow gains `gain` times that flow in its artery, up to the ceiling. The default gain is the measured 25.5 % of Lautt 1985 (`liver_remodelling.toml`, `habr_gain`), and the response is off unless a model asks for it. It acts on the arterial conductance of a lobe, which only the pressure driven circulation has: a lobed liver with a `HABR` and no `PressureFlow` is refused at the definition instead of building a model which ignores it.
 
 ```python
 from pkpdsim.pbpk.lobes import HABR
@@ -245,7 +245,7 @@ What the lobe library takes as a model choice, every one of them marked `ModelCh
 
 - **The supply fractions.** No publication of the parameter database gives the share of the hepatic artery or the portal vein inflow of a single lobe in any species, so a lobe is supplied in proportion to its mass. A Couinaud segment is defined as a portal territory and the arterial branch runs with the portal branch in the portal triad, so the perfusion per volume is the same in every lobe, which is the assumption the equivalence with the lumped liver rests on.
 - **The human segment volumes.** Only the share of segment VIII is sourced (Mise 2014); the others keep the published descending order VIII > VII > IV > V > III > VI > II > I and the bound of 10 % on the segments II and III, and are model choices within it.
-- **The split of the median lobe of the rat.** Madrahimov 2006 fixes the lobes of the rat around its hepatectomies, but not the split of the median lobe into its left and right half, which is taken as even.
+- **The split of the lobes of the rat.** Madrahimov 2006 fixes the lobes of the rat around its hepatectomies and gives the sum of the left lateral, the median and the right lobe (the 90 % hepatectomy), not the split of that sum into the three lobes (0.30, 0.40, 0.20, the conventional split) nor the split of the median lobe into its left and its right half (taken as even): all four are `ModelChoice` rows of the table.
 - **The growth constant.** No publication states a rate constant of the flow driven growth law, so the default is the one which restores the liver in about a week after a 70 % resection, the time course the hepatectomy literature reports. A measured course is mapped with `PrescribedVolume` instead of fitted through the law.
 - **The tracking time of a prescribed volume**, one hour, is a numerical choice and not a physiological one.
 - **The split of the hepatic resistances over the lobes.** The reference resistance of a branch of a lobe is the resistance of the whole liver divided by the reference share of the lobe, which is the one split which reproduces the baseline flows; no publication of the database gives the resistance of a single branch.

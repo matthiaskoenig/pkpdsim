@@ -14,6 +14,7 @@ the reason.
 """
 
 import dataclasses
+import re
 import warnings
 from collections.abc import Sequence
 from pathlib import Path
@@ -52,11 +53,14 @@ from pkpdsim.pbpk import (
     ids,
     steady_state,
 )
+from pkpdsim.pbpk.lobes import lobe_table
 from pkpdsim.pbpk.stationary import (
     SteadyStateWarning,
     linear_clearance,
     steady_plan,
 )
+from pkpdsim.pbpk.variants.liver_lobes import LobedLiver
+from pkpdsim.species import Species
 
 from .conftest import (
     assert_reference_sbml,
@@ -498,6 +502,45 @@ def test_the_zonated_liver_starts_at_the_mix_of_its_inflows(tmp_path: Path) -> N
         expected = mix if "Cpl" in sid else r[f"Kp_{S}"] * mix
         assert r[f"[{sid}]"] == pytest.approx(expected, rel=1e-12), sid
     _assert_stationary(_load(_pinned(variants), tmp_path / "pinned"))
+
+
+def test_no_lobe_of_the_liver_starts_at_the_lobe_beside_it(tmp_path: Path) -> None:
+    """The lobes are perfused in parallel, so no lobe is initialized from another.
+
+    The sites of a chain are in series (the zones along a sinusoid), the
+    chains in parallel, so the first site of every lobe starts at the mix of
+    the inflows of the liver. A generated start which walks the flat list of
+    the sites chains the lobes instead, a path no flow of the model takes:
+    the values agree while the liver neither produces nor clears, the
+    formulas do not, and they lengthen the chain the initial assignments
+    resolve in.
+    """
+    variants = Variants(organs={Organ.LIVER: LobedLiver()})
+    d = _definition([PROD, PASRC, SEC], variants=variants, species=Species.RAT)
+    sbml = build(d, tmp_path).flat_path.read_text()
+    tokens = [lobe.token for lobe in lobe_table(Species.RAT)]
+    assert len(tokens) > 1
+    for token in tokens:
+        math = _assignment(sbml, f"LI__{ids.species(Part.PLASMA, S, token)}")
+        others = [f"_{other}_" for other in tokens if other != token]
+        assert not [x for x in others if x in math], (
+            f"the start of lobe {token} reads another lobe: {math}"
+        )
+    r = _load(d, tmp_path / "solved", f_shunt=0.2)
+    _assert_stationary(r)
+
+
+def _assignment(sbml: str, sid: str) -> str:
+    """The ids the initial assignment of a symbol reads, as one string."""
+    match = re.search(
+        rf'<initialAssignment[^>]*symbol="{re.escape(sid)}"[^>]*>(.*?)</initialAssignment>',
+        sbml,
+        re.S,
+    )
+    assert match is not None, f"no initial assignment of {sid}"
+    return " ".join(
+        f"_{x}_" for x in re.findall(r"<ci>\s*(\S+)\s*</ci>", match.group(1))
+    )
 
 
 def test_a_declared_process_of_the_zonated_liver_says_what_is_missing(

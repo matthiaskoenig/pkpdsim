@@ -366,7 +366,10 @@ def _flows(lobes: Sequence[Lobe]) -> list[Sbase]:
     lobes whose branch is open: `Qpo*g_po*f_po/sum(g_po*f_po)`. An occlusion
     therefore passes the flow of the closed branch to the lobes which are
     open, with no pressure model present, and the sum of the lobe flows is
-    the flow of the liver whatever is open.
+    the flow of the liver while a branch of that kind is open. With every
+    branch of a kind closed the sum is 0 and the liver draws nothing from
+    that inflow, which no mode of the lobes drains elsewhere
+    (`docs/pbpk/lobes.md`, the gaps).
     """
     objects: list[Sbase] = []
     branches = (
@@ -692,18 +695,24 @@ def _reference_flows(lobes: Sequence[Lobe]) -> list[Sbase]:
         f"{ids.flow_fraction(o)} * {ids.CO_BASE}" for o in Organ if o in PORTAL_ORGANS
     )
     arterial = f"{ids.flow_fraction(Organ.LIVER)} * {ids.CO_BASE}"
-    whole = {
-        ids.QHA: arterial,
-        ids.QPO: portal,
-        ids.QH: f"{arterial} + {portal}",
-    }
-    share = {
-        ids.QHA: ids.arterial_fraction,
-        ids.QPO: ids.portal_fraction,
-        ids.QH: ids.lobe_reference_fraction,
+
+    # the hepatic vein of a lobe carries what its two inflows bring, which is
+    # the share of the mass only for a lobe whose supply is its mass; the
+    # resistance of the branch is calibrated from this, so a set with its own
+    # supply fractions would not balance at the reference pressures otherwise
+    def artery(token: str) -> str:
+        return f"{ids.arterial_fraction(token)} * ({arterial})"
+
+    def portal_vein(token: str) -> str:
+        return f"{ids.portal_fraction(token)} * ({portal})"
+
+    formulas = {
+        ids.QHA: artery,
+        ids.QPO: portal_vein,
+        ids.QH: lambda token: f"{artery(token)} + {portal_vein(token)}",
     }
     objects: list[Sbase] = []
-    for flow, formula in whole.items():
+    for flow, formula in formulas.items():
         for lobe in lobes:
             sid = ids.lobe_reference_flow(flow, lobe.token)
             objects.append(
@@ -719,11 +728,7 @@ def _reference_flows(lobes: Sequence[Lobe]) -> list[Sbase]:
                     "lobe_flow",
                 )
             )
-            objects.append(
-                InitialAssignment(
-                    sid, f"{share[flow](lobe.token)} * ({formula})", U.l_per_min
-                )
-            )
+            objects.append(InitialAssignment(sid, formula(lobe.token), U.l_per_min))
     return objects
 
 

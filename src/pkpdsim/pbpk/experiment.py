@@ -402,7 +402,13 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
             named procedures of a species are
             `pkpdsim.pbpk.interventions.scenario_changes`, and an experiment
             applies the changes of one before a simulation or between the
-            phases of one, which is what a surgery at a time point is.
+            phases of one, which is what a surgery at a time point is. The
+            map is a declaration of the experiment of a model package and
+            nothing of the library reads it, unlike `renal_map`,
+            `cirrhosis_map` and `cardiac_map`, which the generated app turns
+            into the knobs of a page: the lobe page of an app is built from
+            the lobes of the model itself (`pkpdsim.webapp`, `g_po_<lobe>`),
+            so it offers every lobe and not only the named procedures.
         renal_function_range: a narrower range of the renal functions the
             model supports, `None` (the default) for the range of the validity
             of the kidney outflow, from 0 (anuria, the substances leave by the

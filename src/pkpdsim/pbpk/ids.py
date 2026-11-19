@@ -402,12 +402,15 @@ EGFR = "eGFR"
 F_ZONE = "f_zone"
 """The volume fraction of a zone of a zonated organ, `1/n` of `n` zones."""
 VLI_REF = "Vli_ref"
-"""The id of the reference volume of the liver, the intact organ."""
+"""The id of the reference volume of the liver, the intact organ.
+
+The liver volume the physiology derives from the body weight, which the
+lobes share.
+"""
 
 VLI_LOBES = "Vli_lobes"
 """The id of the sum of the volumes of the lobes, the liver which is there."""
 
-"""The liver volume the physiology derives from the body weight, which the lobes share."""
 F_REMNANT = "f_remnant"
 """The share of the reference liver volume which is left: 1 intact, `1 - resected`."""
 VBILE = "Vbile"

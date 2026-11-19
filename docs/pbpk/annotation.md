@@ -51,6 +51,8 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | fraction of the hepatic blood flow to a lobe of the liver | `FRACTION_OF_BLOOD_FLOW_TO_A_COMPARTMENT` |
 | blood flow to a lobe of the liver | `BLOOD_FLOW_RATE_TO_COMPARTMENT` |
 | blood flow per volume of a lobe of the liver | `PHYSIOLOGICAL_PARAMETER` |
+| rate of change of the volume of a lobe of the liver (positive hypertrophy, negative atrophy) | `PHYSIOLOGICAL_PARAMETER` |
+| time constant of the remodelling of a lobe of the liver | `PHYSIOLOGICAL_PARAMETER` |
 | patency of a vascular branch of a lobe of the liver (1 open, 0 ligated) | `PHYSIOLOGICAL_PARAMETER` |
 | presence of a lobe of the liver (1 in place, 0 resected) | `PHYSIOLOGICAL_PARAMETER` |
 | share of the liver which is left after a resection | `PHYSIOLOGICAL_PARAMETER` |

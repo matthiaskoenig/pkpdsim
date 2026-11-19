@@ -188,7 +188,7 @@ def _growth(lobe: Lobe, formula: str) -> list[Sbase]:
                 "hypertrophy, negative atrophy. The liver reads it for the "
                 "amount which atrophied tissue carries away.",
             ),
-            "lobe_flow",
+            "lobe_growth",
             organ=Organ.LIVER,
         ),
         AssignmentRule(
@@ -399,7 +399,7 @@ class PrescribedVolume:
                     "The time constant with which the volume of a lobe "
                     "follows its prescribed course.",
                 ),
-                "lobe_perfusion",
+                "remodelling_time",
                 organ=Organ.LIVER,
             )
         ]

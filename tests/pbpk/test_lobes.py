@@ -129,3 +129,46 @@ def test_habr_has_the_measured_default_gain() -> None:
     """Lautt 1985: the buffer response compensates 25.5 +- 2.7 % of the lost portal flow."""
     assert HABR().gain.value == pytest.approx(0.255, abs=1e-9)
     assert HABR().gain.source == "Lautt1985"
+
+
+def test_a_negative_supply_fraction_is_refused() -> None:
+    """A share of an inflow is no more allowed to be negative than a share of the mass.
+
+    A set whose supply fractions sum to 1 with a negative one among them
+    gives a lobe a negative blood flow, which is a model of nothing: the
+    check refuses it where it refuses a negative mass fraction.
+    """
+    lobes = [
+        Lobe("a", "a", _share(0.5), portal_fraction=_share(-0.2)),
+        Lobe("b", "b", _share(0.5), portal_fraction=_share(1.2)),
+    ]
+    with pytest.raises(ValueError, match=r"portal fraction .* is negative"):
+        check_lobes(lobes)
+
+
+def test_a_token_of_a_lobe_is_no_prefix_of_another() -> None:
+    """The tokens join the zone tokens into the site `<lobe>_<zone>`.
+
+    A site is resolved back to its lobe by its prefix, so a set with `a` and
+    `a_b` in it would give the sites of one lobe to the other: the tokens
+    carry no underscore.
+    """
+    with pytest.raises(ValueError, match="underscore"):
+        check_lobes([Lobe("a", "a", _share(0.5)), Lobe("a_b", "a b", _share(0.5))])
+
+
+def test_the_growth_and_the_tracking_time_say_what_they_are() -> None:
+    """The kind of an element is the term requested for it, so it has to fit.
+
+    `dVli_<lobe>` is the rate of change of a volume and `tau_track` a time;
+    neither is a blood flow to a lobe nor a flow per volume, and the
+    requested terms of the kinds go upstream to the ontology
+    (`docs/pbpk/annotation.md`).
+    """
+    from pkpdsim.pbpk.annotation import KINDS
+
+    requested = {kind: KINDS[kind].requested or "" for kind in KINDS}
+    assert "volume" in requested["lobe_growth"]
+    assert "time" in requested["remodelling_time"]
+    for kind in ("lobe_growth", "remodelling_time"):
+        assert "blood flow" not in requested[kind]

@@ -172,6 +172,14 @@ def check_circulation(definition: PBPKDefinition) -> None:
     """Reject topologies and initialization contracts the circulation cannot satisfy."""
     circulation = definition.variants.circulation
     if circulation is None:
+        if _buffered_lobes(definition):
+            raise ValueError(
+                "A hepatic arterial buffer response acts on the arterial "
+                "conductance of a lobe in the pressure network, which a liver "
+                "of prescribed supply fractions has not got; add "
+                "Variants(circulation=PressureFlow()) or drop the HABR of the "
+                "lobed liver."
+            )
         return
     if not isinstance(circulation, PressureFlow):
         raise ValueError("Variants.circulation must be PressureFlow or DynamicHeart.")
@@ -208,11 +216,21 @@ def check_circulation(definition: PBPKDefinition) -> None:
 
 def _remodelling_lobes(definition: PBPKDefinition) -> bool:
     """Whether the liver of a definition is a lobed liver whose anatomy moves."""
+    return _lobed(definition, "remodelling")
+
+
+def _buffered_lobes(definition: PBPKDefinition) -> bool:
+    """Whether the liver of a definition asks for the hepatic arterial buffer response."""
+    return _lobed(definition, "habr")
+
+
+def _lobed(definition: PBPKDefinition, attribute: str) -> bool:
+    """Whether the liver is a lobed liver which carries the given option."""
     from pkpdsim.pbpk.builder import organ_component
     from pkpdsim.pbpk.variants.liver_lobes import LobedLiver
 
     liver = organ_component(definition, Organ.LIVER)
-    return isinstance(liver, LobedLiver) and liver.remodelling is not None
+    return isinstance(liver, LobedLiver) and getattr(liver, attribute) is not None
 
 
 def _parameter(sid: str, value: float, unit: UnitDefinition, notes: str) -> Parameter:

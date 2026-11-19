@@ -234,11 +234,12 @@ def scenario_changes(species: Species) -> dict[str, dict[str, float]]:
     Raises:
         ValueError: whatever `scenarios` refuses.
     """
+    found = scenarios(species)
+    if not found:
+        # a species without a lobe set has no procedures, as `scenarios` says
+        return {}
     tokens = [lobe.token for lobe in lobe_table(species)]
-    return {
-        name: intervention.changes(tokens)
-        for name, intervention in scenarios(species).items()
-    }
+    return {name: intervention.changes(tokens) for name, intervention in found.items()}
 
 
 class _Scenarios(dict[str, Intervention]):

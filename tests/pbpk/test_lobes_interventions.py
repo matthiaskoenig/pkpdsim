@@ -176,6 +176,38 @@ def test_every_branch_closed_leaves_the_model_finite(tmp_path: Path) -> None:
     assert np.isfinite(result[:, 1]).all()
 
 
+def test_a_total_portal_occlusion_strands_the_drug_in_the_portal_vein(
+    tmp_path: Path,
+) -> None:
+    """Every portal branch closed is a liver which draws nothing from the portal vein.
+
+    The portal pool has one outlet in the body, the inflow of the liver, and
+    the splanchnic organs keep delivering into it: with the supply fractions
+    the model is finite and stationary in the arithmetic sense and physically
+    a dead end, the whole dose parks in the portal vein and the systemic
+    exposure goes to 0. This is what the model says, so the page says it as
+    well (`docs/pbpk/lobes.md`): a total portal occlusion asks for the
+    portosystemic collaterals the gaps of the page name, and the model of one
+    lobe without a portal inflow does not.
+    """
+    r = _after(tmp_path, PortalLigation(RAT_TOKENS))
+    assert r[ids.QPO] > 0.0, "the portal vein of the body still carries its flow"
+    for token in RAT_TOKENS:
+        assert r[ids.lobe_flow(ids.QPO, token)] == pytest.approx(0.0)
+    r[ids.iv_dose(S)] = 10.0
+    cpo = f"[{ids.pool_species(Pool.PORTAL, S)}]"
+    cve = f"[{ids.pool_species(Pool.VENOUS, S)}]"
+    result = r.simulate(0.0, 2880.0, 97, selections=["time", cpo, cve])
+    portal, venous = result[:, 1], result[:, 2]
+    assert np.isfinite(result).all()
+    # the portal pool only fills (the plateau drifts by the tolerance of the
+    # integrator alone) and the systemic concentration dies away
+    assert (np.diff(portal) >= -1e-6 * portal[-1]).all()
+    # a 10 mg dose in the portal plasma of a rat, which is where it stays
+    assert portal[-1] > 1000.0
+    assert venous[-1] < 1e-6 * venous[1]
+
+
 def test_the_scenarios_of_the_rat_are_those_of_the_table() -> None:
     names = scenarios(Species.RAT)
     assert set(names) == {"pvl70", "pvl90", "hepatectomy70", "hepatectomy90"}
@@ -235,3 +267,13 @@ def test_a_surgery_between_two_phases_takes_effect(tmp_path: Path) -> None:
     r.simulate(60.0, 120.0, 11)
     assert r[ids.lobe_flow(ids.QPO, "lll")] == pytest.approx(0.0)
     assert r[ids.lobe_flow(ids.QPO, "rl")] > before
+
+
+def test_a_species_without_lobes_has_no_changes_either() -> None:
+    """`scenario_changes` answers a species without a lobe table as `scenarios` does.
+
+    A species the table of the lobes does not cover has no procedures, which
+    is an empty mapping and not an error: the two functions say the same.
+    """
+    assert scenarios(Species.PIG) == {}
+    assert scenario_changes(Species.PIG) == {}
