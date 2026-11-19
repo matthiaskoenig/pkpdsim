@@ -177,3 +177,18 @@ def test_too_many_sites_raise() -> None:
 def test_a_lobe_set_which_is_no_set_is_refused() -> None:
     with pytest.raises(ValueError, match="sum to"):
         LobedLiver(lobes=[Lobe("a", "a", Value(0.5, U.dimensionless, "ModelChoice"))])
+
+
+def test_the_lobe_objects_of_a_variant_are_public() -> None:
+    """A user configures a lobed liver from `pkpdsim.pbpk`, as with every variant.
+
+    `ZonatedLiver` and `PressureFlow` are names of the package, so the lobed
+    liver and the objects which configure it are too: a study imports the
+    variant, its buffer response and its drivers from one place.
+    """
+    import pkpdsim.pbpk as pbpk
+
+    names = ("LobedLiver", "HABR", "FlowDriven", "PrescribedVolume", "PrescribedFlow")
+    for name in names:
+        assert name in pbpk.__all__, name
+        assert getattr(pbpk, name) is not None, name

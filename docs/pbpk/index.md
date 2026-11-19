@@ -20,7 +20,7 @@ Every model is built on one physiology, scaled to the individual of a study and 
 - [Adipose tissue and obesity](adipose.md) - the fat of an individual as the remainder of its body weight, its visceral and subcutaneous depots and a body weight which changes.
 - [Standard organ](organ.md) - the four compartments every organ is built from, which of them a substance needs, and the validity of the kidney outflow.
 - [Organ variants](variants.md) - the alternative component of an organ within the boundary of the standard organ: the zonated liver, the nephron kidney, the intestines.
-- [Liver lobes](lobes.md) - the second spatial axis of the liver: the lobes of a species perfused in parallel, the remodelling of their volumes after an intervention, and the portal vein ligations and hepatectomies which act on them.
+- [Liver lobes](lobes.md) - the second spatial axis of the liver: the lobes of a species perfused in parallel, the remodelling of their volumes after an intervention, and the portal vein ligations and hepatectomies which act on them; the [interactive examples](lobes_examples.md) run them in the browser.
 - [Zonated liver](../zonation.md) - the sinusoid of `n` zones the zonation engine writes, its flow, diffusion and profiles, and the figures of a zonated result.
 - [Machine perfusion](../perfusion.md) - the circuit of an ex vivo perfusion with one mounted organ, built from a definition as a body is.
 

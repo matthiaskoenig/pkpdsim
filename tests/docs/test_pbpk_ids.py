@@ -36,6 +36,7 @@ NAMESPACE = {
     "protein": "CYP3A4",
     "seg": "du",
     "zone": "z1",
+    "lobe": "lll",
     "kind": "iv",
     "tseg": "pt",
 }
@@ -52,13 +53,15 @@ PLACEHOLDERS = {
     "<seg>": "du",
     "<p>": "API2M",
     "<zone>": "z1",
+    "<lobe>": "lll",
     "<kind>": "iv",
     "<tseg>": "pt",
 }
 
 #: the names of `ids.__all__` which make no id and have no row: the tokens of
-#: the segments and the list of the species of a substance
-NO_ROW = frozenset({"GUT_SEGMENTS", "TUBULE_SEGMENTS", "species_of"})
+#: the segments, the ids of the hepatic flows and the list of the species of a
+#: substance
+NO_ROW = frozenset({"GUT_SEGMENTS", "HEPATIC_FLOWS", "TUBULE_SEGMENTS", "species_of"})
 
 
 def rows() -> list[re.Match[str]]:

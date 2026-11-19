@@ -216,7 +216,7 @@ def lobe_table(species: Species) -> tuple[Lobe, ...]:
 
 def _habr_gain() -> Value:
     """The measured gain of the hepatic arterial buffer response."""
-    return value("cardiovascular", "defaults", "habr_gain")
+    return value("liver_remodelling", "defaults", "habr_gain")
 
 
 @dataclass(frozen=True)
@@ -234,7 +234,7 @@ class HABR:
     Attributes:
         gain: the fraction of a lost portal flow the artery compensates,
             `None` for the measured default of the table
-            (`cardiovascular.toml`, 0.255 of Lautt 1985; Lautt 1990 reports
+            (`liver_remodelling.toml`, 0.255 of Lautt 1985; Lautt 1990 reports
             0.44 with the passive pressure effect included).
         maximum: the largest factor the arterial conductance reaches, so that
             a fully deportalised lobe does not take an unbounded arterial

@@ -36,7 +36,10 @@ nav = [
     { "Adipose tissue and obesity" = "pbpk/adipose.md" },
     { "Standard organ" = "pbpk/organ.md" },
     { "Organ variants" = "pbpk/variants.md" },
-    { "Liver lobes" = "pbpk/lobes.md" },
+    { "Liver lobes" = [
+      { "Model" = "pbpk/lobes.md" },
+      { "Interactive examples" = "pbpk/lobes_examples.md" },
+    ] },
     { "Cardiovascular circulation" = [
       { "Model" = "pbpk/cardiovascular.md" },
       { "Interactive examples" = "pbpk/cardiovascular_examples.md" },

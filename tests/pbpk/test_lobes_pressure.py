@@ -325,3 +325,24 @@ def test_the_sinusoidal_pressure_of_the_liver_is_the_mean_of_the_lobes(
         v[ids.lobe_flow(ids.QH, t)] * v[ids.lobe_pressure(t)] for t in RAT_TOKENS
     )
     assert v["CV_P_li"] == pytest.approx(weighted / v[ids.QH], rel=1e-7)
+
+
+def test_the_gain_of_the_buffer_response_is_a_parameter_of_the_lobes(
+    tmp_path: Path,
+) -> None:
+    """Only a lobed liver with a buffer response carries the gain.
+
+    The parameters of `cardiovascular.toml` are emitted as `CV_<key>` for
+    every model with a circulation, so a gain of the buffer response in that
+    table would put an unused constant into every pressure model and a second
+    name for the one the lobes use. The gain belongs to the lobes.
+    """
+    plain = _model(tmp_path / "plain", None, PressureFlow()).read_text()
+    assert 'id="CV_habr_gain"' not in plain
+    assert f'id="{ids.HABR_GAIN}"' not in plain
+
+    lobed = _model(
+        tmp_path / "lobed", LobedLiver(habr=HABR()), PressureFlow()
+    ).read_text()
+    assert f'id="{ids.HABR_GAIN}"' in lobed
+    assert 'id="CV_habr_gain"' not in lobed

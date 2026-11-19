@@ -222,7 +222,7 @@ f_{habr,l} = \min\left(f_{max},\;
 1 + \mathrm{gain}\,\frac{\max(0,\,Q_{po,l}^{ref} - Q_{po,l})}{Q_{ha,l}^{ref}}\right),
 \]
 
-so a lobe which loses a part of its portal flow gains `gain` times that flow in its artery, up to the ceiling. The default gain is the measured 25.5 % of Lautt 1985 (`cardiovascular.toml`, `habr_gain`), and the response is off unless a model asks for it, because a prescribed flow model has no arterial conductance to act on.
+so a lobe which loses a part of its portal flow gains `gain` times that flow in its artery, up to the ceiling. The default gain is the measured 25.5 % of Lautt 1985 (`liver_remodelling.toml`, `habr_gain`), and the response is off unless a model asks for it, because a prescribed flow model has no arterial conductance to act on.
 
 ```python
 from pkpdsim.pbpk.lobes import HABR
@@ -250,5 +250,6 @@ What the lobe library takes as a model choice, every one of them marked `ModelCh
 - **The tracking time of a prescribed volume**, one hour, is a numerical choice and not a physiological one.
 - **The split of the hepatic resistances over the lobes.** The reference resistance of a branch of a lobe is the resistance of the whole liver divided by the reference share of the lobe, which is the one split which reproduces the baseline flows; no publication of the database gives the resistance of a single branch.
 - **The absence of a portosystemic shunt of a lobe.** The shunt `f_shunt` of the liver is of the whole organ and the pressure network has no collateral vessel, so a liver whose every portal branch is closed has no solution on the network (above) and a portal pressure which rises is not relieved by collaterals, as it is in a cirrhotic liver. The functional share `f_functional` of a cirrhotic liver is of the whole organ too, so a cirrhosis is uniform over the lobes.
+- **The conductance of a lobe does not follow its volume.** The reference resistance of a branch is a constant of the build, so the split of the hepatic inflow over the lobes which stay open keeps the reference shares while the volumes move: a lobe which has doubled does not draw a larger share of the portal inflow than it did on the day of the operation. What the remodelling changes is the perfusion per volume, which is the stimulus of the growth law and the exposure of the lobe, and what the interventions change is the split; a conductance which grows with the volume would couple the two and is not implemented.
 - **The ceiling of the buffer response**, a doubling of the arterial inflow of a lobe, is a model choice: Lautt 1985 measured the gain and not a saturation.
 - **The procedures of the mouse and the human** are the anatomical standard (the Brisbane 2000 terminology for the human), which no publication of the database states. The two thirds hepatectomy of the mouse is named `hepatectomy` and not `hepatectomy70`, because the lobes it removes are 0.61 of the mass with the shares of Brennan 2024 and not the two thirds the procedure is named after in the literature.
