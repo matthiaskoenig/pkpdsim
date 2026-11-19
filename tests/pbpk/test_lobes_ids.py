@@ -105,3 +105,16 @@ def test_lobe_flow_refuses_a_flow_which_is_no_hepatic_flow(flow: str) -> None:
 def test_lobe_supply_fraction_ids() -> None:
     assert ids.arterial_fraction("lll") == "f_ha_lll"
     assert ids.portal_fraction("lll") == "f_po_lll"
+
+
+def test_lobe_remodelling_ids() -> None:
+    assert ids.lobe_reference_fraction("lll") == "f_vol_ref_lll"
+    assert ids.lobe_growth("lll") == "dVli_lll"
+    assert ids.VLI_LOBES == "Vli_lobes"
+    assert ids.Q_LIVER_REF == "q_li_ref"
+
+
+def test_remodelling_reaction_id() -> None:
+    assert (
+        ids.remodelling_reaction(Part.TISSUE, "apap", "lll") == "J_remodel_lll_ti_apap"
+    )

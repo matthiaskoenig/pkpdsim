@@ -54,6 +54,9 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | patency of a vascular branch of a lobe of the liver (1 open, 0 ligated) | `PHYSIOLOGICAL_PARAMETER` |
 | presence of a lobe of the liver (1 in place, 0 resected) | `PHYSIOLOGICAL_PARAMETER` |
 | share of the liver which is left after a resection | `PHYSIOLOGICAL_PARAMETER` |
+| compartment of the tissue a liver lobe has lost | `COMPARTMENT` |
+| cumulative amount carried away by atrophied tissue | `AMOUNT_OF_COMPOUND_IN_COMPARTMENT` |
+| loss of a compound with the tissue a liver lobe has lost | `DISTRIBUTION_PROCESS` |
 | hepatic artery blood flow | `BLOOD_FLOW_RATE_TO_COMPARTMENT` |
 | glomerular filtration rate at normal renal function | `PHYSIOLOGICAL_PARAMETER` |
 | relative organ function | `PHYSIOLOGICAL_PARAMETER` |

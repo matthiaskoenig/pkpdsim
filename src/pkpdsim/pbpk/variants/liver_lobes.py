@@ -43,9 +43,13 @@ from pkpdsim.pbpk.annotation import annotate
 from pkpdsim.pbpk.lobes import HABR, Lobe, Remodelling, check_lobes, lobe_table
 from pkpdsim.pbpk.organ import Boundary, OrganContext, StandardOrgan
 from pkpdsim.pbpk.organs import Organ
+from pkpdsim.pbpk.placement import built_parts
+from pkpdsim.pbpk.remodelling import VREMODELLED, remodelling_sink, sink_objects
+from pkpdsim.pbpk.substance import Substance
 from pkpdsim.pbpk.units import U
 from pkpdsim.pbpk.variants.liver_zonated import ZonatedBuilder, ZonatedLiver
 from pkpdsim.sbml.parameters import value_parameter
+from pkpdsim.species import Species
 
 if TYPE_CHECKING:
     from pkpdsim.pbpk.definition import PBPKDefinition
@@ -111,11 +115,11 @@ class LobedLiver:
         """The number of zones of every lobe, 1 for lumped lobes."""
         return 1 if self.zonation is None else self.zonation.n_zones
 
-    def resolved(self, ctx: OrganContext) -> tuple[Lobe, ...]:
-        """The lobes of the component, the set of the species of the build without.
+    def lobe_set(self, species: Species) -> tuple[Lobe, ...]:
+        """The lobes of the component, the set of a species where it gives none.
 
         Args:
-            ctx: the context of the liver.
+            species: the species of the build.
 
         Returns:
             The lobes.
@@ -126,9 +130,13 @@ class LobedLiver:
         """
         if self.lobes is not None:
             return tuple(self.lobes)
-        lobes = lobe_table(ctx.species)
+        lobes = lobe_table(species)
         _check_sites(len(lobes), self._n_zones)
         return lobes
+
+    def resolved(self, ctx: OrganContext) -> tuple[Lobe, ...]:
+        """The lobes of the component in the context of a build."""
+        return self.lobe_set(ctx.species)
 
     def body_objects(self, definition: PBPKDefinition) -> list[Sbase]:
         """Get the anatomy, the supply and the flows of the lobes in the top model.
@@ -143,14 +151,14 @@ class LobedLiver:
         Raises:
             ValueError: for a species without a lobe set.
         """
-        lobes = (
-            tuple(self.lobes)
-            if self.lobes is not None
-            else lobe_table(definition.species)
-        )
+        lobes = self.lobe_set(definition.species)
         if len(lobes) < 2:
             return []
-        return lobe_objects(lobes)
+        objects = lobe_objects(lobes)
+        if self.remodelling is not None:
+            objects += self.remodelling.objects(lobes, definition.species)
+            objects += sink_objects(definition)
+        return objects
 
     def build(self, ctx: OrganContext) -> tuple[ModelDefinition, Boundary]:
         """Build the model of the lobed liver and its boundary.
@@ -274,16 +282,35 @@ def _shares(lobe: Lobe) -> list[Sbase]:
     objects: list[Sbase] = [
         annotate(
             value_parameter(
-                ids.lobe_volume_fraction(lobe.token),
+                ids.lobe_reference_fraction(lobe.token),
                 lobe.mass_fraction,
                 U.dimensionless,
-                f"volume fraction of {lobe.name}",
+                f"reference volume fraction of {lobe.name}",
                 _SBO_PARAMETER,
-                "The share of the liver volume which this lobe holds.",
+                "The share of the volume of the intact liver which this lobe "
+                "holds, the constant of the lobe table; the share which it "
+                "holds during a simulation follows its volume.",
             ),
             "lobe_fraction",
             organ=Organ.LIVER,
-        )
+        ),
+        _parameter(
+            ids.lobe_volume_fraction(lobe.token),
+            lobe.mass_fraction.value,
+            U.dimensionless,
+            f"volume fraction of {lobe.name}",
+            "The share of the volume of the liver which this lobe holds, "
+            "`Vli_<lobe>/Vli` against the reference volume: it follows the "
+            "volume of the lobe when the anatomy of the liver changes during "
+            "a simulation, and the shares then sum to the remnant fraction "
+            "of the liver instead of 1.",
+            "lobe_fraction",
+        ),
+        InitialAssignment(
+            ids.lobe_volume_fraction(lobe.token),
+            f"{ids.lobe_volume(lobe.token)} / {ids.organ_volume(Organ.LIVER)}",
+            U.dimensionless,
+        ),
     ]
     supply = (
         (
@@ -380,6 +407,36 @@ def lobe_objects(lobes: Sequence[Lobe]) -> list[Sbase]:
     for lobe in lobes:
         objects += _shares(lobe)
         objects += _patency(lobe)
+    objects += [
+        _parameter(
+            ids.VLI_REF,
+            1.0,
+            U.litre,
+            "reference volume of the liver [l]",
+            "The volume of the intact liver of the individual, which the "
+            "shares of the lobes are measured against and which a remnant "
+            "grows back towards. It is taken at the start of a simulation "
+            "and does not change during it.",
+            "lobe_volume",
+        ),
+        InitialAssignment(ids.VLI_REF, ids.organ_volume(Organ.LIVER), U.litre),
+        _parameter(
+            ids.VLI_LOBES,
+            1.0,
+            U.litre,
+            "volume of the lobes of the liver [l]",
+            "The sum of the volumes of the lobes: the liver which is there, "
+            "the reference volume of the intact organ and less after a "
+            "resection or an atrophy.",
+            "lobe_volume",
+            constant=False,
+        ),
+        AssignmentRule(
+            ids.VLI_LOBES,
+            " + ".join(ids.lobe_volume(lobe.token) for lobe in lobes),
+            U.litre,
+        ),
+    ]
     for lobe in lobes:
         objects.append(
             _parameter(
@@ -396,7 +453,7 @@ def lobe_objects(lobes: Sequence[Lobe]) -> list[Sbase]:
             InitialAssignment(
                 ids.lobe_volume(lobe.token),
                 f"{ids.organ_volume(Organ.LIVER)} * "
-                f"{ids.lobe_volume_fraction(lobe.token)}",
+                f"{ids.lobe_reference_fraction(lobe.token)}",
                 U.litre,
             )
         )
@@ -452,11 +509,7 @@ def lobe_objects(lobes: Sequence[Lobe]) -> list[Sbase]:
     objects.append(
         AssignmentRule(
             ids.F_REMNANT,
-            " + ".join(
-                f"{ids.lobe_present(lobe.token)} * "
-                f"{ids.lobe_volume_fraction(lobe.token)}"
-                for lobe in lobes
-            ),
+            f"{ids.VLI_LOBES} / {ids.VLI_REF}",
             U.dimensionless,
         )
     )
@@ -510,6 +563,65 @@ class LobedBuilder(ZonatedBuilder):
             "capacity of the liver, is fed at its own hepatic artery and "
             "portal vein flows and drains at its own concentration; the organ "
             "drains the flow weighted mix of the lobes."
+        )
+
+    def _substance(self, s: Substance) -> None:
+        """The species, flows and exchanges of a substance, and what atrophy carries away."""
+        super()._substance(s)
+        if self.liver.remodelling is not None:
+            self._remodelled(s)
+
+    def _remodelled(self, s: Substance) -> None:
+        """The amount of a substance which the tissue of a shrinking lobe carries away.
+
+        The state of a species of the liver is its amount, so a lobe which
+        grows dilutes what it holds by itself; a lobe which shrinks would
+        concentrate it instead, which no tissue does. Every part of every
+        site of a lobe therefore loses the share of its amount which the
+        lobe loses, `A*max(0, -dVli_<lobe>)/Vli_<lobe>`, into the sink of
+        the body: the concentration of a shrinking lobe is left alone and
+        the amount which left the body is auditable.
+        """
+        self._input_compartment(VREMODELLED, "remodelled tissue")
+        sink = self._input_species(
+            remodelling_sink(s.sid),
+            VREMODELLED,
+            f"{s.name} (remodelled tissue)",
+            amount=True,
+        )
+        for lobe, sites in self._chains:
+            assert lobe is not None
+            loss = (
+                f"max(0 l_per_min, -{self._growth(lobe)}) / {self._lobe_volume(lobe)}"
+            )
+            for site in sites:
+                for part in built_parts(self.ctx.parts[s.sid]):
+                    conc = ids.species(part, s.sid, site)
+                    self._reaction(
+                        ids.remodelling_reaction(part, s.sid, str(site)),
+                        f"{conc} -> {sink}",
+                        f"{ids.compartment(part, site)} * {conc} * {loss}",
+                        f"loss {s.sid} {part.value} of lobe {lobe} to atrophy",
+                        kind="remodelling",
+                    )
+
+    def _growth(self, lobe: str) -> str:
+        """The growth of a lobe, the input `dVli_<lobe>` (l/min)."""
+        return self._input(
+            ids.lobe_growth(lobe),
+            U.l_per_min,
+            f"growth of lobe {lobe} [l/min]",
+            "The rate of change of the volume of the lobe, which the "
+            "remodelling of the body drives.",
+        )
+
+    def _lobe_volume(self, lobe: str) -> str:
+        """The volume of a lobe, the input `Vli_<lobe>` (l)."""
+        return self._input(
+            ids.lobe_volume(lobe),
+            U.litre,
+            f"volume of lobe {lobe} [l]",
+            "The volume of the lobe of the body.",
         )
 
     def _zone_of(self, site: str | None) -> str:

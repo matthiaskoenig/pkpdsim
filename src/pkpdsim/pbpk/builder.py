@@ -139,6 +139,7 @@ from pkpdsim.pbpk.placement import (
     value_parameter,
 )
 from pkpdsim.pbpk.pregnancy import pregnancy_objects, pregnancy_physiology_factors
+from pkpdsim.pbpk.remodelling import lobes_dynamic
 from pkpdsim.pbpk.routes import DEPOT, ORAL, depot_site, route_objects
 from pkpdsim.pbpk.sinks import sink_objects
 from pkpdsim.pbpk.stationary import (
@@ -758,6 +759,7 @@ def _body(
             *(f for f in rhythms if f not in definition.dynamic),
             *(b for b in adipose_dynamic(definition) if b not in definition.dynamic),
             *circulation_dynamic(definition),
+            *(b for b in lobes_dynamic(definition) if b not in definition.dynamic),
         ),
         top.objects,
         model_definitions,

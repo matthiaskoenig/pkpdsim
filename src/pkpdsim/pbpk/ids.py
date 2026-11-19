@@ -69,6 +69,7 @@ __all__ = [
     "QH",
     "QHA",
     "QPO",
+    "Q_LIVER_REF",
     "Q_PLACENTA",
     "SAT",
     "SV_TIS",
@@ -81,6 +82,7 @@ __all__ = [
     "VBILE",
     "VBLOOD",
     "VFECES",
+    "VLI_LOBES",
     "VLI_REF",
     "VLUMEN",
     "VURINE",
@@ -188,8 +190,10 @@ __all__ = [
     "kstab",
     "lobe_flow",
     "lobe_functional",
+    "lobe_growth",
     "lobe_perfusion",
     "lobe_present",
+    "lobe_reference_fraction",
     "lobe_shunt",
     "lobe_volume",
     "lobe_volume_fraction",
@@ -244,6 +248,7 @@ __all__ = [
     "rectal_portal_fraction",
     "ref",
     "regional_absorption_factor",
+    "remodelling_reaction",
     "segment_process",
     "shunt_reaction",
     "sinusoid_reaction",
@@ -393,6 +398,13 @@ EGFR = "eGFR"
 F_ZONE = "f_zone"
 """The volume fraction of a zone of a zonated organ, `1/n` of `n` zones."""
 VLI_REF = "Vli_ref"
+"""The id of the reference volume of the liver, the intact organ."""
+
+VLI_LOBES = "Vli_lobes"
+"""The id of the sum of the volumes of the lobes, the liver which is there."""
+
+Q_LIVER_REF = "q_li_ref"
+"""The id of the reference perfusion per volume of the liver, `Qh/Vli`."""
 """The liver volume the physiology derives from the body weight, which the lobes share."""
 F_REMNANT = "f_remnant"
 """The share of the reference liver volume which is left: 1 intact, `1 - resected`."""
@@ -606,6 +618,36 @@ def lobe_flow(flow: str, lobe: str) -> str:
             f"'{flow}' is no hepatic flow; the hepatic flows are {list(HEPATIC_FLOWS)}."
         )
     return f"{flow}_{lobe}"
+
+
+def remodelling_reaction(part: Part, s: str, site: str) -> str:
+    """The local id of the loss of `s` from a shrinking site, `J_remodel_<site>_<part>_<s>`.
+
+    The tissue an atrophying lobe loses carries its content away, so every
+    part of every site of the lobe has one.
+    """
+    return f"J_remodel_{site}_{part.value}_{s}"
+
+
+def lobe_reference_fraction(lobe: str) -> str:
+    """The id of the reference share of a lobe of the liver volume, `f_vol_ref_<lobe>`.
+
+    The share of the intact liver which the lobe holds, the constant of the
+    lobe table; the share `f_vol_<lobe>` follows the volume of the lobe and
+    leaves it when the anatomy of the liver changes.
+    """
+    return f"f_vol_ref_{lobe}"
+
+
+def lobe_growth(lobe: str) -> str:
+    """The id of the growth of the volume of a lobe, `dVli_<lobe>` (l/min).
+
+    The rate of change of the volume of the lobe, which the remodelling
+    drives: positive is hypertrophy, negative atrophy. It is a quantity of
+    the model and not a derivative of the solver, so the liver reads it for
+    the amount which atrophied tissue carries away.
+    """
+    return f"dVli_{lobe}"
 
 
 def arterial_fraction(lobe: str) -> str:

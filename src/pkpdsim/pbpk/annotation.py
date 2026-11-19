@@ -497,6 +497,11 @@ KINDS: dict[str, Kind] = {
     ),
     "urine": Kind(_C, "URINE_COMPARTMENT", terms=tuple(_compartments["urine"])),
     "feces": Kind(_C, "FECES_COMPARTMENT", terms=tuple(_compartments["feces"])),
+    "remodelled_tissue": Kind(
+        SBO.IMPLICIT_COMPARTMENT,
+        "COMPARTMENT",
+        requested="compartment of the tissue a liver lobe has lost",
+    ),
     "bile": Kind(_C, "BILE_COMPARTMENT", terms=tuple(_compartments["bi"])),
     "lumen": Kind(_C, "GUT_LUMEN_COMPARTMENT", terms=tuple(_compartments["gu_lumen"])),
     "mucosa": Kind(
@@ -967,6 +972,11 @@ KINDS: dict[str, Kind] = {
     "amount_undissolved": Kind(
         _SPECIES, "AMOUNT_IN_LUMEN", requested="amount of undissolved drug"
     ),
+    "amount_remodelled": Kind(
+        _SPECIES,
+        "AMOUNT_OF_COMPOUND_IN_COMPARTMENT",
+        requested="cumulative amount carried away by atrophied tissue",
+    ),
     # reactions
     "blood_flow": Kind(
         _T,
@@ -974,6 +984,11 @@ KINDS: dict[str, Kind] = {
         terms=((BQB.IS, "go/GO:0008015"),),  # blood circulation
     ),
     "exchange": Kind(_T, "DISTRIBUTION_PROCESS"),
+    "remodelling": Kind(
+        _T,
+        "DISTRIBUTION_PROCESS",
+        requested="loss of a compound with the tissue a liver lobe has lost",
+    ),
     "metabolism": Kind(
         SBO.BIOCHEMICAL_REACTION,
         "LINEAR_ELIMINATION",

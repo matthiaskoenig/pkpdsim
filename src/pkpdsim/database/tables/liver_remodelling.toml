@@ -1,0 +1,23 @@
+# The remodelling of the lobes of the liver after an intervention: a lobe which
+# loses its portal inflow atrophies and the lobes which keep theirs
+# hypertrophy, until the perfusion per volume of every lobe is the reference
+# one again. The numbers are model choices of the growth law of
+# `pkpdsim.pbpk.remodelling.FlowDriven`; no publication states a rate constant
+# of this law, so the default is the one which restores the mass of the rat
+# liver in about a week after a 70 % resection, the time course the
+# hepatectomy literature reports (Madrahimov 2006 for the lobe structure, the
+# regeneration of the rodent liver is essentially complete after 7 to 10 days).
+# A fit of a measured time course replaces it, and a measured course is mapped
+# directly with `PrescribedVolume` instead of the growth law.
+
+[defaults.k_growth]
+value = 0.0005
+unit = "1/min"
+source = "ModelChoice"
+notes = "Rate constant of the flow driven growth of a lobe: the relative growth per minute at a perfusion of twice the reference one. 0.0005 1/min is 0.72 1/day, which restores the liver of the rat in about a week after a 70 % resection (the remnant starts at three times the reference perfusion per volume, so it grows at about 1.4 1/day and the growth slows as the total volume approaches the reference one). It is a model choice to be fitted, not a measured constant."
+
+[defaults.tau_track]
+value = 60.0
+unit = "min"
+source = "ModelChoice"
+notes = "Tracking time of a prescribed lobe volume (`PrescribedVolume`): the lobe volume is a state which follows the given curve with this time constant, so that the growth rate of the lobe is a quantity of the model and the amount which atrophied tissue carries away is accounted for. One hour is fast against the days of liver remodelling; the state lags the curve by the tracking time times its slope, about 0.1 % of the volume for a course over a week."
