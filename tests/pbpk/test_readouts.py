@@ -1,12 +1,15 @@
 """The readouts of every key of a model figure."""
 
+import dataclasses
 import json
 from pathlib import Path
 from xml.etree import ElementTree
 
-from pkpdsim.pbpk import ids
+from pkpdsim.pbpk import Species, ids
+from pkpdsim.pbpk.figure import model_figure
 from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.visual.anatomy import anatomy_figure
+from pkpdsim.pbpk.visual.animal import vein_of
 from pkpdsim.pbpk.visual.content import ModelContent
 from pkpdsim.pbpk.visual.interactive import (
     ReadoutGroup,
@@ -216,3 +219,29 @@ def test_the_archive_writes_the_sidecar_beside_the_anatomy_figure(
     sidecar = tmp_path / "models" / "simple_body.readouts.json"
     assert json.loads(sidecar.read_text())["model"] == "simple"
     assert not (tmp_path / "models" / "simple.readouts.json").exists()
+
+
+def test_the_sidecar_covers_the_figure_of_an_animal(tmp_path: Path) -> None:
+    definition = dataclasses.replace(seven_substances(), species=Species.RAT)
+    svg = anatomy_figure(definition, tmp_path / "m_body.svg")
+    sidecar = write_readouts(
+        ModelContent.of(definition), svg, vein=vein_of(str(definition.species))
+    )
+    keys = set(json.loads(sidecar.read_text())["keys"])
+    drawn = _key_paths_of(svg)
+    assert any("tail vein" in k for k in drawn)
+    assert drawn <= keys
+
+
+def test_the_schematic_draws_keys_the_readouts_do_not_return(tmp_path: Path) -> None:
+    """The reason the archive writes no sidecar of the schematic.
+
+    When this fails, `readouts` covers the keys of the schematic: write its
+    sidecar in `create_archive` and test it like the anatomy figure.
+    """
+    definition = seven_substances()
+    svg = model_figure(definition, tmp_path / "m.svg")
+    missing = _key_paths_of(svg) - set(readouts(ModelContent.of(definition)))
+    assert "gu" in missing
+    assert "ki/urine" in missing
+    assert "lumen/feces" in missing

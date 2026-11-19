@@ -409,7 +409,10 @@ def write_readouts(content: ModelContent, svg: Path, *, vein: str = "arm vein") 
     "label", "unit", "kind"}]}}}`, the paths and groups of `readouts`, so a
     reader of the SVG needs no import of pkpdsim: it joins the `data-k` of the
     ancestors of a clicked element into a path and looks it up. Every path the
-    figure draws is a key (a decoration has no readouts). The ids are those of
+    anatomical drawing draws is a key (a decoration has no readouts). That
+    does not hold for the schematic figure (`pkpdsim.pbpk.figure`), which draws
+    paths `readouts` does not return yet (`gu`, `gu/sub:*`, `ki/urine/*`,
+    `lumen/feces/*`), so do not write its sidecar. The ids are those of
     the id scheme and are not checked against a compiled model, the reader
     filters the ones its model lacks.
 

@@ -36,6 +36,7 @@ __all__ = [
     "AnimalFigure",
     "figure_of",
     "reference_volumes",
+    "vein_of",
 ]
 
 DRAWINGS: Mapping[str, str] = MappingProxyType(
@@ -47,6 +48,14 @@ VEINS: Mapping[str, str] = MappingProxyType(
     {"mouse": "tail vein", "rat": "tail vein", "pig": "ear vein"}
 )
 """The vein of the intravenous dose and the blood sample of every animal."""
+
+
+def vein_of(species: str) -> str:
+    """The sampling site a figure names: the arm vein of the human, else the vein of the animal."""
+    if species == "human":
+        return "arm vein"
+    return VEINS.get(species, "tail vein")
+
 
 SKINS: Mapping[str, str] = MappingProxyType({"pig": "#f4c2c2"})
 """The skin of an animal, `palette.SKIN` by default."""
@@ -134,7 +143,7 @@ class AnimalBody:
         if "snout_x" in lm:  # the points of the routes given by the drawing (the pig)
             self.snout = np.array([lm["snout_x"], lm["snout_y"]])
             self.tail = np.array([lm["vein_x"], lm["vein_y"]])
-        self.vein = VEINS.get(species, "tail vein")
+        self.vein = vein_of(species)
 
     def centroid(self, key: str) -> np.ndarray:
         """The centre of the largest piece of an organ."""
