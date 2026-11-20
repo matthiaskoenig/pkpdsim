@@ -6,8 +6,11 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 from pkpdsim.pbpk import Species, build, ids
+from pkpdsim.pbpk.definition import Variants
 from pkpdsim.pbpk.figure import model_figure
 from pkpdsim.pbpk.organs import Organ
+from pkpdsim.pbpk.routes import FirstOrderDissolution, Route
+from pkpdsim.pbpk.variants.intestine import SingleLumen
 from pkpdsim.pbpk.visual.anatomy import anatomy_figure
 from pkpdsim.pbpk.visual.animal import vein_of
 from pkpdsim.pbpk.visual.content import ModelContent
@@ -19,6 +22,7 @@ from pkpdsim.pbpk.visual.interactive import (
 )
 
 from .test_figure import seven_substances
+from .test_intestine import S, _definition
 
 
 def _groups() -> dict[str, ReadoutGroup]:
@@ -101,9 +105,79 @@ def test_the_urine_reports_the_amount_and_the_rate() -> None:
     ]
 
 
-def test_the_lumen_reports_the_dissolved_amount() -> None:
-    groups = _groups()
-    assert [r.id for r in groups["lumen/sub:api"].readouts] == ["Alumen_api"]
+def test_the_lumen_reports_the_dissolved_amount_of_every_segment() -> None:
+    """Without the declared readout the lumen is reported segment by segment."""
+    content = ModelContent.of(seven_substances())
+    assert ids.lumen_amount("api") not in content.readouts
+    got = _groups()["lumen/sub:api"].readouts
+    assert [r.id for r in got] == [
+        f"{ids.flat(Organ.SMALL_INTESTINE, '')}Clumen_{seg}_api"
+        for seg in ids.GUT_SEGMENTS
+    ]
+    assert [r.label for r in got][:2] == [
+        "apixaban, stomach amount",
+        "apixaban, duodenum amount",
+    ]
+    assert {r.kind for r in got} == {"amount"} and {r.unit for r in got} == {"mmole"}
+
+
+def test_the_lumen_reports_the_summed_amount_when_the_model_declares_it() -> None:
+    """A model which requests the readout of the library gets the one curve."""
+    definition = seven_substances()
+    declared = dataclasses.replace(definition, readouts=(ids.lumen_amount("api"),))
+    got = readouts(ModelContent.of(declared))["lumen/sub:api"].readouts
+    assert [r.id for r in got] == ["Alumen_api"]
+
+
+def test_a_single_lumen_reports_its_one_compartment(tmp_path: Path) -> None:
+    """A model whose intestine has no segments reports its one lumen species."""
+    definition = _definition(
+        "single_lumen_figure",
+        routes=[Route.oral(S, FirstOrderDissolution(k=2.0))],
+        variants=Variants(organs={Organ.SMALL_INTESTINE: SingleLumen()}),
+    )
+    content = ModelContent.of(definition)
+    assert content.lumen_segments == ()
+    got = readouts(content)[f"lumen/sub:{S}"].readouts
+    assert [r.id for r in got] == [ids.flat(Organ.SMALL_INTESTINE, ids.lumen(S))]
+    sbml = build(definition, tmp_path).flat_path.read_text(encoding="utf-8")
+    root = ElementTree.fromstring(sbml)
+    ns = root.tag.split("}")[0].strip("{")
+    known = {e.get("id") for e in root.iter(f"{{{ns}}}species")}
+    assert got[0].id in known
+
+
+def test_every_lumen_readout_is_a_selection_of_the_model(tmp_path: Path) -> None:
+    """The lumen keys report ids which the build of the model really has.
+
+    The sidecar is read by a consumer which checks its ids against a compiled
+    model (`sbmlsim.panel_figure.restrict_to_model`), so a key whose ids are
+    all absent reports nothing at all. A key may propose an id the model
+    lacks - the drawing shows every organ of the library and a model has the
+    organs of its substances, and the urine and the feces rate are readouts a
+    model has to request - but the lumen had no other id beside the one it
+    requests, so clicking the intestine of an oral model gave nothing
+    (pkpdsim#222).
+    """
+    definition = seven_substances()
+    sbml = build(definition, tmp_path).flat_path.read_text(encoding="utf-8")
+    root = ElementTree.fromstring(sbml)
+    ns = root.tag.split("}")[0].strip("{")
+    known = {
+        element.get("id")
+        for tag in ("species", "parameter")
+        for element in root.iter(f"{{{ns}}}{tag}")
+    }
+    content = ModelContent.of(definition)
+    groups = readouts(content)
+    assert content.luminal, "the fixture has a lumen"
+    for sid in content.luminal:
+        got = groups[f"lumen/sub:{sid}"].readouts
+        assert got, f"the lumen of {sid} reports nothing"
+        for readout in got:
+            assert readout.id in known, (
+                f"the lumen of {sid} reports {readout.id}, which the build has not"
+            )
 
 
 def test_a_process_badge_reports_the_flux_of_its_reaction() -> None:

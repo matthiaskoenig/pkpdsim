@@ -13,11 +13,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 
+from pkpdsim.pbpk import ids
 from pkpdsim.pbpk.chemistry import Metabolism, Transport
 from pkpdsim.pbpk.definition import PBPKDefinition
 from pkpdsim.pbpk.figure import _Figure
 from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.parts import parts_for
+from pkpdsim.pbpk.variants.intestine import SegmentedIntestine
 
 __all__ = ["Chip", "ModelContent", "OrganContent", "Process", "SubstanceInfo"]
 
@@ -101,6 +103,10 @@ class ModelContent:
             `oral_solution`.
         route_text: the routes in words.
         luminal: the substances which reach the lumen.
+        lumen_segments: the lumen segments of the intestine in the order of
+            the transit, empty for a single lumen and without a lumen.
+        readouts: the readouts of the library which the model requests
+            (`PBPKDefinition.readouts`); the others are not in its build.
         bile: the substances excreted into the bile.
         urine: the substances excreted into the urine.
         pd: the PD components as (id, reads, sets).
@@ -115,6 +121,8 @@ class ModelContent:
     routes: tuple[tuple[str, str], ...]
     route_text: str
     luminal: tuple[str, ...]
+    lumen_segments: tuple[str, ...]
+    readouts: tuple[str, ...]
     bile: tuple[str, ...]
     urine: tuple[str, ...]
     pd: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...]
@@ -179,6 +187,10 @@ class ModelContent:
             routes=tuple((r.kind, r.substance) for r in definition.routes),
             route_text=f._route_text(),
             luminal=tuple(f.luminal),
+            lumen_segments=(
+                ids.GUT_SEGMENTS if isinstance(f.gut, SegmentedIntestine) else ()
+            ),
+            readouts=tuple(definition.readouts),
             bile=tuple(f.bile),
             urine=tuple(s.sid for s in definition.substances if s.excretion.urine),
             pd=tuple(
