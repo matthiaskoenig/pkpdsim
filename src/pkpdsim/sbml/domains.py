@@ -196,8 +196,8 @@ def domain_uncertainty(d: Domain) -> Uncertainty:
         integer or boolean domain, one `externalParameter` whose
         `definitionURL` is the XSD datatype of the value set. The child
         carries the value 1 although only its URL means something: libsbml
-        validates a bare one, but libAntimony, which the archive of a model
-        loads it with, refuses it.
+        does not need it, but libAntimony, which the archive of a model loads
+        it with, fails without it (sys-bio/antimony#190).
     """
     parameters: list[UncertParameter | UncertSpan] = [
         UncertSpan(

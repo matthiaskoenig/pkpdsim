@@ -346,6 +346,12 @@ def test_a_document_with_an_integer_domain_validates(tmp_path: Path, d: Domain) 
 def test_the_value_one_of_the_value_set_child_is_needed_by_antimony(
     tmp_path: Path, d: Domain
 ) -> None:
+    """Keep the `value` of the value set child: libAntimony fails without it.
+
+    libsbml accepts the child without a value, libAntimony does not and blames
+    the sibling `uncertSpan` (sys-bio/antimony#190). Remove the value only when
+    that issue is fixed.
+    """
     # the archive of a model is written through antimony, which refuses an
     # externalParameter without a value
     path = _one_parameter(tmp_path, d)
