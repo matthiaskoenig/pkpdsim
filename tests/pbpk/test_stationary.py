@@ -60,6 +60,7 @@ from pkpdsim.pbpk.stationary import (
     steady_plan,
 )
 from pkpdsim.pbpk.variants.liver_lobes import LobedLiver
+from pkpdsim.sbml.domains import NONNEGATIVE
 from pkpdsim.species import Species
 
 from .conftest import (
@@ -76,13 +77,13 @@ DAY = 24 * 60.0
 STANDARD = Variants()
 
 PARAMETERS = [
-    ModelParameter("k_prod", 0.0074, U.mmole_per_min),
-    ModelParameter("k_syn", 0.002, U.mmole_per_min),
-    ModelParameter("k_pa", 0.001, U.mmole_per_min),
-    ModelParameter("k_cl", 0.01, U.per_min),
-    ModelParameter("k_pacl", 0.002, U.l_per_min),
-    ModelParameter("Vm", 0.01, U.mmole_per_min),
-    ModelParameter("Km", 0.05, U.mM),
+    ModelParameter("k_prod", 0.0074, U.mmole_per_min, domain=NONNEGATIVE),
+    ModelParameter("k_syn", 0.002, U.mmole_per_min, domain=NONNEGATIVE),
+    ModelParameter("k_pa", 0.001, U.mmole_per_min, domain=NONNEGATIVE),
+    ModelParameter("k_cl", 0.01, U.per_min, domain=NONNEGATIVE),
+    ModelParameter("k_pacl", 0.002, U.l_per_min, domain=NONNEGATIVE),
+    ModelParameter("Vm", 0.01, U.mmole_per_min, domain=NONNEGATIVE),
+    ModelParameter("Km", 0.05, U.mM, domain=NONNEGATIVE),
 ]
 
 
@@ -309,7 +310,10 @@ def test_a_lung_which_clears_a_solved_substance(tmp_path: Path) -> None:
             stationary=_rate("k_pa"),
         ),
     ]
-    d = _definition([PROD, *lung], extra=[ModelParameter("k_lu", 0.5, U.l_per_min)])
+    d = _definition(
+        [PROD, *lung],
+        extra=[ModelParameter("k_lu", 0.5, U.l_per_min, domain=NONNEGATIVE)],
+    )
     r = _load(d, tmp_path, BW=80.0)
     _assert_stationary(r)
     assert r[f"[LU__Cpl_{S}]"] == pytest.approx(r[f"[Car_{S}]"], rel=1e-14)
@@ -408,17 +412,20 @@ def _pinned(
             )
         )
     parameters = [
-        ModelParameter("k_up", 0.004, U.mmole_per_min),
-        ModelParameter("Km_up", 0.01, U.mM),
+        ModelParameter("k_up", 0.004, U.mmole_per_min, domain=NONNEGATIVE),
+        ModelParameter("Km_up", 0.01, U.mM, domain=NONNEGATIVE),
         ModelParameter(
             "V_up",
             Formula(f"k_up * (Km_up + {muscle}) / ({muscle})", U.mmole_per_min),
             U.mmole_per_min,
+            domain=NONNEGATIVE,
         ),
-        ModelParameter("k_lu", 0.05, U.l_per_min),
-        ModelParameter("V_lu", 0.002, U.mmole_per_min),
-        ModelParameter("Km_lu", 0.02, U.mM),
-        ModelParameter("k_sup", Formula(rate, U.mmole_per_min), U.mmole_per_min),
+        ModelParameter("k_lu", 0.05, U.l_per_min, domain=NONNEGATIVE),
+        ModelParameter("V_lu", 0.002, U.mmole_per_min, domain=NONNEGATIVE),
+        ModelParameter("Km_lu", 0.02, U.mM, domain=NONNEGATIVE),
+        ModelParameter(
+            "k_sup", Formula(rate, U.mmole_per_min), U.mmole_per_min, domain=NONNEGATIVE
+        ),
     ]
     return PBPKDefinition(
         sid="pinned",
@@ -625,7 +632,7 @@ def test_a_product_starts_at_the_steady_state_of_its_substrate(tmp_path: Path) -
     d = _definition(
         [PROD, convert],
         substances=[_substance(), product],
-        extra=[ModelParameter("k_conv", 0.2, U.l_per_min)],
+        extra=[ModelParameter("k_conv", 0.2, U.l_per_min, domain=NONNEGATIVE)],
     )
     r = _load(d, tmp_path)
     _assert_stationary(r)

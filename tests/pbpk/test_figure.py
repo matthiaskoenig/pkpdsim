@@ -51,6 +51,7 @@ from pkpdsim.pbpk import (
     model_figure,
 )
 from pkpdsim.pbpk.visual.anatomy import anatomy_figure
+from pkpdsim.sbml.domains import NONNEGATIVE
 
 from .conftest import cardiac_pd, definition
 
@@ -192,7 +193,7 @@ def seven_substances() -> PBPKDefinition:
             Route.oral_solution("cr"),
         ],
         pd=[cardiac_pd(reads="api")],
-        parameters=[ModelParameter("k_cr2crtn", 1e-5, U.per_min)],
+        parameters=[ModelParameter("k_cr2crtn", 1e-5, U.per_min, domain=NONNEGATIVE)],
         slow_pools=[SlowPool("cr", frozenset({Organ.MUSCLE}), k=0.001, kp=2.0)],
     )
 
@@ -447,7 +448,7 @@ def test_a_custom_bile_reaction_and_an_intestinal_influx_are_drawn(
     d = definition(
         routes=[Route.iv("drg")],
         chemistry=[*definition().chemistry, custom, influx],
-        parameters=[ModelParameter("k_bile", 1e-3, U.l_per_min)],
+        parameters=[ModelParameter("k_bile", 1e-3, U.l_per_min, domain=NONNEGATIVE)],
     )
     texts = _texts(model_figure(d, tmp_path / "custom.svg"))
     # a process line wraps at the measure of the figure (`MAX_TEXT`)
@@ -503,7 +504,7 @@ def test_the_text_of_the_legend_and_the_processes(tmp_path: Path) -> None:
     d = definition(
         substances=[drug, definition().substances[1]],
         chemistry=[*definition().chemistry, source],
-        parameters=[ModelParameter("k_src", 1e-6, U.mmole_per_min)],
+        parameters=[ModelParameter("k_src", 1e-6, U.mmole_per_min, domain=NONNEGATIVE)],
     )
     path = model_figure(d, tmp_path / "legend.svg")
     text = " ".join(_texts(path))
@@ -681,7 +682,9 @@ def test_a_produced_substance_with_a_solved_baseline_is_endogenous(
     d = definition(
         substances=[*definition().substances, end],
         chemistry=[*definition().chemistry, production],
-        parameters=[ModelParameter("k_prod", 0.0074, U.mmole_per_min)],
+        parameters=[
+            ModelParameter("k_prod", 0.0074, U.mmole_per_min, domain=NONNEGATIVE)
+        ],
     )
     text = " ".join(_texts(model_figure(d, tmp_path / "produced.svg")))
     assert "endogenous (production, baseline solved)" in text

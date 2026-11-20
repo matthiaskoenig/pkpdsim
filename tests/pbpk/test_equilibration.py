@@ -63,6 +63,7 @@ from pkpdsim.pbpk.equilibration import (
     equilibrated_simulation,
 )
 from pkpdsim.pbpk.experiment import PBPKSimulationExperiment
+from pkpdsim.sbml.domains import NONNEGATIVE
 
 from .conftest import definition, endogenous_reference_definition
 
@@ -984,7 +985,7 @@ def _custom(equation: str, rate: str, *, baseline: bool = True) -> PBPKDefinitio
             ),
         ],
         chemistry=[CustomReaction("CONV", Organ.MUSCLE, Part.TISSUE, equation, rate)],
-        parameters=[ModelParameter("k_conv", 1e-3, U.l_per_min)],
+        parameters=[ModelParameter("k_conv", 1e-3, U.l_per_min, domain=NONNEGATIVE)],
         routes=[Route.iv("pre")],
     )
 
@@ -1016,7 +1017,7 @@ def test_a_product_of_a_source_keeps_its_value(tmp_path: Path) -> None:
     """
     d = dataclasses.replace(
         _custom("-> Cti_end", "k_conv * 1 mM", baseline=False),
-        parameters=[ModelParameter("k_conv", 1e-3, U.l_per_min)],
+        parameters=[ModelParameter("k_conv", 1e-3, U.l_per_min, domain=NONNEGATIVE)],
     )
     result = build(d, tmp_path)
     path = result.flat_path

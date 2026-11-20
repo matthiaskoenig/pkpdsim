@@ -20,6 +20,7 @@ from sbmlutils.metadata import SBO
 
 from pkpdsim.database.tables import cite
 from pkpdsim.sbml.annotation import initial_assignment
+from pkpdsim.sbml.domains import Domain, domain_uncertainty
 from pkpdsim.sbml.values import Formula, Q, Value, as_value
 
 __all__ = [
@@ -29,6 +30,7 @@ __all__ = [
     "observer",
     "value_notes",
     "value_parameter",
+    "with_domain",
 ]
 
 RULE = SBO.MATHEMATICAL_EXPRESSION
@@ -111,6 +113,22 @@ def value_parameter(
         notes=value_notes(v, text),
         uncertainties=v.uncertainties,
     )
+
+
+def with_domain(p: Parameter, domain: Domain | None) -> Parameter:
+    """State the domain of a parameter as its `domain` uncertainty.
+
+    Args:
+        p: the parameter.
+        domain: the domain the model states for it, `None` states none.
+
+    Returns:
+        The parameter, with the uncertainty of the domain after the
+        uncertainties it has (the one of a fitted value).
+    """
+    if domain is not None:
+        p.uncertainties = [*(p.uncertainties or []), domain_uncertainty(domain)]
+    return p
 
 
 def value_notes(v: Value, text: str = "") -> str | None:

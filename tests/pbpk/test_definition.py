@@ -47,6 +47,7 @@ from pkpdsim.pbpk import (
     sources,
 )
 from pkpdsim.pbpk.builder import organ_component
+from pkpdsim.sbml.domains import FRACTION, NONNEGATIVE, domain_of, domains
 
 from .conftest import (
     assert_reference_sbml,
@@ -793,6 +794,7 @@ def _k_prod(value: float | Value = K_PROD) -> ModelParameter:
         U.mmole_per_min,
         name="production rate",
         notes="The production shared by the baseline and the muscle.",
+        domain=NONNEGATIVE,
     )
 
 
@@ -812,6 +814,7 @@ def test_a_definition_parameter_is_a_top_parameter(tmp_path: Path) -> None:
                 "k_scaled",
                 Formula("2 dimensionless * k_prod * BW / 70 kg", U.mmole_per_min),
                 U.mmole_per_min,
+                domain=NONNEGATIVE,
             ),
         ],
         observers=[Observer("A_prod", "k_prod * time", U.mmole, "produced amount")],
@@ -829,7 +832,9 @@ def test_a_definition_parameter_is_a_top_parameter(tmp_path: Path) -> None:
     assert "The fitted production." in notes
     assert "Fitted value." in notes
     distrib = p.getPlugin("distrib")
-    assert distrib is not None and distrib.getNumUncertainties() == 1
+    # the uncertainty of the fit and the domain of the parameter
+    assert distrib is not None and distrib.getNumUncertainties() == 2
+    assert domain_of(p) == NONNEGATIVE
     assert p.getSBOTermID() == "SBO:0000002"  # quantitative systems description
     assert p.isSetMetaId() and p.getCVTerms().getSize() > 0
     scaled = model.getParameter("k_scaled")
@@ -874,7 +879,9 @@ def test_a_definition_parameter_may_not_shadow_a_library_id(
     sinks, the submodels) and the local ids of an organ (which a custom
     reaction of the organ would read instead) when the model is composed.
     """
-    d = _definition(parameters=[ModelParameter(sid, 1.0, U.dimensionless)])
+    d = _definition(
+        parameters=[ModelParameter(sid, 1.0, U.dimensionless, domain=NONNEGATIVE)]
+    )
     with pytest.raises(ValueError, match=rf"parameter '{sid}'.*{where}"):
         compose(d)
 
@@ -883,12 +890,12 @@ def test_the_parameters_of_a_definition_are_validated() -> None:
     """SIds without `__`, unique, a `Value` or `Formula` in the declared unit."""
     d = _definition(
         parameters=[
-            ModelParameter("a", 1.0, U.dimensionless),
-            ModelParameter("a", 2.0, U.dimensionless),
-            ModelParameter("1b", 1.0, U.dimensionless),
-            ModelParameter("c__d", 1.0, U.dimensionless),
-            ModelParameter("e", Value(1.0, U.mM), U.per_min),
-            ModelParameter("f", Formula("2 * a", U.mM), U.per_min),
+            ModelParameter("a", 1.0, U.dimensionless, domain=NONNEGATIVE),
+            ModelParameter("a", 2.0, U.dimensionless, domain=NONNEGATIVE),
+            ModelParameter("1b", 1.0, U.dimensionless, domain=NONNEGATIVE),
+            ModelParameter("c__d", 1.0, U.dimensionless, domain=NONNEGATIVE),
+            ModelParameter("e", Value(1.0, U.mM), U.per_min, domain=NONNEGATIVE),
+            ModelParameter("f", Formula("2 * a", U.mM), U.per_min, domain=NONNEGATIVE),
         ]
     )
     with pytest.raises(ValueError) as info:
@@ -905,8 +912,18 @@ def test_the_formulas_of_parameters_may_not_read_each_other_in_a_cycle() -> None
     """Two formulas which read each other are refused, naming them."""
     d = _definition(
         parameters=[
-            ModelParameter("a", Formula("2 * b", U.dimensionless), U.dimensionless),
-            ModelParameter("b", Formula("a / 2", U.dimensionless), U.dimensionless),
+            ModelParameter(
+                "a",
+                Formula("2 * b", U.dimensionless),
+                U.dimensionless,
+                domain=NONNEGATIVE,
+            ),
+            ModelParameter(
+                "b",
+                Formula("a / 2", U.dimensionless),
+                U.dimensionless,
+                domain=NONNEGATIVE,
+            ),
         ]
     )
     with pytest.raises(ValueError, match=r"\['a', 'b'\] read each other in a cycle"):
@@ -936,7 +953,12 @@ def test_a_custom_reaction_reads_no_unknown_id() -> None:
 def test_combine_unites_the_parameters() -> None:
     """Equal parameters of two definitions are taken once, different ones raise."""
     a = _definition(parameters=[_k_prod()])
-    b = _definition(parameters=[_k_prod(), ModelParameter("x", 1.0, U.dimensionless)])
+    b = _definition(
+        parameters=[
+            _k_prod(),
+            ModelParameter("x", 1.0, U.dimensionless, domain=NONNEGATIVE),
+        ]
+    )
     d = PBPKDefinition.combine(a, b, sid="coupled")
     assert [p.sid for p in d.parameters] == ["k_prod", "x"]
     with pytest.raises(ValueError, match="parameter 'k_prod'"):
@@ -954,7 +976,10 @@ def test_a_definition_without_parameters_is_unchanged(tmp_path: Path) -> None:
     plain_result = build(plain, tmp_path / "plain")
     assert_reference_sbml(plain_result)
     with_parameter = dataclasses.replace(
-        plain, parameters=[ModelParameter("k_prod", 0.002, U.mmole_per_min)]
+        plain,
+        parameters=[
+            ModelParameter("k_prod", 0.002, U.mmole_per_min, domain=NONNEGATIVE)
+        ],
     )
     result = build(with_parameter, tmp_path / "parameter")
     for path, reference in (
@@ -963,9 +988,11 @@ def test_a_definition_without_parameters_is_unchanged(tmp_path: Path) -> None:
     ):
         doc = libsbml.readSBMLFromFile(str(path))
         assert doc.getModel().removeParameter("k_prod") is not None
-        assert dateless(libsbml.writeSBMLToString(doc)) == dateless(
-            reference.read_text(encoding="utf-8")
-        )
+        # but for the root element, which names the package `distrib` of the
+        # domain of the parameter
+        written = dateless(libsbml.writeSBMLToString(doc))
+        expected = dateless(reference.read_text(encoding="utf-8"))
+        assert written[:1] + written[2:] == expected[:1] + expected[2:]
 
 
 def test_a_definition_parameter_may_not_take_an_id_of_the_definition() -> None:
@@ -974,7 +1001,8 @@ def test_a_definition_parameter_may_not_take_an_id_of_the_definition() -> None:
 
     observer = Observer("A_prod", "1 mmole_per_min * time", U.mmole, "produced")
     d = _definition(
-        parameters=[ModelParameter("A_prod", 1.0, U.mmole)], observers=[observer]
+        parameters=[ModelParameter("A_prod", 1.0, U.mmole, domain=NONNEGATIVE)],
+        observers=[observer],
     )
     with pytest.raises(
         ValueError,
@@ -982,7 +1010,7 @@ def test_a_definition_parameter_may_not_take_an_id_of_the_definition() -> None:
     ):
         compose(d)
     d = _definition(
-        parameters=[ModelParameter("cardio", 1.0, U.dimensionless)],
+        parameters=[ModelParameter("cardio", 1.0, U.dimensionless, domain=NONNEGATIVE)],
         pd=[cardiac_pd(reads="api")],
     )
     with pytest.raises(ValueError, match="parameter 'cardio' is an id of the PD"):
@@ -1005,11 +1033,13 @@ def test_a_constant_of_a_formulation_is_read_from_the_definition(
                 Value(0.27, U.dimensionless, notes="calibrated"),
                 U.dimensionless,
                 notes="The factor of the dissolution of the prolonged release.",
+                domain=FRACTION,
             ),
             ModelParameter(
                 "f_twice",
                 Formula("2 dimensionless * f_dis_pr_drg", U.dimensionless),
                 U.dimensionless,
+                domain=NONNEGATIVE,
             ),
         ],
     )
@@ -1021,5 +1051,80 @@ def test_a_constant_of_a_formulation_is_read_from_the_definition(
         released.parameter_value("f_dis_ir_drg")
     with pytest.raises(ValueError, match="formula"):
         released.parameter_value("f_twice")
-    plain = definition(parameters=[ModelParameter("f", 0.5, U.dimensionless)])
+    plain = definition(
+        parameters=[ModelParameter("f", 0.5, U.dimensionless, domain=FRACTION)]
+    )
     assert plain.parameter_value("f") == 0.5
+
+
+def _message(d: PBPKDefinition) -> str:
+    """The problems of the validation of a definition, empty for a valid one."""
+    try:
+        d.validate()
+    except ValueError as err:
+        return str(err)
+    return ""
+
+
+def _muscle_reaction(*parameters: ModelParameter | Parameter) -> CustomReaction:
+    """A custom reaction of the muscle with the constant `k_deep`."""
+    return CustomReaction(
+        "DEEP",
+        Organ.MUSCLE,
+        Part.TISSUE,
+        "Cti_api ->",
+        "k_deep * Vti * Cti_api",
+        parameters=list(parameters),
+    )
+
+
+def test_a_definition_parameter_without_a_domain_is_a_problem() -> None:
+    """A constant of the definition states the interval it accepts."""
+    message = _message(
+        _definition(parameters=[ModelParameter("k_prod", 0.001, U.mmole_per_min)])
+    )
+    assert "parameter 'k_prod': value states no domain" in message
+
+
+def test_a_definition_parameter_outside_its_domain_is_a_problem() -> None:
+    """A value outside the stated domain is named with the domain."""
+    message = _message(
+        _definition(
+            parameters=[ModelParameter("fm_x", 1.3, U.dimensionless, domain=FRACTION)]
+        )
+    )
+    assert "fm_x" in message and "[0, 1]" in message
+
+
+def test_a_custom_reaction_parameter_without_a_domain_is_a_problem() -> None:
+    """A `ModelParameter` of a custom reaction states its domain as well."""
+    reaction = _muscle_reaction(ModelParameter("k_deep", 1e-3, U.per_min))
+    message = _message(_definition(chemistry=[reaction]))
+    assert "k_deep" in message and "states no domain" in message
+
+
+def test_a_raw_parameter_of_a_custom_reaction_needs_no_domain() -> None:
+    """A sbmlutils `Parameter` is an element the model writes itself."""
+    reaction = _muscle_reaction(Parameter("k_deep", 1e-3, U.per_min))
+    assert "k_deep" not in _message(_definition(chemistry=[reaction]))
+
+
+def test_the_domain_of_a_definition_parameter_reaches_the_model(
+    tmp_path: Path,
+) -> None:
+    """The domain of a `ModelParameter` is the `domain` uncertainty of the element."""
+    d = _definition(
+        parameters=[ModelParameter("fm_x", 0.3, U.dimensionless, domain=FRACTION)]
+    )
+    assert domains(build(d, tmp_path).flat_path)["fm_x"] == FRACTION
+
+
+def test_the_domain_of_a_custom_reaction_parameter_reaches_the_flat_model(
+    tmp_path: Path,
+) -> None:
+    """The constant of a custom reaction of the muscle is `MU__k_deep`."""
+    reaction = _muscle_reaction(
+        ModelParameter("k_deep", 1e-3, U.per_min, domain=NONNEGATIVE)
+    )
+    d = _definition(chemistry=[reaction])
+    assert domains(build(d, tmp_path).flat_path)["MU__k_deep"] == NONNEGATIVE

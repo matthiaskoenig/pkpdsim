@@ -3,8 +3,9 @@
 import libsbml
 from sbmlutils.factory import Uncertainty, UncertParameter
 
-from pkpdsim.pbpk import MODEL_UNITS, U, Value, as_value, fitted
-from pkpdsim.pbpk.values import equal_by_value
+from pkpdsim.pbpk import MODEL_UNITS, Formula, U, Value, as_value, fitted
+from pkpdsim.pbpk.values import check_domain, equal_by_value
+from pkpdsim.sbml.domains import FRACTION
 
 
 def test_fitted_takes_fit_record_kwargs() -> None:
@@ -71,3 +72,27 @@ def test_values_with_equal_uncertainties_are_equal_by_value() -> None:
     assert equal_by_value({"x": [a]}, {"x": [b]})
     assert not equal_by_value([a], (b,))
     assert equal_by_value(1, 1.0)
+
+
+def test_check_domain_requires_a_domain() -> None:
+    """A parameter which states no domain is a problem."""
+    assert check_domain("parameter 'k'", "value", 0.5, None) == [
+        "parameter 'k': value states no domain"
+    ]
+
+
+def test_check_domain_reports_a_value_outside_it() -> None:
+    """A number outside the domain is named with the domain."""
+    (problem,) = check_domain("parameter 'f'", "value", 1.3, FRACTION)
+    assert "1.3" in problem and "[0, 1]" in problem
+
+
+def test_check_domain_passes_a_value_inside_it() -> None:
+    """A number inside the domain is no problem."""
+    assert check_domain("parameter 'f'", "value", 0.94, FRACTION) == []
+
+
+def test_check_domain_passes_a_formula() -> None:
+    """A formula has no number to check."""
+    formula = Formula("1 - fabs_drg", U.dimensionless)
+    assert check_domain("parameter 'f'", "value", formula, FRACTION) == []

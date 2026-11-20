@@ -59,6 +59,7 @@ from pkpdsim.pbpk.physiology import (
     reference_liver_flow,
 )
 from pkpdsim.pbpk.units import U
+from pkpdsim.sbml.domains import NONNEGATIVE
 from pkpdsim.sex import Sex
 from pkpdsim.zonation import ids as zids
 from pkpdsim.zonation.geometry import geometry, porosities, reference_liver_mass
@@ -1274,7 +1275,9 @@ def test_a_custom_reaction_runs_in_every_zone(tmp_path: Path) -> None:
     scale = 2.0
     d = definition(
         chemistry=[_drg2m(), _custom_reaction(factor="k_scale")],
-        parameters=[ModelParameter("k_scale", scale, U.dimensionless)],
+        parameters=[
+            ModelParameter("k_scale", scale, U.dimensionless, domain=NONNEGATIVE)
+        ],
         routes=[Route.iv(S)],
     )
     c = 0.005

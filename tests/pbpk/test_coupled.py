@@ -37,6 +37,7 @@ from pkpdsim.pbpk import (
 )
 from pkpdsim.pbpk.builder import build, compose
 from pkpdsim.pbpk.physiology import Sex
+from pkpdsim.sbml.domains import FRACTION
 
 from .conftest import cardiac_pd, load
 
@@ -179,7 +180,9 @@ def _fitted_metabolite(sd: float = 0.01) -> Substance:
 
 def _fitted_parameter(sd: float = 0.01) -> ModelParameter:
     """A shared fitted parameter of the definitions, built anew."""
-    return ModelParameter("f_shared", fitted(_fit(0.5, sd)), U.dimensionless)
+    return ModelParameter(
+        "f_shared", fitted(_fit(0.5, sd)), U.dimensionless, domain=FRACTION
+    )
 
 
 def test_combine_equal_fitted_values_by_value() -> None:

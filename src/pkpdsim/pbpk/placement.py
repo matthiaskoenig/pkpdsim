@@ -113,6 +113,7 @@ from pkpdsim.sbml.parameters import (
     formula_assignment,
     value_notes,
     value_parameter,
+    with_domain,
 )
 
 if TYPE_CHECKING:
@@ -1494,7 +1495,7 @@ def _custom_parameter(
     """The parameter of a custom reaction in its organ.
 
     A `ModelParameter` is a constant with its provenance and the uncertainty
-    of a fitted value (a `Formula` a `FormulaParameter`, whose initial
+    of a fitted value and its domain (a `Formula` a `FormulaParameter`, whose initial
     assignment the organ adds with inputs of the ids it reads), with the
     metaid of its flat id (`meta_MU__<id>`), unique in the document when two
     organs have a constant of the id. A sbmlutils `Parameter` is copied as
@@ -1503,13 +1504,16 @@ def _custom_parameter(
     would be given twice, an invalid document).
     """
     if isinstance(par, ModelParameter):
-        p = value_parameter(
-            par.sid,
-            par.value,
-            par.unit,
-            par.name or par.sid,
-            SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
-            par.notes or "",
+        p = with_domain(
+            value_parameter(
+                par.sid,
+                par.value,
+                par.unit,
+                par.name or par.sid,
+                SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
+                par.notes or "",
+            ),
+            par.domain,
         )
         p.metaId = f"meta_{ids.flat(organ, par.sid)}"
         return p

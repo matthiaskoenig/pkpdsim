@@ -38,6 +38,7 @@ from pkpdsim.pbpk import (
     ids,
 )
 from pkpdsim.pbpk import steady_state as ss
+from pkpdsim.sbml.domains import NONNEGATIVE
 
 from .conftest import individual
 
@@ -50,9 +51,9 @@ STANDARD = Variants()
 SECRETION = ss.Saturable(vmax="V_sec", km="km_sec")
 
 PARAMETERS = [
-    ModelParameter("k_prod", 0.009, U.mmole_per_min),
-    ModelParameter("V_sec", 0.002, U.mmole_per_min),
-    ModelParameter("km_sec", 0.08, U.mM),
+    ModelParameter("k_prod", 0.009, U.mmole_per_min, domain=NONNEGATIVE),
+    ModelParameter("V_sec", 0.002, U.mmole_per_min, domain=NONNEGATIVE),
+    ModelParameter("km_sec", 0.08, U.mM, domain=NONNEGATIVE),
 ]
 
 
@@ -94,7 +95,7 @@ def _definition(s: Substance) -> PBPKDefinition:
         ],
         parameters=[
             *PARAMETERS,
-            ModelParameter("C_ki_0", Formula(kidney, U.mM), U.mM),
+            ModelParameter("C_ki_0", Formula(kidney, U.mM), U.mM, domain=NONNEGATIVE),
         ],
         starts={
             f"MU__Cpl_{S}": Formula(muscle, U.mM),

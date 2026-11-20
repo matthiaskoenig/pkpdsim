@@ -42,6 +42,7 @@ from pkpdsim.pbpk.chemistry import Direction, Membrane, Transport
 from pkpdsim.pbpk.data import value
 from pkpdsim.pbpk.impairment import GASTRIC_EMPTYING
 from pkpdsim.pbpk.variants.segments import DATA, SEGMENTS
+from pkpdsim.sbml.domains import FRACTION
 
 from .conftest import (
     assert_reference_sbml,
@@ -741,7 +742,7 @@ def test_a_conversion_reads_the_transit_of_the_stomach(tmp_path: Path) -> None:
     )
     d = dataclasses.replace(
         _definition("conv_transit", intestine),
-        parameters=[ModelParameter("f_conv", f, U.dimensionless)],
+        parameters=[ModelParameter("f_conv", f, U.dimensionless, domain=FRACTION)],
     )
     result = build(d, tmp_path)
     person = individuals(result.flat_path)

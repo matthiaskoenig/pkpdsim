@@ -33,6 +33,7 @@ from pkpdsim.pbpk import (
     compose,
     ids,
 )
+from pkpdsim.sbml.domains import NONNEGATIVE
 
 from .conftest import (
     assert_reference_sbml,
@@ -85,7 +86,9 @@ def _definition(starts: dict[str, object] | None = None) -> PBPKDefinition:
                 "PROD", Organ.MUSCLE, Part.TISSUE, f"-> Cti_{S}", "k_prod", []
             )
         ],
-        parameters=[ModelParameter("k_prod", PRODUCTION, U.mmole_per_min)],
+        parameters=[
+            ModelParameter("k_prod", PRODUCTION, U.mmole_per_min, domain=NONNEGATIVE)
+        ],
         **fields,  # ty: ignore[invalid-argument-type]
     )
 

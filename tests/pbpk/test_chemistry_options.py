@@ -42,6 +42,7 @@ from pkpdsim.pbpk import (
     ids,
 )
 from pkpdsim.pbpk.builder import BuildResult
+from pkpdsim.sbml.domains import NONNEGATIVE
 
 from .conftest import (
     assert_reference_sbml,
@@ -205,6 +206,7 @@ _KP_DEEP = ModelParameter(
     Value(1.5, U.dimensionless, source="ModelChoice", notes="The deep pool to tissue."),
     U.dimensionless,
     name="deep pool to tissue",
+    domain=NONNEGATIVE,
 )
 
 
@@ -221,6 +223,7 @@ def test_a_custom_parameter_is_a_local_id_of_the_organ(tmp_path: Path) -> None:
         U.per_min,
         name="exchange of the deep pool",
         notes="Per litre of tissue.",
+        domain=NONNEGATIVE,
     )
     result = build(_definition([_deep(k_deep, _KP_DEEP)]), tmp_path)
     md = _comp_definition(result, Organ.MUSCLE)
@@ -252,6 +255,7 @@ def test_a_fitted_custom_parameter_carries_its_distribution_and_provenance(
         _fitted(2e-3, "lognormal(-6.2, 0.3, 1e-5, 0.1)", U.per_min),
         U.per_min,
         name="exchange of the deep pool",
+        domain=NONNEGATIVE,
     )
     flat = _flat(build(_definition([_deep(k_deep, _KP_DEEP)]), tmp_path))
     sid = ids.flat(Organ.MUSCLE, "k_deep")
@@ -270,6 +274,7 @@ def test_the_distribution_of_a_custom_parameter_is_drawn(tmp_path: Path) -> None
         "k_deep",
         _fitted(2e-3, "normal(0.002, 0.0002, 0.001, 0.003)", U.per_min),
         U.per_min,
+        domain=NONNEGATIVE,
     )
     result = build(_definition([_deep(k_deep, _KP_DEEP)]), tmp_path)
     assert ids.flat(Organ.MUSCLE, "k_deep") in parameter_distributions(result.flat_path)
@@ -282,7 +287,10 @@ def test_a_custom_parameter_of_a_formula_reads_the_top_model(tmp_path: Path) -> 
     follows a change of a covariate before the simulation.
     """
     k_deep = ModelParameter(
-        "k_deep", Formula("2e-3 per_min * BW / 70 kg", U.per_min), U.per_min
+        "k_deep",
+        Formula("2e-3 per_min * BW / 70 kg", U.per_min),
+        U.per_min,
+        domain=NONNEGATIVE,
     )
     result = build(_definition([_deep(k_deep, _KP_DEEP)]), tmp_path)
     md = _comp_definition(result, Organ.MUSCLE)
@@ -302,11 +310,12 @@ def test_a_custom_parameter_of_a_formula_reads_the_constants_of_its_organ(
     reaction), the tissue `Vti` and the top `BW`; a change of `k_ref` or of
     `BW` before the simulation moves it.
     """
-    k_ref = ModelParameter("k_ref", 1e-3, U.per_min)
+    k_ref = ModelParameter("k_ref", 1e-3, U.per_min, domain=NONNEGATIVE)
     k_deep = ModelParameter(
         "k_deep",
         Formula("2 dimensionless * k_ref * BW / 70 kg * Vti / 1 litre", U.per_min),
         U.per_min,
+        domain=NONNEGATIVE,
     )
     result = build(_definition([_deep(k_ref, k_deep, _KP_DEEP)]), tmp_path)
     md = _comp_definition(result, Organ.MUSCLE)
@@ -344,7 +353,9 @@ def test_a_custom_formula_of_no_constant_of_the_organ_is_refused(
     tmp_path: Path, formula: str, match: str
 ) -> None:
     """A formula which reads itself, a species of the organ or an unknown id is refused."""
-    k_deep = ModelParameter("k_deep", Formula(formula, U.per_min), U.per_min)
+    k_deep = ModelParameter(
+        "k_deep", Formula(formula, U.per_min), U.per_min, domain=NONNEGATIVE
+    )
     with pytest.raises(ValueError, match=match):
         build(_definition([_deep(k_deep, _KP_DEEP)]), tmp_path)
 
@@ -356,9 +367,12 @@ def test_a_custom_formula_of_a_shadowed_top_id_is_refused(tmp_path: Path) -> Non
     a second element `BW` of the organ next to the custom parameter (an SBML
     error before); the build names the clash instead.
     """
-    shadow = ModelParameter("BW", 70.0, U.kg)
+    shadow = ModelParameter("BW", 70.0, U.kg, domain=NONNEGATIVE)
     k_deep = ModelParameter(
-        "k_deep", Formula("2e-3 per_min * BW / 70 kg", U.per_min), U.per_min
+        "k_deep",
+        Formula("2e-3 per_min * BW / 70 kg", U.per_min),
+        U.per_min,
+        domain=NONNEGATIVE,
     )
     with pytest.raises(
         ValueError,
@@ -370,9 +384,17 @@ def test_a_custom_formula_of_a_shadowed_top_id_is_refused(tmp_path: Path) -> Non
 
 def test_custom_formulas_which_read_each_other_are_refused(tmp_path: Path) -> None:
     """Two custom parameters whose formulas read each other have no initial value."""
-    a = ModelParameter("k_a", Formula("1 dimensionless * k_deep", U.per_min), U.per_min)
+    a = ModelParameter(
+        "k_a",
+        Formula("1 dimensionless * k_deep", U.per_min),
+        U.per_min,
+        domain=NONNEGATIVE,
+    )
     k_deep = ModelParameter(
-        "k_deep", Formula("1 dimensionless * k_a", U.per_min), U.per_min
+        "k_deep",
+        Formula("1 dimensionless * k_a", U.per_min),
+        U.per_min,
+        domain=NONNEGATIVE,
     )
     with pytest.raises(ValueError, match=r"cycle: k_a -> k_deep -> k_a"):
         build(_definition([_deep(a, k_deep, _KP_DEEP)]), tmp_path)
@@ -383,7 +405,14 @@ def test_a_custom_parameter_simulates_as_a_sbmlutils_parameter(
 ) -> None:
     """A `ModelParameter` and a sbmlutils `Parameter` of one value give one model."""
     as_model = build(
-        _definition([_deep(ModelParameter("k_deep", 2e-3, U.per_min), _KP_DEEP)]),
+        _definition(
+            [
+                _deep(
+                    ModelParameter("k_deep", 2e-3, U.per_min, domain=NONNEGATIVE),
+                    _KP_DEEP,
+                )
+            ]
+        ),
         tmp_path / "model",
     )
     as_sbml = build(
@@ -411,22 +440,26 @@ def test_a_custom_parameter_simulates_as_a_sbmlutils_parameter(
     ("parameters", "match"),
     [
         (
-            [ModelParameter("k__deep", 2e-3, U.per_min)],
+            [ModelParameter("k__deep", 2e-3, U.per_min, domain=NONNEGATIVE)],
             "DRGDEEP: parameter id 'k__deep' contains '__'",
         ),
         (
-            [ModelParameter("1k", 2e-3, U.per_min)],
+            [ModelParameter("1k", 2e-3, U.per_min, domain=NONNEGATIVE)],
             "DRGDEEP: parameter id '1k' is not an SBML SId",
         ),
         (
             [
-                ModelParameter("k_deep", 2e-3, U.per_min),
-                ModelParameter("k_deep", 3e-3, U.per_min),
+                ModelParameter("k_deep", 2e-3, U.per_min, domain=NONNEGATIVE),
+                ModelParameter("k_deep", 3e-3, U.per_min, domain=NONNEGATIVE),
             ],
             "parameter 'k_deep' of organ 'mu' is defined twice",
         ),
         (
-            [ModelParameter("k_deep", Value(2e-3, U.per_hr), U.per_min)],
+            [
+                ModelParameter(
+                    "k_deep", Value(2e-3, U.per_hr), U.per_min, domain=NONNEGATIVE
+                )
+            ],
             "DRGDEEP: parameter 'k_deep': value must be in",
         ),
     ],
@@ -440,14 +473,16 @@ def test_wrong_custom_parameters_are_refused(
 
 def test_a_custom_parameter_twice_in_two_reactions_of_an_organ_is_refused() -> None:
     """Two custom reactions of an organ define a parameter once; the other reads it."""
-    first = _deep(ModelParameter("k_deep", 2e-3, U.per_min), _KP_DEEP)
+    first = _deep(
+        ModelParameter("k_deep", 2e-3, U.per_min, domain=NONNEGATIVE), _KP_DEEP
+    )
     second = dataclasses.replace(
         first,
         sid="DRGDEEP2",
         species=[],
         equation="Cti_drg -> Cdeep_drg",
         formula="k_deep * Vti * Cti_drg",
-        parameters=[ModelParameter("k_deep", 2e-3, U.per_min)],
+        parameters=[ModelParameter("k_deep", 2e-3, U.per_min, domain=NONNEGATIVE)],
     )
     problems = _problems(_definition([first, second]))
     assert "parameter 'k_deep' of organ 'mu' is defined twice" in problems
@@ -457,12 +492,17 @@ def test_a_custom_parameter_twice_in_two_reactions_of_an_organ_is_refused() -> N
 
 def test_custom_parameters_of_two_organs_are_two_parameters(tmp_path: Path) -> None:
     """The same id in two organs is a constant of each organ, `<ORGAN>__<id>`."""
-    muscle = _deep(ModelParameter("k_deep", 2e-3, U.per_min), _KP_DEEP)
+    muscle = _deep(
+        ModelParameter("k_deep", 2e-3, U.per_min, domain=NONNEGATIVE), _KP_DEEP
+    )
     skin = dataclasses.replace(
         muscle,
         sid="DRGDEEPSK",
         organ=Organ.SKIN,
-        parameters=[ModelParameter("k_deep", 5e-3, U.per_min), _KP_DEEP],
+        parameters=[
+            ModelParameter("k_deep", 5e-3, U.per_min, domain=NONNEGATIVE),
+            _KP_DEEP,
+        ],
     )
     flat = _flat(build(_definition([muscle, skin]), tmp_path))
     assert flat.getParameter("MU__k_deep").getValue() == 2e-3
@@ -492,7 +532,12 @@ def test_a_custom_parameter_under_an_id_of_the_organ_is_refused(
     """A custom parameter under the id of a compartment, a parameter or a process constant."""
     elimination = Metabolism("M_MU", Organ.MUSCLE, "drg", {}, FirstOrder(k=0.1))
     d = _definition(
-        [_deep(ModelParameter(sid, 1.0, U.dimensionless), _KP_DEEP), elimination]
+        [
+            _deep(
+                ModelParameter(sid, 1.0, U.dimensionless, domain=NONNEGATIVE), _KP_DEEP
+            ),
+            elimination,
+        ]
     )
     with pytest.raises(ValueError) as err:
         build(d, tmp_path)
@@ -682,7 +727,9 @@ def test_rate_of_a_custom_reaction_is_refused() -> None:
     """A custom reaction has no constant of the library to share."""
     d = _definition(
         [
-            _deep(ModelParameter("k_deep", 2e-3, U.per_min), _KP_DEEP),
+            _deep(
+                ModelParameter("k_deep", 2e-3, U.per_min, domain=NONNEGATIVE), _KP_DEEP
+            ),
             Transport(
                 "UP_MU",
                 Organ.MUSCLE,

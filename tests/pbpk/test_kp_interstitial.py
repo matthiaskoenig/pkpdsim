@@ -34,6 +34,7 @@ from pkpdsim.pbpk.builder import built_organs
 from pkpdsim.pbpk.data import load
 from pkpdsim.pbpk.impairment import ckd_unbound_fractions, class_factors
 from pkpdsim.pbpk.physiology import reference_fractions
+from pkpdsim.sbml.domains import FRACTION
 
 from .conftest import (
     assert_reference_sbml,
@@ -194,7 +195,7 @@ def test_the_scale_is_a_parameter_a_fit_changes(tmp_path: Path) -> None:
 
 
 def test_the_scale_may_be_a_formula_of_a_definition_parameter(tmp_path: Path) -> None:
-    phi = ModelParameter("phi_drg", 0.5, U.dimensionless)
+    phi = ModelParameter("phi_drg", 0.5, U.dimensionless, domain=FRACTION)
     kp = Kp(
         interstitial=Formula("2 dimensionless * phi_drg", U.dimensionless),
         overrides={Organ.LIVER: 2.0},

@@ -33,6 +33,7 @@ from pkpdsim.pbpk.values import (
     ModelParameter,
     Q,
     Value,
+    check_domain,
     check_positive,
     check_unit,
     number,
@@ -544,7 +545,7 @@ def check_custom_parameters(p: CustomReaction, defined: set[str]) -> list[str]:
 
     An SId without `__` (the separator of the flat ids), defined once in the
     organ (`defined`, the ids of the other custom reactions of the organ: they
-    read it), a `ModelParameter` with a value in its unit. That an id is no
+    read it), a `ModelParameter` with a value in its unit and a domain which holds it. That an id is no
     other element of the organ is checked by the build
     (`OrganBuilder.model_definition`).
 
@@ -576,5 +577,8 @@ def check_custom_parameters(p: CustomReaction, defined: set[str]) -> list[str]:
         if isinstance(par, ModelParameter):
             problems += check_unit(
                 f"{p.sid}: parameter '{sid}'", "value", par.value, par.unit
+            )
+            problems += check_domain(
+                f"{p.sid}: parameter '{sid}'", "value", par.value, par.domain
             )
     return problems

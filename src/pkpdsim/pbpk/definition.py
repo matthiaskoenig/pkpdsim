@@ -42,6 +42,7 @@ from pkpdsim.pbpk.values import (
     ModelParameter,
     Q,
     Value,
+    check_domain,
     check_positive,
     check_unit,
     equal_by_value,
@@ -564,6 +565,7 @@ class PBPKDefinition:
                     f"parameter '{p.sid}' is the id of an organ submodel of the library"
                 )
             problems += check_unit(f"parameter '{p.sid}'", "value", p.value, p.unit)
+            problems += check_domain(f"parameter '{p.sid}'", "value", p.value, p.domain)
         return problems
 
     def _check_starts(self) -> list[str]:

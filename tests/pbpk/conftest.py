@@ -61,6 +61,7 @@ from pkpdsim.pbpk import (
     ids,
 )
 from pkpdsim.pbpk.builder import BuildResult
+from pkpdsim.sbml.domains import NONNEGATIVE
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -574,7 +575,9 @@ def endogenous_reference_definition() -> PBPKDefinition:
                 MM(vmax=1e-3, km=0.1),
             ),
         ],
-        parameters=[ModelParameter("k_prod", 0.001, U.mmole_per_min)],
+        parameters=[
+            ModelParameter("k_prod", 0.001, U.mmole_per_min, domain=NONNEGATIVE)
+        ],
         slow_pools=[SlowPool("end", frozenset({Organ.MUSCLE}), k=0.001, kp=2.0)],
         variants=Variants(
             organs={Organ.LIVER: ZonatedLiver(n_zones=8), Organ.KIDNEY: "nephron"}
@@ -667,7 +670,7 @@ def assert_reference_sbml(result: BuildResult) -> None:
     and with the heart failure factors of the consensus (Leithe 1984), the
     kidney volume and transit of CKD of Malik 2020 and the cirrhosis factors
     cited from Edginton 2008 (factors, notes and sources only), and all rebuilt with the factors of the sex of the female build and the constant factors of the age of a build without the physiology over age (`PBPKDefinition.age`, which is not the default: the reference values and the factors are those of the individual of 35 years, as before, and the parameters `fage_*` are their constant 1; the values of the default individual unchanged); a change of the library which changes the
-    SBML of every model on purpose rebuilds them and says so, and all rebuilt with the notes of the age table read from the primary publications (`age_human.toml`; the notes of the age factors and the two sources Fomon 1982 and Jopling 2009 only, no value changed) and with the citation of NHANES which names the script of the waist regression (the one line of the sources of the hematocrit and the albumin; the waist itself belongs to the adipose option, which these references do not have), and with the citation of `ModelChoice` which names both libraries of pkpdsim, the PBPK and the machine perfusion library (that text only), and with the units of the flat model merged (`pkpdsim.sbml.flatten.merge_unit_definitions` in `flat_model`: the flat references carry 21 unit definitions instead of the 315 copies of them the flattening made, and every `units`, `substanceUnits` and unit of the math names the definition of the model instead of the copy of its organ, `mmole` instead of `LU__mmole`; line by line the former references otherwise, the comp references unchanged). `turnover_reference_definition()` was built at the commit before the degradation rate of a protein and the stabilisation; its flat reference is rebuilt with the merged units as well, its comp reference is unchanged.
+    SBML of every model on purpose rebuilds them and says so, the endogenous references rebuilt with the `domain` uncertainty of the constant `k_prod` of their definition (additions only: the namespace of `distrib` in the root element and the uncertainty of the parameter), and all rebuilt with the notes of the age table read from the primary publications (`age_human.toml`; the notes of the age factors and the two sources Fomon 1982 and Jopling 2009 only, no value changed) and with the citation of NHANES which names the script of the waist regression (the one line of the sources of the hematocrit and the albumin; the waist itself belongs to the adipose option, which these references do not have), and with the citation of `ModelChoice` which names both libraries of pkpdsim, the PBPK and the machine perfusion library (that text only), and with the units of the flat model merged (`pkpdsim.sbml.flatten.merge_unit_definitions` in `flat_model`: the flat references carry 21 unit definitions instead of the 315 copies of them the flattening made, and every `units`, `substanceUnits` and unit of the math names the definition of the model instead of the copy of its organ, `mmole` instead of `LU__mmole`; line by line the former references otherwise, the comp references unchanged). `turnover_reference_definition()` was built at the commit before the degradation rate of a protein and the stabilisation; its flat reference is rebuilt with the merged units as well, its comp reference is unchanged.
     """
     for path in (result.comp_path, result.flat_path):
         reference = gzip.decompress((REFERENCE / f"{path.name}.gz").read_bytes())

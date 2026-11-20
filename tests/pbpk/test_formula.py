@@ -37,6 +37,7 @@ from pkpdsim.pbpk import (
 )
 from pkpdsim.pbpk.placement import formula_ids
 from pkpdsim.pbpk.values import as_value
+from pkpdsim.sbml.domains import FRACTION, NONNEGATIVE
 
 from .conftest import (
     compiled,
@@ -399,7 +400,11 @@ def test_a_formula_fabs_follows_the_fed_state(tmp_path: Path) -> None:
     """
     d = definition(
         routes=[Route.oral("drg"), Route.oral("drg_m")],
-        parameters=[ModelParameter("f_ref", 0.3, U.dimensionless, name="reference")],
+        parameters=[
+            ModelParameter(
+                "f_ref", 0.3, U.dimensionless, name="reference", domain=FRACTION
+            )
+        ],
         variants=Variants(
             organs={
                 Organ.SMALL_INTESTINE: SegmentedIntestine(
@@ -432,7 +437,11 @@ def test_a_formula_release_follows_a_definition_parameter(tmp_path: Path) -> Non
     release = Formula("f_mr", U.dimensionless, notes="The release of the tablet.")
     d = definition(
         routes=[Route.oral("drg", FirstOrderDissolution(k=2.0, release=release))],
-        parameters=[ModelParameter("f_mr", 1.0, U.dimensionless, name="release")],
+        parameters=[
+            ModelParameter(
+                "f_mr", 1.0, U.dimensionless, name="release", domain=FRACTION
+            )
+        ],
     )
     flat = build(d, tmp_path).flat_path
     assert _formula(_model(flat), ids.dissolution_release_factor("drg")) == "f_mr"
@@ -468,7 +477,11 @@ def test_a_formula_rate_reads_a_definition_parameter(tmp_path: Path) -> None:
     ]
     d = definition(
         chemistry=chemistry,
-        parameters=[ModelParameter("k_gu", 0.25, U.l_per_min, name="gut constant")],
+        parameters=[
+            ModelParameter(
+                "k_gu", 0.25, U.l_per_min, name="gut constant", domain=NONNEGATIVE
+            )
+        ],
     )
     result = build(d, tmp_path)
     flat = _model(result.flat_path)
@@ -481,7 +494,9 @@ def test_a_formula_rate_reads_a_definition_parameter(tmp_path: Path) -> None:
 
 def _k_prod(value: float = 0.025) -> ModelParameter:
     """The constant `k_prod` of a definition (mM)."""
-    return ModelParameter("k_prod", value, U.mM, name="production constant")
+    return ModelParameter(
+        "k_prod", value, U.mM, name="production constant", domain=NONNEGATIVE
+    )
 
 
 def test_a_formula_baseline_reads_a_definition_parameter(tmp_path: Path) -> None:
@@ -531,7 +546,13 @@ def test_a_custom_reaction_reads_a_definition_parameter(tmp_path: Path) -> None:
         substances=[s],
         chemistry=[production],
         parameters=[
-            ModelParameter("k_prod", 0.002, U.mmole_per_min, name="production rate")
+            ModelParameter(
+                "k_prod",
+                0.002,
+                U.mmole_per_min,
+                name="production rate",
+                domain=NONNEGATIVE,
+            )
         ],
     )
     result = build(d, tmp_path)
@@ -599,7 +620,11 @@ def test_an_organ_formula_reads_a_definition_parameter(tmp_path: Path) -> None:
     k = Formula("2 dimensionless * k_bl", U.per_min)
     d = dataclasses.replace(
         _definition(k=k),
-        parameters=[ModelParameter("k_bl", 0.005, U.per_min, name="bile constant")],
+        parameters=[
+            ModelParameter(
+                "k_bl", 0.005, U.per_min, name="bile constant", domain=NONNEGATIVE
+            )
+        ],
     )
     result = build(d, tmp_path)
     comp = libsbml.readSBMLFromFile(str(result.comp_path))

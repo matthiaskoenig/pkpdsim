@@ -38,6 +38,7 @@ from pkpdsim.pbpk.flat_model import loaded_model
 from pkpdsim.pbpk.kidney_validity import individual_values
 from pkpdsim.pbpk.organs import PORTAL_ORGANS
 from pkpdsim.pbpk.stationary import SteadyStateWarning
+from pkpdsim.sbml.domains import NONNEGATIVE
 
 from .cardiovascular_solver import simulate
 from .conftest import cardiac_pd
@@ -397,9 +398,12 @@ def test_pressure_model_checks_pinned_endogenous_balance(
         variants=Variants(circulation=PressureFlow()),
         parameters=[
             ModelParameter(
-                "source_rate", 0.004 if imbalance else 0.003, U.mmole_per_min
+                "source_rate",
+                0.004 if imbalance else 0.003,
+                U.mmole_per_min,
+                domain=NONNEGATIVE,
             ),
-            ModelParameter("clearance", 0.1, U.l_per_min),
+            ModelParameter("clearance", 0.1, U.l_per_min, domain=NONNEGATIVE),
         ],
         chemistry=[
             CustomReaction(
@@ -555,7 +559,12 @@ def test_user_formulas_still_cannot_snapshot_pressure_driven_flows() -> None:
     definition = dataclasses.replace(
         _definition(PressureFlow()),
         parameters=[
-            ModelParameter("user_flow", Formula("Qki", U.l_per_min), U.l_per_min)
+            ModelParameter(
+                "user_flow",
+                Formula("Qki", U.l_per_min),
+                U.l_per_min,
+                domain=NONNEGATIVE,
+            )
         ],
     )
     with pytest.raises(ValueError, match="change during"):
