@@ -1495,9 +1495,9 @@ def _custom_parameter(
     """The parameter of a custom reaction in its organ.
 
     A `ModelParameter` is a constant with its provenance and the uncertainty
-    of a fitted value and its domain (a `Formula` a `FormulaParameter`, whose initial
-    assignment the organ adds with inputs of the ids it reads), with the
-    metaid of its flat id (`meta_MU__<id>`), unique in the document when two
+    of a fitted value and its domain (a `Formula` a `FormulaParameter`, whose
+    initial assignment the organ adds with inputs of the ids it reads), with
+    the metaid of its flat id (`meta_MU__<id>`), unique in the document when two
     organs have a constant of the id. A sbmlutils `Parameter` is copied as
     it is; when another organ uses its id (`shared`) and it has no metaid,
     it gets the metaid of its flat id as well (the default metaid of its id

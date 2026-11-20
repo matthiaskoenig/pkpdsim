@@ -840,6 +840,7 @@ def test_a_definition_parameter_is_a_top_parameter(tmp_path: Path) -> None:
     scaled = model.getParameter("k_scaled")
     assert scaled.getName() == "k_scaled"
     assert scaled.getConstant()
+    assert domain_of(scaled) == NONNEGATIVE
     ia = model.getInitialAssignmentBySymbol("k_scaled")
     assert "k_prod" in libsbml.formulaToL3String(ia.getMath())
     r = individual(result.flat_path, k_prod=0.004, BW=70.0)

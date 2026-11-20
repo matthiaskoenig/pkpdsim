@@ -545,9 +545,9 @@ def check_custom_parameters(p: CustomReaction, defined: set[str]) -> list[str]:
 
     An SId without `__` (the separator of the flat ids), defined once in the
     organ (`defined`, the ids of the other custom reactions of the organ: they
-    read it), a `ModelParameter` with a value in its unit and a domain which holds it. That an id is no
-    other element of the organ is checked by the build
-    (`OrganBuilder.model_definition`).
+    read it), a `ModelParameter` with a value in its unit and a domain which
+    holds it. That an id is no other element of the organ is checked by the
+    build (`OrganBuilder.model_definition`).
 
     Args:
         p: the custom reaction.
