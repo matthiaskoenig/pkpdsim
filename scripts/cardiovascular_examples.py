@@ -31,6 +31,7 @@ from pkpdsim.pbpk import (
     DynamicHeart,
     PBPKDefinition,
     PressureFlow,
+    Sex,
     Variants,
     build,
     ids,
@@ -292,7 +293,7 @@ def heart_example(path: Path, example: Example) -> dict[str, Any]:
     }
 
 
-def export_browser_model(path: Path, output: Path) -> None:
+def export_browser_model(path: Path, output: Path, *, runtime: bool = True) -> None:
     """Export the installed core host, runtime and compiled heart for Web Workers.
 
     All runtime bytes and their notices come from the same installed release
@@ -309,21 +310,24 @@ def export_browser_model(path: Path, output: Path) -> None:
         newline="\n",
     )
     (output / "model.xml").write_text(sbml, encoding="utf-8", newline="\n")
-    for name, wasm in sbmlsim_core.runtime_wasm().items():
-        (output / f"{name}.wasm").write_bytes(wasm)
-    (output / "sbmlsim-core.js").write_text(
-        core_web.script().replace("\r\n", "\n"), encoding="utf-8", newline="\n"
-    )
-    (output / "THIRD_PARTY.md").write_text(
-        sbmlsim_core.THIRD_PARTY.replace("\r\n", "\n"),
-        encoding="utf-8",
-        newline="\n",
-    )
-    package = distribution("sbmlsim-core")
-    license_file = next(
-        file for file in package.files or () if str(file).endswith("licenses/LICENSE")
-    )
-    shutil.copyfile(str(package.locate_file(license_file)), output / "LICENSE")
+    if runtime:
+        for name, wasm in sbmlsim_core.runtime_wasm().items():
+            (output / f"{name}.wasm").write_bytes(wasm)
+        (output / "sbmlsim-core.js").write_text(
+            core_web.script().replace("\r\n", "\n"), encoding="utf-8", newline="\n"
+        )
+        (output / "THIRD_PARTY.md").write_text(
+            sbmlsim_core.THIRD_PARTY.replace("\r\n", "\n"),
+            encoding="utf-8",
+            newline="\n",
+        )
+        package = distribution("sbmlsim-core")
+        license_file = next(
+            file
+            for file in package.files or ()
+            if str(file).endswith("licenses/LICENSE")
+        )
+        shutil.copyfile(str(package.locate_file(license_file)), output / "LICENSE")
     config = {
         "generated_by": "scripts/cardiovascular_examples.py",
         "engine": "SUNDIALS IDA",
@@ -353,24 +357,34 @@ def export_browser_model(path: Path, output: Path) -> None:
     )
 
 
-def generate(*, browser_output: Path | None = None) -> dict[str, Any]:
+def generate(
+    *, sex: Sex = Sex.MALE, browser_output: Path | None = None
+) -> dict[str, Any]:
     """Build both SBML variants and generate the documentation dataset."""
     with TemporaryDirectory(prefix="pkpdsim-cardiovascular-examples-") as directory:
         folder = Path(directory)
         pressure = build(
             PBPKDefinition(
-                "pressure_examples", [], variants=Variants(circulation=PressureFlow())
+                "pressure_examples",
+                [],
+                sex=sex,
+                variants=Variants(circulation=PressureFlow()),
             ),
             folder / "pressure",
         )
         heart = build(
             PBPKDefinition(
-                "heart_examples", [], variants=Variants(circulation=DynamicHeart())
+                "heart_examples",
+                [],
+                sex=sex,
+                variants=Variants(circulation=DynamicHeart()),
             ),
             folder / "heart",
         )
         if browser_output is not None:
-            export_browser_model(heart.flat_path, browser_output)
+            export_browser_model(
+                heart.flat_path, browser_output, runtime=sex is Sex.MALE
+            )
         fingerprint = hashlib.sha256(
             pressure.flat_path.read_text(encoding="utf-8").encode("utf-8")
             + heart.flat_path.read_text(encoding="utf-8").encode("utf-8")
@@ -381,7 +395,8 @@ def generate(*, browser_output: Path | None = None) -> dict[str, Any]:
                 "generator": "scripts/cardiovascular_examples.py",
                 "engine": "core",
                 "solver": "SUNDIALS IDA",
-                "model": "illustrative adult human male",
+                "model": f"illustrative adult human {sex.value}",
+                "sex": sex.value,
                 "sbmlsim_version": version("sbmlsim"),
                 "sbmlsim_core_version": version("sbmlsim-core"),
                 "sbml_sha256": fingerprint,
@@ -411,16 +426,63 @@ def generate(*, browser_output: Path | None = None) -> dict[str, Any]:
         }
 
 
-def write(output: Path = OUTPUT) -> None:
-    """Write deterministic, compact JSON without timestamps or nonfinite numbers."""
-    data = generate(browser_output=output.parent / "solver")
-    output.parent.mkdir(parents=True, exist_ok=True)
+def export_anatomy(output: Path) -> None:
+    """Reuse the physiology figures' scaled bodies and organ anchors for the app."""
+    from pkpdsim.pbpk.visual.body import reference_body
+
+    bodies = {}
+    for sex in Sex:
+        body = reference_body(sex.value)
+        anchors = {}
+        for organ in Organ:
+            key = organ.value
+            if key in ("mu", "bo", "sk", "ad"):
+                lm, cx = body.landmarks, body.anatomy.midline
+                fraction = {"mu": 0.55, "bo": 0.7, "sk": 0.25, "ad": 0.45}[key]
+                point = body.at(
+                    cx - 8, lm["armpit"] + fraction * (lm["bottom"] - lm["armpit"])
+                )
+            elif key == "go" and sex is Sex.FEMALE:
+                point = body.centroid("uterus")
+            else:
+                point = body.centroid(key)
+            anchors[key] = [round(float(v), 4) for v in point]
+        bodies[sex.value] = {
+            "svg": body.svg(arteries=False, tags=True),
+            "height": body.bounds()[2],
+            "anchors": anchors,
+        }
     output.write_text(
-        json.dumps(data, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+        json.dumps(
+            {
+                "generated_by": "scripts/cardiovascular_examples.py",
+                "attribution": "Anatomy adapted from EMBL-EBI Expression Atlas anatomograms (CC BY 4.0), using pkpdsim physiology figures.",
+                "source": "https://github.com/ebi-gene-expression-group/anatomogram",
+                "license": "https://creativecommons.org/licenses/by/4.0/",
+                "bodies": bodies,
+            },
+            separators=(",", ":"),
+        )
         + "\n",
         encoding="utf-8",
         newline="\n",
     )
+
+
+def write(output: Path = OUTPUT) -> None:
+    """Write male/female examples and physiology anatomy with portable text."""
+    output.parent.mkdir(parents=True, exist_ok=True)
+    for sex in Sex:
+        target = output if sex is Sex.MALE else output.parent / "female" / output.name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        data = generate(sex=sex, browser_output=target.parent / "solver")
+        target.write_text(
+            json.dumps(data, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+            + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+    export_anatomy(output.parent / "cardiovascular-anatomy.json")
 
 
 def main() -> None:

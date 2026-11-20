@@ -22,15 +22,21 @@ ASSETS = ROOT / "docs/pbpk/examples/solver"
 GENERATOR = runpy.run_path(str(ROOT / "scripts/cardiovascular_examples.py"))
 
 
-@pytest.fixture(scope="module")
-def browser_result(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+@pytest.fixture(scope="module", params=["male", "female"])
+def browser_result(
+    tmp_path_factory: pytest.TempPathFactory, request: pytest.FixtureRequest
+) -> dict[str, Any]:
     node = shutil.which("node")
     if node is None:
         pytest.skip("Node.js is required for the WebAssembly worker comparison.")
     output = tmp_path_factory.mktemp("heart_worker") / "result.json"
     result = subprocess.run(
         [node, str(Path(__file__).with_name("cardiovascular_solver.test.mjs"))],
-        env=dict(os.environ, PKPDSIM_HEART_TEST_OUTPUT=str(output)),
+        env=dict(
+            os.environ,
+            PKPDSIM_HEART_TEST_OUTPUT=str(output),
+            PKPDSIM_HEART_TEST_SEX=request.param,
+        ),
         text=True,
         capture_output=True,
         timeout=60,
@@ -96,7 +102,15 @@ def test_slider_worker_matches_a_fresh_python_ida_solution(
     times = np.unique(np.concatenate((np.linspace(start, end, count), [start, end])))
     columns = GENERATOR["COLUMNS"]
     native = Simulator(engine="core", n_workers=1, **GENERATOR["INTEGRATOR"]).simulate(
-        AbstractModel(source=ASSETS / "model.xml", selections=list(columns)),
+        AbstractModel(
+            source=(
+                ASSETS
+                if browser_result["sex"] == "male"
+                else ASSETS.parent / "female/solver"
+            )
+            / "model.xml",
+            selections=list(columns),
+        ),
         Simulation(
             end=end,
             times=times.tolist(),

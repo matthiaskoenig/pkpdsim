@@ -34,9 +34,9 @@ class Element {
     if (!this.listeners.has(name)) this.listeners.set(name, []);
     this.listeners.get(name).push(handler);
   }
-  dispatch(name) { for (const listener of this.listeners.get(name) ?? []) listener({target: this}); }
+  dispatch(name, fields = {}) { for (const listener of this.listeners.get(name) ?? []) listener({target: this, ...fields}); }
   click() { this.dispatch("click"); }
-  getBoundingClientRect() { return {height: this.height}; }
+  getBoundingClientRect() { return {height: this.height, width: this.clientWidth, left: 0, top: 0}; }
 }
 
 function descendants(element) {
@@ -51,7 +51,7 @@ async function waitUntil(predicate, message, timeout = 15000) {
   }
 }
 
-test("the app shares sliders, solves combined controls, replays flow widths and recovers from loading errors", {timeout: 25000}, async () => {
+test("the app shares sliders, solves combined controls, replays flow widths and recovers from loading errors", {timeout: 40000}, async () => {
   const elements = [...html.matchAll(/<([a-z][\w-]*)\s+([^>]*?)>/gi)].map(match => {
     const attributes = Object.fromEntries([...match[2].matchAll(/([\w-]+)(?:="([^"]*)")?/g)].map(attribute => [attribute[1], attribute[2] ?? ""]));
     return new Element(match[1], attributes);
@@ -149,7 +149,7 @@ test("the app shares sliders, solves combined controls, replays flow widths and 
     assert.equal(byId.get("load-error").hidden, true);
     assert.equal(byId.get("metric-0").textContent, "10.0");
     assert.equal(byId.get("heart-case").children.length, 9);
-    assert.equal(edges().length, 9);
+    assert.equal(edges().length, 34);
 
     select("[data-preset]").find(button => button.dataset.preset === "hepatic").click();
     assert.ok(Number(byId.get("metric-0").textContent) > 15);
@@ -166,7 +166,7 @@ test("the app shares sliders, solves combined controls, replays flow widths and 
     assert.equal(byId.get("pressure-results").hidden, true);
     assert.equal(byId.get("heart-results").hidden, false);
     assert.equal(Number(byId.get("hepatic").value), 8);
-    assert.equal(edges().length, 15);
+    assert.equal(edges().length, 38);
     assert.equal(frames.size, 0, "Reduced motion must prevent automatic replay");
     const parameters = {hepatic: "CV_fR_hepatic", systemic: "CV_fR_systemic", portal: "CV_fR_portal", renal: "CV_fR_ki", "heart-rate": "CV_HR", contractility: "CV_contractility"};
     for (const example of data.cases) {
@@ -250,7 +250,7 @@ test("the app shares sliders, solves combined controls, replays flow widths and 
     } finally { URL.createObjectURL = originalCreate; }
     byId.get("app").height = 1100;
     mode("pressure");
-    assert.equal(edges().length, 9);
+    assert.equal(edges().length, 34);
     assert.equal(byId.get("heart-results").hidden, true);
     assert.equal(byId.get("pressure-boundaries").hidden, false);
     assert.equal(byId.get("metric-label-0").textContent, "Portal pressure");
@@ -260,6 +260,46 @@ test("the app shares sliders, solves combined controls, replays flow widths and 
     assert.equal(messages.at(-1).height, 1100);
     mode("heart");
     assert.equal(workerCount, 1, "Switching back should reuse the solved slider combination");
+    // Display scaling changes every vessel and legend without solving the model.
+    scrub(0.15);
+    const hit = descendants(byId.get("arterial-chart")).find(item => item.getAttribute("class") === "inspection-hit");
+    hit.dispatch("pointerdown", {clientX: 400, pointerId: 1});
+    assert.ok(Number(byId.get("flow-time").value) > 0.5, "Clicking the chart should scrub the displayed instant");
+    assert.equal(frames.size, 0);
+    const previousFlow = flow("Aortic valve");
+    byId.get("flow-scale").value = "2";
+    byId.get("flow-scale").dispatch("input");
+    assert.equal(workerCount, 1);
+    assert.equal(flow("Aortic valve"), previousFlow);
+    assert.equal(Number(edge("Aortic valve").getAttribute("stroke-width")), flowWidth(previousFlow, 2));
+    for (const chart of ["arterial-chart", "portal-chart", "flow-chart", "pv-chart"]) {
+      const marker = descendants(byId.get(chart)).find(item => item.getAttribute("data-cursor-point") === chart);
+      assert.ok(marker, `Missing synchronized point in ${chart}`);
+      assert.equal(marker.getAttribute("r"), "5.5");
+    }
+    const maleBody = descendants(byId.get("circulation-schematic")).find(item => item.getAttribute("class") === "cv-body").innerHTML;
+    byId.get("sex").value = "female";
+    byId.get("sex").dispatch("change");
+    await waitUntil(() => !byId.get("workspace").hidden, "Female physiology did not load");
+    assert.equal(byId.get("individual-label").textContent, "Female reference");
+    assert.equal(Number(byId.get("hepatic").value), combined.hepatic);
+    await waitUntil(() => byId.get("solver-status").textContent.startsWith("Current settings solved"), "Female IDA solve failed");
+    assert.equal(workerCount, 2);
+    assert.ok(assets.some(asset => asset.endsWith("/female/solver/model.wasm")));
+    assert.notEqual(descendants(byId.get("circulation-schematic")).find(item => item.getAttribute("class") === "cv-body").innerHTML, maleBody);
+    const femaleOutput = byId.get("metric-1").textContent;
+    byId.get("sex").value = "male";
+    byId.get("sex").dispatch("change");
+    await waitUntil(() => !byId.get("workspace").hidden, "Male physiology did not reload");
+    assert.equal(workerCount, 2, "A cached male result must not be replaced by the female result");
+    assert.notEqual(byId.get("metric-1").textContent, femaleOutput);
+    assertFiniteCharts();
+    window.innerWidth = 1186; window.parent.innerHeight = 900;
+    byId.get("flow-scale").dispatch("input");
+    assert.equal(messages.at(-1).height, 780, "A wide documentation frame should fill its available viewport height");
+    window.innerWidth = 390;
+    byId.get("flow-scale").dispatch("input");
+    assert.equal(messages.at(-1).height, 1100, "Narrow frames should follow the natural content height");
     assert.equal(errors.length, 1, "Only the intentional first loading failure should be logged");
   } finally {
     windowEvents.dispatch("pagehide");
