@@ -457,8 +457,8 @@ def check_products(p: Metabolism) -> list[str]:
         problems += check_unit(p.sid, where, f, U.dimensionless)
         x = number(f)
         low, high = fraction_range(f)
-        support = draw_support(f) if isinstance(f, Value) else None
-        for end in support or ():
+        supports = draw_supports(f) if isinstance(f, Value) else []
+        for end in dict.fromkeys(end for support in supports for end in support):
             if math.isfinite(end) and not FRACTION.contains(end):
                 ranges.append(
                     f"{p.sid}: {where} can be {end:g} (the support of the "
@@ -499,45 +499,43 @@ def check_products(p: Metabolism) -> list[str]:
     return problems
 
 
-def draw_support(f: Value) -> tuple[float, float] | None:
-    """Get the support of the draws of a fitted value, as the fit states it.
+def draw_supports(f: Value) -> list[tuple[float, float]]:
+    """Get the support of each distribution of the draws of a fitted value.
 
-    The distribution of the draws (the uncertainty of `fitted`, truncated to
-    the bounds of the fit) is what a fit or an uncertainty run can give the
-    value (`sbmlsim.distrib.support`). The union over all distributions is
-    returned as it is, an unbounded one has an infinite end.
+    The distributions of the draws (the uncertainty of `fitted`, truncated to
+    the bounds of the fit) are what a fit or an uncertainty run can give the
+    value (`sbmlsim.distrib.support`). Each support is returned as the fit
+    states it, an unbounded distribution has an infinite end. This is the
+    only place which reads them.
 
     Args:
         f: the value.
 
     Returns:
-        The lower and the upper end of the support, `None` without draws.
+        The lower and the upper end of the support of every distribution, an
+        empty list without draws.
     """
-    support: tuple[float, float] | None = None
+    supports: list[tuple[float, float]] = []
     for u in f.uncertainties or []:
         for child in u.uncertParameters or []:
             if child.type != libsbml.DISTRIB_UNCERTTYPE_DISTRIBUTION or not child.math:
                 continue
-            lo, hi = distrib.support(child.math)
-            support = (
-                (lo, hi)
-                if support is None
-                else (min(support[0], lo), max(support[1], hi))
-            )
-    return support
+            supports.append(distrib.support(child.math))
+    return supports
 
 
 def fraction_range(f: float | Value) -> tuple[float, float]:
     """Get the range of a fraction: its value and the support of the draws of a fit.
 
-    The support of the draws (`draw_support`) is the range a fit or an
+    The union of the supports of the draws (`draw_supports`) is the range a fit or an
     uncertainty run gives the fraction. It is intersected with the domain of
     a fraction (`FRACTION`, the unit interval), which an untruncated
     distribution leaves: the range is always a usable interval of fractions.
     A support inside the unit interval is kept as it is. The value itself is
     never moved, so a value outside the unit interval stays visible to the
-    checks of the caller. A finite end of the support outside the unit
-    interval is a statement of the author which `check_products` reports.
+    checks of the caller. A finite end of the support of a distribution outside the
+    unit interval is a statement of the author which `check_products` reports
+    per distribution, as the union would hide it behind an unbounded one.
 
     Args:
         f: a fixed fraction or a `Value`, fixed or fitted.
@@ -548,9 +546,11 @@ def fraction_range(f: float | Value) -> tuple[float, float]:
     if not isinstance(f, Value):
         return float(f), float(f)
     low = high = f.value
-    support = draw_support(f)
-    if support is not None:
-        lo, hi = FRACTION.clip(*support)
+    supports = draw_supports(f)
+    if supports:
+        lo, hi = FRACTION.clip(
+            min(lo for lo, _ in supports), max(hi for _, hi in supports)
+        )
         low, high = min(low, lo), max(high, hi)
     return low, high
 

@@ -871,6 +871,42 @@ def test_a_finite_bound_beyond_the_unit_interval_is_refused(
     assert "a fraction is never below 0 or above 1" in problems
 
 
+def test_a_semi_bounded_fit_is_cut_silently() -> None:
+    """A lognormal has the support (0, inf): its infinite end is cut, no problem."""
+    f = _fitted(0.5, "lognormal(-0.7, 0.3)")
+    assert fraction_range(f) == (0.0, 1.0)
+    _definition([_split({"drg_m1": f, "drg_m3": REST})]).validate()
+
+
+def test_a_support_entirely_beyond_the_unit_interval_reports_both_ends() -> None:
+    """Both finite ends of uniform(1.2, 1.5) are outside the unit interval.
+
+    `Domain.clip` limits each bound on its own side and returns the reversed
+    interval (1.2, 1.0) as it is, by its contract, so this is not a defect;
+    united with the value 1.3 the range is (1.2, 1.3). Both ends are reported.
+    """
+    f = _fitted(1.3, "uniform(1.2, 1.5)")
+    assert fraction_range(f) == (1.2, 1.3)
+    problems = _problems(_definition([_split({"drg_m1": f, "drg_m3": REST})]))
+    assert "can be 1.2 (the support" in problems
+    assert "can be 1.5 (the support" in problems
+
+
+def test_an_unbounded_distribution_does_not_hide_a_finite_bad_bound() -> None:
+    """The union of an untruncated normal and uniform(0, 1.5) is unbounded.
+
+    The finite end of the second distribution is checked on its own, so the
+    union does not hide it; the range is still the clipped union.
+    """
+    f = _fitted(0.5, "normal(0.5, 0.1)")
+    f = dataclasses.replace(
+        f, uncertainties=[*(f.uncertainties or []), *_uncertainty("uniform(0.0, 1.5)")]
+    )
+    assert fraction_range(f) == (0.0, 1.0)
+    problems = _problems(_definition([_split({"drg_m1": f, "drg_m3": REST})]))
+    assert "can be 1.5 (the support" in problems
+
+
 def test_the_fractions_of_a_metabolism_are_parameters(tmp_path: Path) -> None:
     """Values and the remainder are the constants `f_<metabolism>_<product>` of the organ.
 
