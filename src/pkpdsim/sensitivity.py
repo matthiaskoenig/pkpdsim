@@ -406,12 +406,6 @@ def _clip_to_domains(
         if math.isnan(lower) or math.isnan(upper):
             not_a_number.append(p.uid)
             continue
-        if lower > upper:
-            # set_relative_bounds reverses the bounds of a negative value on
-            # purpose and `distributions` of sbmlsim refuses such a parameter by
-            # name, so that a model sets explicit bounds with `set_bounds`;
-            # clipping the pair would hide that
-            continue
         clipped = domain.clip(lower, upper)
         if clipped != (lower, upper):
             logger.warning(

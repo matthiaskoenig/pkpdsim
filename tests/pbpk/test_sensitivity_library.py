@@ -231,15 +231,14 @@ def test_a_value_outside_its_domain_raises(tmp_path: Path) -> None:
 
 
 def test_an_inverted_pair_of_a_negative_value_is_left_alone(tmp_path: Path) -> None:
-    """The reversed bounds of a negative value survive the clipping.
+    """The reversed bounds of a negative value survive the clipping unchanged.
 
     `set_relative_bounds` of sbmlsim reverses the bounds of a negative value on
     purpose and `distributions` refuses such a parameter by name, so that a
-    model sets explicit bounds, so the pair must stay inverted. The value -0.9
-    in the domain [-1, 1] gives the pair (-0.765, -1.035). This pins the
-    outcome on a real model; `Domain.clip` limits each bound on its own side
-    only, so for a value inside its domain it leaves any such pair unchanged
-    even without the guard of `_clip_to_domains`.
+    model sets explicit bounds with `set_bounds`; the clipping must not turn the
+    pair into one which looks valid. The value -0.9 in the domain [-1, 1] gives
+    the pair (-0.765, -1.035). The outcome follows from `Domain.clip` limiting
+    each bound on its own side, so this test fails if that ever changes.
     """
     definition_ = definition(
         parameters=[ModelParameter("neg", -0.9, U.dimensionless, domain=Domain(-1, 1))]

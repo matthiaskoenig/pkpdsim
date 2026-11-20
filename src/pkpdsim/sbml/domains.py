@@ -119,9 +119,11 @@ class Domain:
     ) -> tuple[float, float] | float:
         """Move a value or an interval which lies outside the domain onto it.
 
-        An interval has each bound limited to the interval of the domain. A
-        single value is limited to it and, for an integer or boolean domain,
-        rounded to the nearest integer the domain contains.
+        An interval has each bound limited to the interval of the domain, each
+        on its own side, so an interval whose bounds are reversed is returned
+        as it is; a caller may rely on that. A single value is limited to it
+        and, for an integer or boolean domain, rounded to the nearest integer
+        the domain contains.
 
         Args:
             lower: The value, or the lower bound of an interval.
