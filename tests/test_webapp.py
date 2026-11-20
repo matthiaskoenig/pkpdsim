@@ -121,6 +121,61 @@ def sbml(tmp_path_factory: pytest.TempPathFactory) -> Path:
     ).sbml_path
 
 
+LOBES = ("lll", "rl")
+"""The lobes of the lobed toy model, two of the five lobes of a rat."""
+
+
+def _lobed_model() -> Model:
+    """The dosed toy with the patency and the presence of two liver lobes."""
+    model = _dosed_model()
+    model.sid = "lobed"
+    model.parameters = [
+        *model.parameters,
+        *(
+            Parameter(
+                f"g_po_{lobe}",
+                1.0,
+                unit=U.dimensionless,
+                constant=False,
+                name=f"patency of the portal vein branch of lobe {lobe}",
+            )
+            for lobe in LOBES
+        ),
+        *(
+            Parameter(
+                f"g_ha_{lobe}",
+                1.0,
+                unit=U.dimensionless,
+                constant=False,
+                name=f"patency of the hepatic artery branch of lobe {lobe}",
+            )
+            for lobe in LOBES
+        ),
+        *(
+            Parameter(
+                f"f_present_{lobe}",
+                1.0,
+                unit=U.dimensionless,
+                constant=False,
+                name=f"presence of lobe {lobe}",
+            )
+            for lobe in LOBES
+        ),
+    ]
+    return model
+
+
+@pytest.fixture(scope="module")
+def lobed_sbml(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    directory = tmp_path_factory.mktemp("lobed")
+    return create_model(
+        model=_lobed_model(),
+        filepath=directory / "lobed.xml",
+        sbml_level=3,
+        sbml_version=2,
+    ).sbml_path
+
+
 class _Base:
     """The base of the experiments of the dosed model: its classes of the renal function."""
 
@@ -359,3 +414,44 @@ def test_a_model_of_one_build_has_no_panels_of_a_variant(
     model = _model(sbml, {"male": sbml})
     panels, _ = default_app(model, sbml)
     assert webapp.default_variant_panels(model, panels, model.variants) == {}
+
+
+def test_a_model_of_lobes_gets_a_page_of_its_lobes(
+    lobed_sbml: Path, studied: _Studied
+) -> None:
+    """The lobes of the liver are a page of the app, one choice per lobe."""
+    panels, app = default_app(_model(lobed_sbml, {"model": lobed_sbml}), lobed_sbml)
+    assert app is not None
+    page = next((p for p in app.pages if p.id == "lobes"), None)
+    assert page is not None
+    assert page.title == "Liver lobes"
+    knobs = panels[page.panels[0]].knobs
+    targets = [str(knob.target) for knob in knobs]
+    for lobe in LOBES:
+        assert f"g_po_{lobe}" in targets
+        assert f"f_present_{lobe}" in targets
+    # the dose knob of the first page is on every page of a disease or a lobe
+    assert "PODOSE_x" in targets
+
+
+def test_the_choices_of_a_lobe_are_the_intervention_and_none(
+    lobed_sbml: Path, studied: _Studied
+) -> None:
+    """Intact is the default, so an app which nobody touches is the healthy liver."""
+    panels, app = default_app(_model(lobed_sbml, {"model": lobed_sbml}), lobed_sbml)
+    assert app is not None
+    page = next(p for p in app.pages if p.id == "lobes")
+    knobs = {str(k.target): k for k in panels[page.panels[0]].knobs}
+    portal = knobs[f"g_po_{LOBES[0]}"]
+    assert portal.kind == "choice"
+    assert portal.default == 1.0
+    assert [c.value for c in portal.choices] == [1.0, 0.0]
+    assert [c.label for c in portal.choices] == ["open", "ligated"]
+    present = knobs[f"f_present_{LOBES[0]}"]
+    assert [c.label for c in present.choices] == ["in place", "resected"]
+
+
+def test_a_model_without_lobes_gets_no_lobe_page(sbml: Path, studied: _Studied) -> None:
+    _, app = default_app(_model(sbml, {"model": sbml}), sbml)
+    assert app is not None
+    assert not [p for p in app.pages if p.id == "lobes"]

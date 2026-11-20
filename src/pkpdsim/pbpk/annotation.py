@@ -497,6 +497,11 @@ KINDS: dict[str, Kind] = {
     ),
     "urine": Kind(_C, "URINE_COMPARTMENT", terms=tuple(_compartments["urine"])),
     "feces": Kind(_C, "FECES_COMPARTMENT", terms=tuple(_compartments["feces"])),
+    "remodelled_tissue": Kind(
+        SBO.IMPLICIT_COMPARTMENT,
+        "COMPARTMENT",
+        requested="compartment of the tissue a liver lobe has lost",
+    ),
     "bile": Kind(_C, "BILE_COMPARTMENT", terms=tuple(_compartments["bi"])),
     "lumen": Kind(_C, "GUT_LUMEN_COMPARTMENT", terms=tuple(_compartments["gu_lumen"])),
     "mucosa": Kind(
@@ -549,6 +554,60 @@ KINDS: dict[str, Kind] = {
     "tissue_volume": Kind(_P, "VOLUME_OF_COMPARTMENT"),
     "zone_fraction": Kind(
         _P, _PHYS, requested="volume fraction of a zone of the liver"
+    ),
+    # the lobes of the liver, perfused in parallel
+    "lobe_volume": Kind(
+        _P, "VOLUME_OF_COMPARTMENT", requested="volume of a lobe of the liver"
+    ),
+    "lobe_fraction": Kind(
+        _P, _PHYS, requested="volume fraction of a lobe of the liver"
+    ),
+    "lobe_supply_fraction": Kind(
+        _P,
+        "FRACTION_OF_BLOOD_FLOW_TO_A_COMPARTMENT",
+        requested="fraction of the hepatic blood flow to a lobe of the liver",
+    ),
+    "lobe_flow": Kind(
+        _P,
+        "BLOOD_FLOW_RATE_TO_COMPARTMENT",
+        requested="blood flow to a lobe of the liver",
+    ),
+    "lobe_perfusion": Kind(
+        _P, _PHYS, requested="blood flow per volume of a lobe of the liver"
+    ),
+    "lobe_growth": Kind(
+        _P,
+        _PHYS,
+        requested="rate of change of the volume of a lobe of the liver "
+        "(positive hypertrophy, negative atrophy)",
+    ),
+    "remodelling_time": Kind(
+        _P,
+        _PHYS,
+        requested="time constant of the remodelling of a lobe of the liver",
+    ),
+    "lobe_patency": Kind(
+        _P,
+        _PHYS,
+        requested="patency of a vascular branch of a lobe of the liver "
+        "(1 open, 0 ligated)",
+    ),
+    "lobe_present": Kind(
+        _P, _PHYS, requested="presence of a lobe of the liver (1 in place, 0 resected)"
+    ),
+    "remnant_fraction": Kind(
+        _P, _PHYS, requested="share of the liver which is left after a resection"
+    ),
+    "lobe_pressure": Kind(
+        _P, _PHYS, requested="blood pressure in the sinusoids of a lobe of the liver"
+    ),
+    "lobe_resistance": Kind(
+        _P,
+        _PHYS,
+        requested="vascular resistance of a branch of a lobe of the liver",
+    ),
+    "buffer_response": Kind(
+        _P, _PHYS, requested="gain of the hepatic arterial buffer response"
     ),
     "hematocrit": Kind(
         _P,
@@ -857,6 +916,7 @@ KINDS: dict[str, Kind] = {
     # observers and the outflow of the organs
     "outflow": Kind(_P, "TOTAL_VENOUS_CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
     "outflow_blood_cells": Kind(_P, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
+    "outflow_lobe": Kind(_P, "TOTAL_VENOUS_CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
     # a species of an organ which a PD component or an observer reads, exposed
     # by the organ
     "organ_concentration": Kind(_P, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
@@ -934,6 +994,11 @@ KINDS: dict[str, Kind] = {
     "amount_undissolved": Kind(
         _SPECIES, "AMOUNT_IN_LUMEN", requested="amount of undissolved drug"
     ),
+    "amount_remodelled": Kind(
+        _SPECIES,
+        "AMOUNT_OF_COMPOUND_IN_COMPARTMENT",
+        requested="cumulative amount carried away by atrophied tissue",
+    ),
     # reactions
     "blood_flow": Kind(
         _T,
@@ -941,6 +1006,11 @@ KINDS: dict[str, Kind] = {
         terms=((BQB.IS, "go/GO:0008015"),),  # blood circulation
     ),
     "exchange": Kind(_T, "DISTRIBUTION_PROCESS"),
+    "remodelling": Kind(
+        _T,
+        "DISTRIBUTION_PROCESS",
+        requested="loss of a compound with the tissue a liver lobe has lost",
+    ),
     "metabolism": Kind(
         SBO.BIOCHEMICAL_REACTION,
         "LINEAR_ELIMINATION",

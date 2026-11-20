@@ -1,0 +1,76 @@
+# The interventions on the lobes of the liver which the literature reports as
+# named procedures, one section per species and one entry per scenario. A
+# scenario names the lobes it acts on and what it does to them: a portal vein
+# ligation closes their portal branch, an arterial ligation their hepatic
+# artery branch, a resection removes them. The shares of the mass are those of
+# the lobe tables (`liver_lobes_<species>.toml`), so the fraction a scenario
+# acts on follows from the lobe set and is not repeated here.
+#
+# The procedures of the rat are those of Madrahimov 2006, which defines the
+# hepatectomies of the rat by the lobes they remove. The two thirds
+# hepatectomy of the mouse and the hepatectomies of the human are the
+# anatomical standard (the Brisbane 2000 terminology for the human: a right
+# hepatectomy removes the segments V to VIII, a left hepatectomy the segments
+# II to IV, an extended right hepatectomy the segments IV to VIII), which no
+# publication of the parameter database states, so they are `ModelChoice`; the
+# volumes of the segments they act on are Mise 2014 and Brennan 2024.
+
+[rat.pvl70]
+kind = "portal_ligation"
+lobes = ["lll", "lml", "rml"]
+source = "Madrahimov2006"
+notes = "Portal vein ligation of the lobes which the 70 % hepatectomy of the rat removes: the left lateral, the left median and the right median lobe. The deportalised lobes keep their hepatic artery inflow and atrophy, the caudate and the right lobe hypertrophy."
+
+[rat.pvl90]
+kind = "portal_ligation"
+lobes = ["lll", "lml", "rml", "rl"]
+source = "Madrahimov2006"
+notes = "Portal vein ligation of the lobes which the 90 % hepatectomy of the rat removes; the caudate lobes, about 0.10 of the mass, keep their portal inflow."
+
+[rat.hepatectomy70]
+kind = "resection"
+lobes = ["lll", "lml", "rml"]
+source = "Madrahimov2006"
+notes = "The 70 % hepatectomy of the rat: the left lateral, the left median and the right median lobe are removed and the caudate and the right lobe are the remnant."
+
+[rat.hepatectomy90]
+kind = "resection"
+lobes = ["lll", "lml", "rml", "rl"]
+source = "Madrahimov2006"
+notes = "The 90 % hepatectomy of the rat: the left lateral, the median and the right lobe are removed and the caudate lobes are the remnant. Madrahimov 2006 fixes this procedure, which the lobe table of the rat is built around."
+
+[mouse.pvl]
+kind = "portal_ligation"
+lobes = ["ll", "ml"]
+source = "ModelChoice"
+notes = "Portal vein ligation of the left and the median lobe of the mouse, the lobes which its two thirds hepatectomy removes; their shares of the mass are Brennan 2024."
+
+[mouse.hepatectomy]
+kind = "resection"
+lobes = ["ll", "ml"]
+source = "ModelChoice"
+notes = "The two thirds hepatectomy of the mouse: the left and the median lobe are removed and the right superior, right inferior and caudate lobes are the remnant. The procedure is named after the lobes it removes and not after a fraction, because those lobes are about 0.61 of the mass with the lobe table of Brennan 2024 and not the two thirds of the name of the literature."
+
+[human.right_pvl]
+kind = "portal_ligation"
+lobes = ["sg5", "sg6", "sg7", "sg8"]
+source = "ModelChoice"
+notes = "Right portal vein ligation or embolisation, the procedure which grows the future liver remnant before a right hepatectomy: the segments V to VIII are deportalised and the left lobe hypertrophies. The volumes of the segments are Mise 2014."
+
+[human.right_hepatectomy]
+kind = "resection"
+lobes = ["sg5", "sg6", "sg7", "sg8"]
+source = "ModelChoice"
+notes = "Right hepatectomy (Brisbane 2000): the segments V to VIII are removed, about 0.66 of the volume with the segment table, and the segments I to IV are the future liver remnant."
+
+[human.left_hepatectomy]
+kind = "resection"
+lobes = ["sg2", "sg3", "sg4"]
+source = "ModelChoice"
+notes = "Left hepatectomy (Brisbane 2000): the segments II to IV are removed, about 0.30 of the volume with the segment table."
+
+[human.extended_right_hepatectomy]
+kind = "resection"
+lobes = ["sg4", "sg5", "sg6", "sg7", "sg8"]
+source = "ModelChoice"
+notes = "Extended right hepatectomy or right trisectionectomy (Brisbane 2000): the segments IV to VIII are removed, about 0.80 of the volume with the segment table, which leaves the smallest remnant of the standard procedures."

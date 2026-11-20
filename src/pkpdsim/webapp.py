@@ -85,6 +85,19 @@ __all__ = [
 
 #: the targets of a dose of the PBPK library: the route and the substance
 DOSE_TARGETS: Final = re.compile(r"^(PO|IV|SOL|IM|SC|REC|INH)DOSE_(\w+)$")
+"""The parameters of a dose of a substance of a model."""
+
+LOBE_TARGETS: Final = (
+    ("g_po_", "open", "ligated"),
+    ("g_ha_", "open", "ligated"),
+    ("f_present_", "in place", "resected"),
+)
+"""The interventions on a lobe of the liver: the prefix of the parameter and
+the labels of its two states, in place first.
+
+A lobe is portally ligated, arterially ligated or resected, which is a value
+of one parameter each (`pkpdsim.pbpk.interventions`), so each is a choice of
+the lobe page of an app of a model with lobes."""
 #: the routes of the dose targets as they are shown
 ROUTE_LABELS: Final = {
     "PO": "oral",
@@ -244,6 +257,10 @@ def default_app(model: PKPDModel, sbml: Path) -> tuple[dict[str, Panel], App | N
         if knob is not None:
             covered.add(target)
             pages.append((disease.key, disease.title, (knob, *first), single))
+    lobe_knobs = _lobe_knobs(sbml, ids)
+    if lobe_knobs:
+        covered |= {str(knob.target) for knob in lobe_knobs}
+        pages.append(("lobes", "Liver lobes", (*lobe_knobs, *first), single))
     for spec in studied.scans:
         knob = _scan_knob(spec, ids, covered)
         if knob is not None:
@@ -676,6 +693,46 @@ def _disease_knob(
         choices=tuple(choices),
         default=choices[0].value,
     )
+
+
+def _lobe_knobs(sbml: Path, ids: set[str]) -> tuple[Knob, ...]:
+    """The choice knobs of the lobes of the liver of a model, none without lobes.
+
+    One knob per intervention per lobe (`LOBE_TARGETS`): the portal vein and
+    the hepatic artery branch of the lobe open or ligated, and the lobe in
+    place or resected. The intact state is the default of every one of them,
+    so the app of a model with lobes opens on the healthy liver and a reader
+    ligates or resects from there.
+
+    Args:
+        sbml: the SBML, read for the names of the parameters.
+        ids: the ids of the entities of the model.
+
+    Returns:
+        The knobs, ordered by lobe and within a lobe as `LOBE_TARGETS`.
+    """
+    lobes = sorted(sid.removeprefix("g_po_") for sid in ids if sid.startswith("g_po_"))
+    knobs: list[Knob] = []
+    for lobe in lobes:
+        for prefix, intact, changed in LOBE_TARGETS:
+            target = f"{prefix}{lobe}"
+            if target not in ids:
+                continue
+            knobs.append(
+                Knob(
+                    id=re.sub(r"\W", "_", target),
+                    label=_label(sbml, target),
+                    target=target,
+                    unit="dimensionless",
+                    kind="choice",
+                    choices=(
+                        Choice(label=intact, value=1.0),
+                        Choice(label=changed, value=0.0),
+                    ),
+                    default=1.0,
+                )
+            )
+    return tuple(knobs)
 
 
 def _scan_knob(

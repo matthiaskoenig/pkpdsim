@@ -172,6 +172,14 @@ def check_circulation(definition: PBPKDefinition) -> None:
     """Reject topologies and initialization contracts the circulation cannot satisfy."""
     circulation = definition.variants.circulation
     if circulation is None:
+        if _buffered_lobes(definition):
+            raise ValueError(
+                "A hepatic arterial buffer response acts on the arterial "
+                "conductance of a lobe in the pressure network, which a liver "
+                "of prescribed supply fractions has not got; add "
+                "Variants(circulation=PressureFlow()) or drop the HABR of the "
+                "lobed liver."
+            )
         return
     if not isinstance(circulation, PressureFlow):
         raise ValueError("Variants.circulation must be PressureFlow or DynamicHeart.")
@@ -198,6 +206,31 @@ def check_circulation(definition: PBPKDefinition) -> None:
                 "DynamicHeart cannot use generated stationary chemistry; "
                 "initialize by a finite periodic presimulation."
             )
+        if _remodelling_lobes(definition):
+            raise ValueError(
+                "DynamicHeart requires a constant anatomy, which a lobed "
+                "liver with a remodelling is not; use PressureFlow for the "
+                "days of a remodelling or drop the remodelling."
+            )
+
+
+def _remodelling_lobes(definition: PBPKDefinition) -> bool:
+    """Whether the liver of a definition is a lobed liver whose anatomy moves."""
+    return _lobed(definition, "remodelling")
+
+
+def _buffered_lobes(definition: PBPKDefinition) -> bool:
+    """Whether the liver of a definition asks for the hepatic arterial buffer response."""
+    return _lobed(definition, "habr")
+
+
+def _lobed(definition: PBPKDefinition, attribute: str) -> bool:
+    """Whether the liver is a lobed liver which carries the given option."""
+    from pkpdsim.pbpk.builder import organ_component
+    from pkpdsim.pbpk.variants.liver_lobes import LobedLiver
+
+    liver = organ_component(definition, Organ.LIVER)
+    return isinstance(liver, LobedLiver) and getattr(liver, attribute) is not None
 
 
 def _parameter(sid: str, value: float, unit: UnitDefinition, notes: str) -> Parameter:
@@ -225,6 +258,33 @@ def _derived(
     ]
 
 
+def lobed_liver(definition: PBPKDefinition) -> bool:
+    """Whether the liver of a definition is a lobed liver of more than one lobe.
+
+    A lobed liver brings its own vascular network, one node and three
+    branches per lobe (`pkpdsim.pbpk.variants.liver_lobes.pressure_objects`),
+    so the circulation leaves the hepatic part of the whole liver network to
+    it: the single sinusoidal node, the two hepatic resistances, the three
+    hepatic flows and the junction balance.
+
+    Args:
+        definition: the definition.
+
+    Returns:
+        Whether the liver has lobes.
+
+    Raises:
+        ValueError: for a species without a lobe set.
+    """
+    from pkpdsim.pbpk.builder import organ_component
+    from pkpdsim.pbpk.variants.liver_lobes import LobedLiver
+
+    liver = organ_component(definition, Organ.LIVER)
+    if not isinstance(liver, LobedLiver):
+        return False
+    return len(liver.lobe_set(definition.species)) > 1
+
+
 def _sum_flows(organs: frozenset[Organ]) -> str:
     """A stable sum of the flows of a set of organs."""
     return " + ".join(ids.organ_flow(o) for o in Organ if o in organs)
@@ -237,6 +297,8 @@ def circulation_physiology(definition: PBPKDefinition, objects: list[Sbase]) -> 
         return
     check_circulation(definition)
     dynamic = isinstance(circulation, DynamicHeart)
+    # the lobes of a lobed liver bring their own nodes and branches
+    lobed = lobed_liver(definition)
     remove = set(_FLOW_IDS)
     if dynamic:
         remove |= {ids.pool_volume(p) for p in Pool}
@@ -292,7 +354,7 @@ def circulation_physiology(definition: PBPKDefinition, objects: list[Sbase]) -> 
         par.constant = node in ("ar", "ve")
         objects.append(par)
     for organ in Organ:
-        if organ is Organ.LUNG:
+        if organ is Organ.LUNG or (organ is Organ.LIVER and lobed):
             continue
         down = (
             "po" if organ in PORTAL_ORGANS else "li" if organ is Organ.LIVER else "ve"
@@ -316,38 +378,39 @@ def circulation_physiology(definition: PBPKDefinition, objects: list[Sbase]) -> 
     portal_ref = " + ".join(
         f"{ids.flow_fraction(o)} * {ids.CO_BASE}" for o in Organ if o in PORTAL_ORGANS
     )
-    objects += _derived(
-        "CV_R_portal",
-        f"(CV_P_po_ref - CV_P_li_ref)/({portal_ref})",
-        CVU.resistance,
-        initial=True,
-    )
-    objects += _derived(
-        "CV_R_hepatic",
-        f"(CV_P_li_ref - CV_P_ve_ref)/"
-        f"({portal_ref} + {ids.flow_fraction(Organ.LIVER)} * {ids.CO_BASE})",
-        CVU.resistance,
-        initial=True,
-    )
-    objects += [
-        AssignmentRule(ids.QHA, ids.organ_flow(Organ.LIVER), U.l_per_min),
-        AssignmentRule(
-            ids.QPO,
-            "max(CV_P_po - CV_P_li, 0 mmHg)/(CV_R_portal * CV_fR_portal)",
-            U.l_per_min,
-        ),
-        AssignmentRule(
-            ids.QH,
-            "max(CV_P_li - CV_P_ve, 0 mmHg)/(CV_R_hepatic * CV_fR_hepatic)",
-            U.l_per_min,
-        ),
-        AlgebraicRule(
-            "CV_hepatic_balance",
-            f"{ids.QHA} + {ids.QPO} - {ids.QH}",
-            U.l_per_min,
-            name="hepatic junction volume balance",
-        ),
-    ]
+    if not lobed:
+        objects += _derived(
+            "CV_R_portal",
+            f"(CV_P_po_ref - CV_P_li_ref)/({portal_ref})",
+            CVU.resistance,
+            initial=True,
+        )
+        objects += _derived(
+            "CV_R_hepatic",
+            f"(CV_P_li_ref - CV_P_ve_ref)/"
+            f"({portal_ref} + {ids.flow_fraction(Organ.LIVER)} * {ids.CO_BASE})",
+            CVU.resistance,
+            initial=True,
+        )
+        objects += [
+            AssignmentRule(ids.QHA, ids.organ_flow(Organ.LIVER), U.l_per_min),
+            AssignmentRule(
+                ids.QPO,
+                "max(CV_P_po - CV_P_li, 0 mmHg)/(CV_R_portal * CV_fR_portal)",
+                U.l_per_min,
+            ),
+            AssignmentRule(
+                ids.QH,
+                "max(CV_P_li - CV_P_ve, 0 mmHg)/(CV_R_hepatic * CV_fR_hepatic)",
+                U.l_per_min,
+            ),
+            AlgebraicRule(
+                "CV_hepatic_balance",
+                f"{ids.QHA} + {ids.QPO} - {ids.QH}",
+                U.l_per_min,
+                name="hepatic junction volume balance",
+            ),
+        ]
     if dynamic:
         _heart_physiology(circulation, objects)
     else:
