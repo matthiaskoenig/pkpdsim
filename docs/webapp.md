@@ -12,3 +12,29 @@ Every model has a web app: one HTML file next to its SBML which shows the readou
 | one per other scan | the scanned parameter as a range over the scanned values and the first dose | the `scan_map` of the scan experiments, e.g. the body weight or the activity of a transporter |
 
 Every page shows the readouts as small panels side by side under the knobs it shares: the outputs the experiments with data compare with their studies, the observables of their fit mappings (at most eight, the most compared first), a concentration in uM and an amount in umol. A model of two builds (male and female) names both, and a reader switches between them; the build of each sex has the classes of a renal impairment at its own healthy GFR (`ScaledRenalMap.of_sex`), the panels of its page through `PKPDModel.default_variant_panels`, the override of sbmlsim's `Project.default_variant_panels`. A model whose experiments dose nothing shows its readouts on one page, and one whose experiments compare nothing with data the time courses of its species.
+
+## The body figure of an app
+
+A model which declares its own app can make its interactive body figure the map of its panels: a reader clicks an organ of the drawing and the timecourses the model reports there appear beside the plots of the app. `pkpdsim.webapp.body_figure(svg, sbml, *, simulation, title, credit="", substances=None, knobs=(), readouts=None)` returns the panels by their key, the figure and the keys which select nothing, ready to be declared in a `panels.py`.
+
+```python
+# not executed
+from pkpdsim.webapp import body_figure
+
+FIGURE_PANELS, FIGURE, FIGURE_DROPPED = body_figure(
+    OUTPUT / "glimepiride_body_body.svg",
+    OUTPUT / "glimepiride_body_flat.xml",
+    simulation=SIMULATION,
+    title="Glimepiride PBPK model",
+    substances={"hydroxy-glimepiride (M1)": "M1"},
+    knobs=KNOBS,
+)
+```
+
+It does three things a consumer would otherwise do by hand, and the reason all three live here is that pkpdsim writes both the figure and the model, so it can read the ids back instead of asking a package to keep a list of what its model lacks.
+
+- **The ids are restricted to the build.** An id of the sidecar is a proposal: the drawing shows every organ of the library while a model has the organs of its substances, and the readouts of the library are the ids a model has to request (`PBPKDefinition.readouts`). The entities of the flat build are read with libsbml, which costs a fraction of a second and no compile, and a key whose readouts are all absent is returned in `FIGURE_DROPPED` and stays a decoration of the drawing. Declaring a panel which selects nothing is refused by the registry, so this step is not optional.
+- **Every panel carries the knobs of the app.** A simulation whose derived targets read a knob can only be evaluated on a panel which has that knob, so a generated panel without them is refused when the factory writes the annotation.
+- **The curves are labelled as the panels of an app are.** A readout label is a legend of its own (`glimepiride, lung interstitium unbound`, 38 characters); a panel of one substance labels the compartment alone (`plasma`), a panel of several names the substance beside it in the short name `substances` gives (`M1 plasma`), and an unbound compartment reads `free <x>`.
+
+The page of the app shows the figure with `AppPage(figure=True, shown=(...))`, which keeps the declared plots on the page and makes the generated panels the ones the drawing opens, and `App(figure=FIGURE)` carries the drawing itself.

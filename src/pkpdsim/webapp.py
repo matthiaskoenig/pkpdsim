@@ -63,6 +63,7 @@ from sbmlsim.panel import (
     PanelDosing,
     PanelSimulation,
 )
+from sbmlsim.panel_figure import AppFigure, panels_from_figure, restrict_to_model
 from sbmlsim.units import Quantity, ureg
 
 from pkpdsim.sex import Sex
@@ -80,6 +81,7 @@ __all__ = [
     "INTERVALS",
     "PROTOCOL_DAYS",
     "READOUTS",
+    "body_figure",
     "default_app",
 ]
 
@@ -352,6 +354,128 @@ def default_variant_panels(
         if changed:
             shown[name] = changed
     return shown
+
+
+def body_figure(
+    svg: Path,
+    sbml: Path,
+    *,
+    simulation: PanelSimulation,
+    title: str,
+    credit: str = "",
+    substances: Mapping[str, str] | None = None,
+    knobs: Sequence[Knob] = (),
+    readouts: Path | None = None,
+) -> tuple[dict[str, Panel], AppFigure, tuple[str, ...]]:
+    """The panels of the body figure of a model, one per place of its drawing.
+
+    `write_readouts` declares what the model reports at every clickable place
+    of the interactive body figure (`<svg stem>.readouts.json`, the contract
+    `figurereadouts/1`) and `sbmlsim.panel_figure.panels_from_figure` turns
+    that pair into one panel per place. Those ids are a proposal and not a
+    declaration: they are the ids of the id scheme, the drawing shows every
+    organ of the library while a model has the organs of its substances, and
+    the readouts of the library are the ids a model has to request
+    (`PBPKDefinition.readouts`). So the panels are restricted to the entities
+    of the build, which is why this lives in pkpdsim: it is the package which
+    writes the figure and the model, so it can read the ids back instead of
+    asking a consumer to keep a list of what its model lacks.
+
+    The curves are labelled as the panels of an app label theirs, the
+    compartment alone where the panel names one substance and the substance
+    beside it where it draws several (`_labelled`).
+
+    Args:
+        svg: the drawing of the interactive figure, as `write_readouts` wrote
+            it.
+        sbml: the flat build of the model whose entities the ids are checked
+            against.
+        simulation: the simulation of every panel, the one of the app.
+        title: the title of the figure.
+        credit: the credit line under the figure.
+        substances: the short name of a substance by the name the readouts
+            give it (`{"hydroxy-glimepiride (M1)": "M1"}`), for the curves of
+            a panel which draws several.
+        knobs: the controls of the app, which every panel it shows carries; a
+            simulation whose derived targets read a knob can only be
+            evaluated on a panel which has it.
+        readouts: the sidecar, `<svg stem>.readouts.json` beside the drawing
+            by default.
+
+    Returns:
+        The panels by their key, the figure, and the keys whose readouts the
+        build has not, which select nothing and stay decorations of the
+        drawing.
+
+    Raises:
+        FileNotFoundError: a path which does not exist.
+    """
+    sidecar = readouts if readouts is not None else svg.with_suffix(".readouts.json")
+    for path, what in ((svg, "drawing"), (sidecar, "readouts"), (sbml, "build")):
+        if not path.exists():
+            msg = f"the {what} of the figure is not at {path}"
+            raise FileNotFoundError(msg)
+    entities = _entities(sbml)
+    panels, figure, dropped = restrict_to_model(
+        *panels_from_figure(
+            svg,
+            sidecar,
+            simulation=simulation,
+            title=title,
+            credit=credit,
+            knobs=tuple(knobs),
+        ),
+        lambda selection: selection in entities,
+    )
+    short = substances or {}
+    return (
+        {key: _labelled(panel, short) for key, panel in panels.items()},
+        figure,
+        dropped,
+    )
+
+
+def _part(label: str, place: str) -> str:
+    """The compartment a readout label names, without its substance and place.
+
+    A readout of pkpdsim reads `<substance>, <place> <compartment>`, which is
+    a legend of its own and says three times in a panel what its title says
+    once. The compartment alone is what the panels of an app label their
+    curves with (`plasma`), and an unbound compartment reads `free <x>`, which
+    is both shorter and the way it is said.
+    """
+    _, _, rest = label.partition(", ")
+    part = rest.removeprefix(f"{place} ").strip() if rest else label
+    return (
+        f"free {part.removesuffix(' unbound')}" if part.endswith(" unbound") else part
+    )
+
+
+def _labelled(panel: Panel, substances: Mapping[str, str]) -> Panel:
+    """The panel whose curves are labelled as the panels of an app are.
+
+    A panel of one substance labels its curves with the compartment alone, as
+    its title names the substance; a panel of several names the substance of
+    every curve, in the short name the app uses for it (`M1`), since that is
+    what its curves differ in.
+    """
+    place = panel.title.split(", ")[-1]
+    named = {curve.label.partition(", ")[0] for curve in panel.curves}
+    curves = tuple(
+        curve.model_copy(
+            update={
+                "label": (
+                    _part(curve.label, place)
+                    if len(named) < 2
+                    else f"{substances.get(substance, substance)} "
+                    f"{_part(curve.label, place)}"
+                )
+            }
+        )
+        for curve in panel.curves
+        for substance in (curve.label.partition(", ")[0],)
+    )
+    return panel.model_copy(update={"curves": curves})
 
 
 def _entities(sbml: Path) -> set[str]:

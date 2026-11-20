@@ -57,7 +57,7 @@ dependencies = [
     # 0.32.0 has the figure of an app, the panels of a readouts sidecar
     # (`sbmlsim.panel_figure`) and `.json` among the formats of a COMBINE
     # archive, so the sidecar of a body figure is an entry of the archive)
-    "sbmlsim>=0.32.0",
+    "sbmlsim>=0.34.0",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`)
     "pkpdutils>=1.7.0",
     # the study folders of format 2 of PK-DB, read as `pkdb check` reads them (`pkpdsim.data`)
