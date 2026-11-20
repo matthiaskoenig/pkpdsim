@@ -517,7 +517,7 @@ def test_no_lobe_of_the_liver_starts_at_the_lobe_beside_it(tmp_path: Path) -> No
     """
     variants = Variants(organs={Organ.LIVER: LobedLiver()})
     d = _definition([PROD, PASRC, SEC], variants=variants, species=Species.RAT)
-    sbml = build(d, tmp_path).flat_path.read_text()
+    sbml = build(d, tmp_path).flat_path.read_text(encoding="utf-8")
     tokens = [lobe.token for lobe in lobe_table(Species.RAT)]
     assert len(tokens) > 1
     for token in tokens:

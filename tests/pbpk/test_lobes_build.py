@@ -86,7 +86,7 @@ def test_one_lobe_liver_is_the_standard_liver(tmp_path: Path) -> None:
 def _dateless(path: Path) -> list[str]:
     return [
         line
-        for line in path.read_text().splitlines()
+        for line in path.read_text(encoding="utf-8").splitlines()
         if "Date" not in line and "dcterms" not in line and "W3CDTF" not in line
     ]
 

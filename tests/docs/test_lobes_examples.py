@@ -161,6 +161,7 @@ def test_the_javascript_of_the_page(tmp_path: Path) -> None:
             cwd=test.parent,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=60,
             check=False,
         )

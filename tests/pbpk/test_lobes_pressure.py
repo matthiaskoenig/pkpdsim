@@ -284,7 +284,7 @@ def test_every_portal_branch_closed_has_no_solution_on_the_network(
 
 def test_a_liver_without_lobes_keeps_the_network_it_had(tmp_path: Path) -> None:
     """The one node, the two hepatic resistances and the one balance of the liver."""
-    text = _model(tmp_path, None, PressureFlow()).read_text()
+    text = _model(tmp_path, None, PressureFlow()).read_text(encoding="utf-8")
     for sid in ("CV_hepatic_balance", "CV_R_portal", "CV_R_hepatic"):
         assert f'id="{sid}"' in text or f'"{sid}"' in text, sid
     for token in RAT_TOKENS:
@@ -296,7 +296,7 @@ def test_a_lobed_liver_replaces_the_one_node_by_the_nodes_of_the_lobes(
     tmp_path: Path,
 ) -> None:
     """The whole liver resistances and balance are the lobes' now."""
-    text = _model(tmp_path, LobedLiver(), PressureFlow()).read_text()
+    text = _model(tmp_path, LobedLiver(), PressureFlow()).read_text(encoding="utf-8")
     assert ids.lobe_balance("lll") in text
     assert '"CV_hepatic_balance"' not in text
     assert '"CV_R_portal"' not in text
@@ -339,13 +339,13 @@ def test_the_gain_of_the_buffer_response_is_a_parameter_of_the_lobes(
     table would put an unused constant into every pressure model and a second
     name for the one the lobes use. The gain belongs to the lobes.
     """
-    plain = _model(tmp_path / "plain", None, PressureFlow()).read_text()
+    plain = _model(tmp_path / "plain", None, PressureFlow()).read_text(encoding="utf-8")
     assert 'id="CV_habr_gain"' not in plain
     assert f'id="{ids.HABR_GAIN}"' not in plain
 
     lobed = _model(
         tmp_path / "lobed", LobedLiver(habr=HABR()), PressureFlow()
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert f'id="{ids.HABR_GAIN}"' in lobed
     assert 'id="CV_habr_gain"' not in lobed
 
