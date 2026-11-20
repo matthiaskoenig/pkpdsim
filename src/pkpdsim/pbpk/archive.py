@@ -266,12 +266,29 @@ def create_archive(
     figures = []
     if figure:
         from pkpdsim.pbpk.visual.anatomy import anatomy_figure
-        from pkpdsim.pbpk.visual.interactive import interactive_figure
+        from pkpdsim.pbpk.visual.animal import vein_of
+        from pkpdsim.pbpk.visual.content import ModelContent
+        from pkpdsim.pbpk.visual.interactive import (
+            interactive_figure,
+            write_readouts,
+        )
 
         path = model_output_dir / f"{definition.sid}.svg"
         figures.append(model_figure(definition, path, sexes))
         body = model_output_dir / f"{definition.sid}_body.svg"
         figures.append(anatomy_figure(definition, body, sexes=sexes))
+        # the readouts of the keys of the anatomy figure, which names the vein
+        # of its animal. Written beside the figure and not added to the
+        # `extra_files`: `sbmlsim.release.archive.write_archive` admits only
+        # the suffixes of its `EXTRA_FORMATS` (no `.json`), so the sidecar
+        # cannot be an archive entry until sbmlsim admits it; then adding it
+        # to `figures` is a one-line change. No sidecar of the schematic
+        # `<sid>.svg`: it draws key paths which `readouts` does not return yet
+        # (`gu`, `gu/sub:*`, `ki/urine/*`, `lumen/feces/*`), so its places
+        # would report nothing.
+        write_readouts(
+            ModelContent.of(definition), body, vein=vein_of(str(definition.species))
+        )
         # the interactive snippets beside the figures, for the documentation
         for svg, kind in ((path, "schematic"), (body, "anatomy")):
             interactive_figure(
