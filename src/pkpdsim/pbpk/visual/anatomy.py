@@ -43,16 +43,33 @@ from pkpdsim.sex import Sex
 __all__ = [
     "LEFT",
     "MIDLINES",
+    "OBSERVER_TEXT",
     "RIGHT",
     "TITLES",
     "AnatomyFigure",
     "anatomy_figure",
+    "line_key",
+    "substance_key",
 ]
 
 #: the escapes of an attribute value of the SVG, which `escape` adds to the
 #: escapes of a text node: a value in double quotes ends at a double quote,
 #: so a text of the definition could leave its attribute
 _QUOTE = {'"': "&quot;"}
+
+OBSERVER_TEXT = "arm vein: the observer Carm of every substance"
+"""The text of the line of the blood sample, the observer of the arm vein."""
+
+
+def substance_key(sid: str) -> str:
+    """The key (`data-k`) of a substance: its chip and its legend dot, `sub:<sid>`."""
+    return f"sub:{sid}"
+
+
+def line_key(badge: str, text: str) -> str:
+    """The key (`data-k`) of a process line of a label, `txt:<badge>: <text>`."""
+    return f"txt:{badge}: {text}"
+
 
 FONT = "'DejaVu Sans', 'Noto Sans', sans-serif"
 MONO = "'DejaVu Sans Mono', monospace"
@@ -542,11 +559,11 @@ class AnatomyFigure:
         for sid, color, tissue in chips:
             if tissue:
                 o.append(
-                    f'<circle data-k="sub:{escape(sid)}" cx="{cx + r:.1f}" cy="{y + h + 5:.1f}" r="{r}" fill="{color}"/>'
+                    f'<circle data-k="{escape(substance_key(sid))}" cx="{cx + r:.1f}" cy="{y + h + 5:.1f}" r="{r}" fill="{color}"/>'
                 )
             else:
                 o.append(
-                    f'<circle data-k="sub:{escape(sid)}" cx="{cx + r:.1f}" cy="{y + h + 5:.1f}" r="{r - 0.7:.1f}" fill="#fff" '
+                    f'<circle data-k="{escape(substance_key(sid))}" cx="{cx + r:.1f}" cy="{y + h + 5:.1f}" r="{r - 0.7:.1f}" fill="#fff" '
                     f'stroke="{color}" stroke-width="1.4" stroke-dasharray="2,1.4"/>'
                 )
             cx += step
@@ -565,7 +582,7 @@ class AnatomyFigure:
         elif key == "urine":
             lines = []
         elif key == "blood":
-            lines = [("OBS", "arm vein: the observer Carm of every substance")]
+            lines = [("OBS", OBSERVER_TEXT)]
         elif key == "iv":
             lines = [
                 ("IV", f"{s} into the venous blood")
@@ -579,7 +596,7 @@ class AnatomyFigure:
             tw = max(len(p) for p in parts) * 10 * _CW
             bx = (xe - tw - 31) if right else x
             o.append(
-                f'<g data-k="txt:{escape(badge, _QUOTE)}: {escape(text, _QUOTE)}">'
+                f'<g data-k="{escape(line_key(badge, text), _QUOTE)}">'
                 f'<rect x="{bx:.1f}" y="{y + h + 1:.1f}" width="26" height="12" rx="2" fill="{_BADGES.get(badge, "#777")}"/>'
                 f'<text x="{bx + 13:.1f}" y="{y + h + 10.2:.1f}" class="bd">{escape(badge)}</text>'
             )
@@ -770,7 +787,7 @@ class AnatomyFigure:
                 if x + w > width:
                     x, y = 6.0, y + 18
                 header.append(
-                    f'<g data-k="sub:{escape(s.sid)}"><circle cx="{x + 5:.1f}" cy="{y - 4:.1f}" r="5" fill="{s.color}"/>'
+                    f'<g data-k="{escape(substance_key(s.sid))}"><circle cx="{x + 5:.1f}" cy="{y - 4:.1f}" r="5" fill="{s.color}"/>'
                     f'<text x="{x + 14:.1f}" y="{y:.1f}" class="sub"><tspan font-weight="600">{escape(s.sid)}</tspan> {escape(s.name)}</text></g>'
                 )
                 x += w
