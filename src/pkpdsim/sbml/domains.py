@@ -80,7 +80,7 @@ NONNEGATIVE = Domain(0.0, math.inf)
 REAL = Domain(-math.inf, math.inf)
 
 
-class MetadataUncertainty(Uncertainty):
+class _MetadataUncertainty(Uncertainty):
     """An uncertainty which asks for no SBO term.
 
     An SBO term classifies a component of a model, an uncertainty is metadata
@@ -100,7 +100,7 @@ def domain_uncertainty(d: Domain) -> Uncertainty:
     Returns:
         An uncertainty named `DOMAIN` with one `range` span.
     """
-    return MetadataUncertainty(
+    return _MetadataUncertainty(
         uncertParameters=[
             UncertSpan(
                 type=libsbml.DISTRIB_UNCERTTYPE_RANGE,
