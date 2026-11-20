@@ -171,8 +171,12 @@ def create_archive(
     substances and processes) is written into `model_output_dir` as
     `<sid>.svg` and the anatomical figure of the male and the female build
     (`anatomy_figure` of `pkpdsim.pbpk.visual.anatomy`) as `<sid>_body.svg`,
-    both entries of the archive, and the interactive snippet of each beside it
-    as `<sid>.html` and `<sid>_body.html`
+    both entries of the archive, the readouts of the keys of the anatomical
+    figure beside it as `<sid>_body.readouts.json`
+    (`pkpdsim.pbpk.visual.interactive.write_readouts`), an entry as well, so a
+    reader of the archive has the places of the drawing and what each of them
+    reads without an import of pkpdsim, and the interactive snippet of each
+    figure beside it as `<sid>.html` and `<sid>_body.html`
     (`pkpdsim.pbpk.visual.interactive.interactive_figure`), which a page of the
     documentation of the model embeds; the snippets are no entry of the
     archive, which carries the figures as SVG. With `panels` the interactive panels of a
@@ -202,9 +206,11 @@ def create_archive(
             `<sid>_svg`, the first extra file of the archive); one figure for
             all sexes, which have the same organs, substances and processes,
             its title names the builds; and the anatomical figure
-            `<sid>_body.svg` (the key `<sid>_body_svg`, the second extra file);
-            and the interactive snippet of each, `<sid>.html` and
-            `<sid>_body.html`, which are no entry of the archive.
+            `<sid>_body.svg` (the key `<sid>_body_svg`, the second extra
+            file) with its readouts `<sid>_body.readouts.json` (the key
+            `<sid>_body.readouts_json`, the third); and the interactive
+            snippet of each figure, `<sid>.html` and `<sid>_body.html`, which
+            are no entry of the archive.
         panels: the interactive panels of the builds, the annotation of their
             flat models: a sequence of panels for every build, or the panels
             of each build by its sex, e.g. `{Sex.MALE: [...]}`, a sex without
@@ -239,7 +245,8 @@ def create_archive(
         `<sid>_flat_md`, `<sid>_flat_ant` (and the same keys of the id of the
         build of every other sex, `<sid>_female_flat`), the stem of every extra
         model, `<sid>_svg` of the figure, `<sid>_body_svg` of the anatomical
-        figure and `<stem>_<suffix>` of every extra file (`fluid_md`), each
+        figure, `<sid>_body.readouts_json` of its readouts and
+        `<stem>_<suffix>` of every extra file (`fluid_md`), each
         `{"path": Path, "entry": ManifestEntry}`.
     """
     sexes = (definition.sex,) if sexes is None else tuple(Sex(s) for s in sexes)
@@ -278,16 +285,16 @@ def create_archive(
         body = model_output_dir / f"{definition.sid}_body.svg"
         figures.append(anatomy_figure(definition, body, sexes=sexes))
         # the readouts of the keys of the anatomy figure, which names the vein
-        # of its animal. Written beside the figure and not added to the
-        # `extra_files`: `sbmlsim.release.archive.write_archive` admits only
-        # the suffixes of its `EXTRA_FORMATS` (no `.json`), so the sidecar
-        # cannot be an archive entry until sbmlsim admits it; then adding it
-        # to `figures` is a one-line change. No sidecar of the schematic
-        # `<sid>.svg`: it draws key paths which `readouts` does not return yet
-        # (`gu`, `gu/sub:*`, `ki/urine/*`, `lumen/feces/*`), so its places
-        # would report nothing.
-        write_readouts(
-            ModelContent.of(definition), body, vein=vein_of(str(definition.species))
+        # of its animal, an entry of the archive beside the figure it belongs
+        # to (`.json` of `sbmlsim.release.archive.EXTRA_FORMATS`), so a reader
+        # of the archive has the places of the drawing without pkpdsim. No
+        # sidecar of the schematic `<sid>.svg`: it draws key paths which
+        # `readouts` does not return yet (`gu`, `gu/sub:*`, `ki/urine/*`,
+        # `lumen/feces/*`), so its places would report nothing.
+        figures.append(
+            write_readouts(
+                ModelContent.of(definition), body, vein=vein_of(str(definition.species))
+            )
         )
         # the interactive snippets beside the figures, for the documentation
         for svg, kind in ((path, "schematic"), (body, "anatomy")):
