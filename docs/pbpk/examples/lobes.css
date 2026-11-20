@@ -1,6 +1,7 @@
 /* The liver lobe explorer. Every colour is a variable of `:root` and is
    redefined for the dark theme, which the page follows from the documentation
-   around it (lobes.mjs sets `data-theme`). */
+   around it (lobes.mjs sets `data-theme`) and from the setting of the system
+   when the page is opened on its own. */
 
 :root {
   color-scheme: light dark;
@@ -12,13 +13,50 @@
   --accent: #007c78;
   --accent-ink: #ffffff;
   --grid: #e6eaee;
-  --lobe-intact: #cfe6e5;
-  --lobe-portal: #f6d7a8;
-  --lobe-arterial: #d9d3ef;
-  --lobe-resected: #e4e7ea;
-  --edge-ha: #e15759;
-  --edge-po: #4e79a7;
+  /* one slot per lobe, in the order of the lobe table (lobes-model.mjs):
+     a validated categorical palette, stepped for this surface */
+  --lobe-1: #2a78d6;
+  --lobe-2: #eb6834;
+  --lobe-3: #1baf7a;
+  --lobe-4: #eda100;
+  --lobe-5: #e87ba4;
+  --lobe-6: #008300;
+  --lobe-7: #6250d6;
+  --lobe-8: #e34948;
+  --lobe-other: #8a949d;
+  --tint: 0.2;
+  --edge-ha: #e34948;
+  --edge-po: #2a78d6;
+  --edge-hv: #6250d6;
   --shadow: 0 1px 2px rgba(31, 36, 41, 0.08);
+}
+
+/* the dark theme: the same hues, stepped for the dark surface, under the
+   toggle of the documentation and under the setting of the system */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #14181b;
+    --panel: #1b2024;
+    --ink: #e8edf1;
+    --muted: #9aa5ae;
+    --line: #2c343a;
+    --accent: #4fd1c5;
+    --accent-ink: #07211f;
+    --grid: #252d33;
+    --lobe-1: #3987e5;
+    --lobe-2: #d95926;
+    --lobe-3: #199e70;
+    --lobe-4: #c98500;
+    --lobe-5: #d55181;
+    --lobe-6: #0ca30c;
+    --lobe-7: #9085e9;
+    --lobe-8: #e66767;
+    --lobe-other: #7d868e;
+    --tint: 0.26;
+    --edge-ha: #e66767;
+    --edge-po: #3987e5;
+    --shadow: none;
+  }
 }
 
 :root[data-theme="dark"] {
@@ -30,12 +68,19 @@
   --accent: #4fd1c5;
   --accent-ink: #07211f;
   --grid: #252d33;
-  --lobe-intact: #1f4b48;
-  --lobe-portal: #5c4420;
-  --lobe-arterial: #3b3357;
-  --lobe-resected: #262c31;
-  --edge-ha: #ff8a8c;
-  --edge-po: #7fb0dd;
+  --lobe-1: #3987e5;
+  --lobe-2: #d95926;
+  --lobe-3: #199e70;
+  --lobe-4: #c98500;
+  --lobe-5: #d55181;
+  --lobe-6: #0ca30c;
+  --lobe-7: #9085e9;
+  --lobe-8: #e66767;
+  --lobe-other: #7d868e;
+  --tint: 0.26;
+  --edge-ha: #e66767;
+  --edge-po: #3987e5;
+  --edge-hv: #9085e9;
   --shadow: none;
 }
 
@@ -43,44 +88,47 @@
 
 body {
   margin: 0;
-  padding: 16px;
+  padding: 10px 12px 12px;
   background: var(--paper);
   color: var(--ink);
-  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 14.5px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
-h1 { font-size: 1.5rem; margin: 0 0 6px; }
-h2 { font-size: 1.05rem; margin: 0; }
+h1 { font-size: 1.22rem; margin: 0 0 2px; }
+h2 { font-size: 0.98rem; margin: 0; }
 a { color: var(--accent); }
 
 .eyebrow {
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   color: var(--muted);
 }
 
-.app-header { margin-bottom: 16px; }
-.app-header p { color: var(--muted); margin: 0 0 12px; max-width: 70ch; }
+.app-header { margin-bottom: 8px; }
+.app-header p { color: var(--muted); margin: 4px 0 0; max-width: 95ch; }
+.title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin-bottom: 16px;
+  border-radius: 9px;
+  padding: 9px 11px 10px;
+  margin-bottom: 8px;
   box-shadow: var(--shadow);
 }
 
 .section-heading {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 7px;
 }
 
-.explanation { color: var(--muted); margin: 6px 0 10px; max-width: 80ch; }
+.explanation { color: var(--muted); margin: 4px 0 6px; max-width: 95ch; }
+.explanation.tight { margin: 2px 0 0; font-size: 0.82rem; }
 
 button {
   font: inherit;
@@ -88,29 +136,77 @@ button {
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 7px;
-  padding: 5px 11px;
+  padding: 3px 10px;
   cursor: pointer;
 }
 button:hover { border-color: var(--accent); }
 button.active, button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button.primary:hover { filter: brightness(1.08); }
+button[disabled] { opacity: 0.55; cursor: progress; }
 
-.mode-switch, .presets { display: flex; flex-wrap: wrap; gap: 8px; }
-.actions { display: flex; gap: 8px; flex: none; }
+.mode-switch, .presets { display: flex; flex-wrap: wrap; gap: 6px; }
 
-.liver-host { width: 100%; max-width: 640px; margin: 0 auto; }
+/* the planner: the procedure, the lobes it acts on and what it costs */
+.plan-grid { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: flex-start; }
+.plan-field { display: flex; flex-direction: column; gap: 4px; }
+.field-label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.plan-lobes { display: flex; flex-wrap: wrap; gap: 6px; }
+.lobe-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; }
+.lobe-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
+.lobe-chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.lobe-chip[aria-pressed="true"] .lobe-dot { box-shadow: 0 0 0 2px var(--accent-ink); }
+.plan-summary { margin: 7px 0 0; font-weight: 500; }
+
+.controls { margin: 7px 0 0; }
+.controls > summary { color: var(--muted); cursor: pointer; font-size: 0.85rem; }
+.controls[open] > summary { margin-bottom: 6px; }
+
+.run-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.run-gap { flex: 1 1 auto; }
+.runtime { color: var(--muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.run-status { margin: 5px 0 0; font-size: 0.85rem; }
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+
+/* the dashboard: the liver beside the plots of what the run says */
+.dashboard { display: grid; gap: 10px 16px; grid-template-columns: minmax(300px, 400px) minmax(320px, 1fr); align-items: start; }
+.player { display: flex; align-items: center; gap: 8px; flex: 1 1 320px; max-width: 460px; }
+.player input[type="range"] { flex: 1 1 auto; }
+.player output { white-space: nowrap; min-width: 4.1rem; text-align: right; }
+
+.liver-row { display: flex; align-items: stretch; gap: 8px; }
+.body-host { flex: 0 0 74px; display: flex; align-items: center; }
+.body-figure { width: 100%; height: auto; max-height: 300px; display: block; }
+/* the drawing is tagged per organ, so the liver of the animal is the one
+   organ which keeps its colour and the ring points at it */
+.body-figure [data-k] { opacity: 0.42; }
+.body-figure [data-k="li"] { opacity: 1; stroke: var(--accent); stroke-width: 1.1; }
+.body-liver { fill: none; stroke: var(--accent); stroke-width: 1.8; opacity: 0.9; }
+.body-liver-dot { fill: none; }
+.liver-host { flex: 1 1 auto; min-width: 0; margin: 0 auto; }
 svg.liver { width: 100%; height: auto; display: block; }
 
 .liver-block {
-  fill: var(--lobe-intact);
-  stroke: var(--line);
-  stroke-width: 1;
-  transition: fill 120ms ease;
+  fill-opacity: var(--tint);
+  stroke-width: 1.5;
+  transition: fill-opacity 120ms ease;
 }
+.liver-frame { fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 5 4; }
+.liver-shade { pointer-events: none; }
 .liver-lobe { cursor: pointer; }
-.liver-lobe:hover .liver-block, .liver-lobe:focus-visible .liver-block { stroke: var(--accent); stroke-width: 2; }
-.liver-lobe[data-state="portal"] .liver-block { fill: var(--lobe-portal); }
-.liver-lobe[data-state="arterial"] .liver-block { fill: var(--lobe-arterial); }
-.liver-lobe[data-state="resected"] .liver-block { fill: var(--lobe-resected); stroke-dasharray: 4 3; }
+.liver-lobe:hover .liver-block, .liver-lobe:focus-visible .liver-block { fill-opacity: calc(var(--tint) + 0.14); stroke-width: 2.5; }
+.liver-lobe[data-state="portal"] .liver-block, .liver-lobe[data-state="arterial"] .liver-block { stroke-dasharray: 5 3; }
 .liver-lobe:focus { outline: none; }
 
 .liver-token { font-size: 13px; font-weight: 600; fill: var(--ink); }
@@ -119,37 +215,48 @@ svg.liver { width: 100%; height: auto; display: block; }
 .liver-edge { fill: none; stroke-linecap: round; }
 .liver-edge-ha { stroke: var(--edge-ha); }
 .liver-edge-po { stroke: var(--edge-po); }
+.liver-edge-hv { stroke: var(--edge-hv); }
 .liver-edge[data-closed="true"] { stroke-dasharray: 3 4; opacity: 0.45; }
+.liver-cut { stroke-width: 2.4; stroke-linecap: round; opacity: 1; }
 
-.removed { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 4px 0 0; }
+.removed { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 4px 0 0; }
 .chip {
-  background: var(--lobe-resected);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel);
   border: 1px dashed var(--line);
   border-radius: 999px;
-  padding: 3px 12px;
-  font-size: 0.85rem;
+  padding: 2px 10px;
+  font-size: 0.82rem;
   color: var(--muted);
 }
+.chip .lobe-dot { width: 12px; height: 12px; border-radius: 3px; }
 .chip:hover { color: var(--ink); border-style: solid; }
 
-.legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0; }
-.legend-item { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 0.85rem; }
-.legend-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--line); display: inline-block; background: var(--lobe-intact); }
-.legend-item[data-state="portal"] .legend-swatch { background: var(--lobe-portal); }
-.legend-item[data-state="arterial"] .legend-swatch { background: var(--lobe-arterial); }
-.legend-item[data-state="resected"] .legend-swatch { background: var(--lobe-resected); }
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 11px; margin: 7px 0 0; }
+.legend-item { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 0.8rem; }
+.legend-swatch { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+.legend-break { flex-basis: 100%; height: 0; }
+.legend-shade {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+  border: 1px solid var(--muted);
+  background: color-mix(in srgb, var(--muted) 22%, transparent);
+}
+.legend-item[data-state="portal"] .legend-shade { background: repeating-linear-gradient(45deg, var(--muted) 0 2.4px, transparent 2.4px 5.4px); }
+.legend-item[data-state="arterial"] .legend-shade { background: repeating-linear-gradient(135deg, var(--muted) 0 1.6px, transparent 1.6px 6.4px); }
 
-.sliders { display: grid; gap: 10px; }
-.slider { display: grid; grid-template-columns: minmax(7rem, 13rem) 1fr 4.5rem; align-items: center; gap: 10px; }
-.slider-label { color: var(--muted); }
-.slider-value { font-variant-numeric: tabular-nums; }
-.scrubber { margin: 8px 0; }
-.scrubber .slider { grid-template-columns: 3rem 1fr 4.5rem; }
+.sliders { display: grid; gap: 6px; }
+.slider { display: grid; grid-template-columns: minmax(7rem, 14rem) 1fr 4.5rem; align-items: center; gap: 10px; }
+.slider-label { color: var(--muted); font-size: 0.85rem; }
+.slider-value { font-variant-numeric: tabular-nums; font-size: 0.85rem; }
 input[type="range"] { width: 100%; accent-color: var(--accent); }
 
-.plots { display: grid; gap: 14px 20px; grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); }
-.plots .section-heading { grid-column: 1 / -1; }
-.plot-host { width: 100%; max-width: 560px; margin: 0 auto; }
+.plots { display: grid; gap: 8px 12px; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); }
+.plot-host { width: 100%; max-width: 460px; margin: 0 auto; }
 svg.plot { width: 100%; height: auto; display: block; }
 .cd-title { font-size: 12px; font-weight: 600; fill: var(--ink); }
 .cd-label { font-size: 12px; fill: var(--ink); }
@@ -158,13 +265,23 @@ svg.plot { width: 100%; height: auto; display: block; }
 .plot-axis { stroke: var(--line); stroke-width: 1; }
 .plot-curve { fill: none; stroke-width: 2; }
 .plot-marker { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3; }
-.plot-bar { opacity: 0.9; }
+/* the hue of a bar is its lobe; the parts of a group are told apart by the
+   shade and are named by the legend */
+.plot-bar-0 { fill-opacity: 1; }
+.plot-bar-1 { fill-opacity: 0.45; }
+.plot-swatch { fill: var(--muted); }
 .plot-legend { font-size: 10px; }
 
-.notice { border: 1px solid var(--line); border-left: 4px solid var(--edge-ha); border-radius: 8px; padding: 10px 14px; background: var(--panel); }
-.app-footer { color: var(--muted); font-size: 0.85rem; }
+.notice { border: 1px solid var(--line); border-left: 4px solid var(--edge-ha); border-radius: 8px; padding: 9px 12px; background: var(--panel); }
+.app-footer { color: var(--muted); font-size: 0.8rem; }
+.app-footer p { margin: 2px 0; }
+
+@media (max-width: 1000px) {
+  .dashboard { grid-template-columns: 1fr; }
+  .liver-host { max-width: 520px; }
+}
 
 @media (max-width: 520px) {
-  .slider, .scrubber .slider { grid-template-columns: 1fr; }
-  .section-heading { flex-direction: column; }
+  .slider { grid-template-columns: 1fr; }
+  .section-heading { flex-direction: column; align-items: stretch; }
 }

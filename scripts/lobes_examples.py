@@ -310,6 +310,40 @@ def generate(*, browser: Path | None = None) -> dict[str, Any]:
     return data
 
 
+def anatomy_of(species: Species) -> dict[str, Any]:
+    """The drawn animal of a species, its box and where its liver sits.
+
+    The figure of the library (`pkpdsim.pbpk.visual`), which is the anatomogram
+    of the EBI Expression Atlas for the mouse and the rat and the body of
+    pkpdsim for the human: the explorer draws the same animal the physiology
+    figures of the documentation draw, so a reader sees which individual the
+    lobes belong to. The drawings are each scaled to their own box, so the
+    species are not on one scale.
+    """
+    from pkpdsim.pbpk.visual.animal import AnimalBody
+    from pkpdsim.pbpk.visual.body import reference_body
+
+    if species is Species.HUMAN:
+        body = reference_body("male")
+        drawing = body.svg(arteries=False, tags=True)
+        points = np.asarray(body.outline)
+        liver = body.centroid("li")
+    else:
+        animal = AnimalBody(species.value)
+        drawing = animal.svg(tags=True)
+        points = np.asarray(animal.a.outline)
+        liver = animal.centroid("li")
+    low, high = points.min(0), points.max(0)
+    return {
+        "svg": drawing,
+        "box": [
+            round(float(v), 3)
+            for v in (low[0], low[1], high[0] - low[0], high[1] - low[1])
+        ],
+        "liver": [round(float(v), 3) for v in liver],
+    }
+
+
 def write(output: Path = OUTPUT, *, browser: Path | None = SOLVERS) -> None:
     """Write the dataset and the browser models.
 
@@ -321,6 +355,23 @@ def write(output: Path = OUTPUT, *, browser: Path | None = SOLVERS) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(
         json.dumps(data, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+        + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    (output.parent / "lobes-anatomy.json").write_text(
+        json.dumps(
+            {
+                "generated_by": "scripts/lobes_examples.py",
+                "attribution": "Anatomy adapted from EMBL-EBI Expression Atlas anatomograms (CC BY 4.0), using pkpdsim physiology figures.",
+                "source": "https://github.com/ebi-gene-expression-group/anatomogram",
+                "license": "https://creativecommons.org/licenses/by/4.0/",
+                "bodies": {species.value: anatomy_of(species) for species in SPECIES},
+            },
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
         + "\n",
         encoding="utf-8",
         newline="\n",

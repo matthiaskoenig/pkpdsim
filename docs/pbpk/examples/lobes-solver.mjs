@@ -8,7 +8,30 @@ export const CONTROLS = {
   habrGain: {parameter: "habr_gain", label: "buffer response gain", min: 0, max: 0.6, step: 0.005, value: 0.255},
   growth: {parameter: "k_growth", label: "growth constant [1/min]", min: 0, max: 0.002, step: 0.00005, value: 0.0005},
   surgery: {parameter: null, label: "time of the surgery [days]", min: 0, max: 4, step: 0.25, value: 0},
+  arterial: {parameter: null, label: "hepatic arterial inflow [x reference]", min: 0, max: 2, step: 0.05, value: 1},
+  portal: {parameter: null, label: "portal inflow [x reference]", min: 0, max: 2, step: 0.05, value: 1},
 };
+
+/** The gates of the lobes an inflow control asks for.
+ *
+ * A branch of a lobe is opened and closed by the gate `pkpdsim.pbpk.lobes`
+ * writes (`g_ha_<lobe>`, `g_po_<lobe>`), which a ligation sets to zero; the
+ * controls scale the same gate of every branch which is still open, so the
+ * page changes the inflow of a liver without a second model of a vessel. A
+ * branch the plan ligated keeps its zero and is left to `caseChanges`, and a
+ * resected lobe has no open branch at all.
+ */
+export function inflowChanges(tokens, states = {}, controls = {}) {
+  const values = normalizeControls(controls);
+  const changes = {};
+  for (const token of tokens) {
+    const state = states[token] ?? "intact";
+    if (state === "resected") continue;
+    if (state !== "arterial" && values.arterial !== CONTROLS.arterial.value) changes[`g_ha_${token}`] = values.arterial;
+    if (state !== "portal" && values.portal !== CONTROLS.portal.value) changes[`g_po_${token}`] = values.portal;
+  }
+  return changes;
+}
 
 /** The controls of the page with every value checked, the defaults filled in. */
 export function normalizeControls(controls = {}) {

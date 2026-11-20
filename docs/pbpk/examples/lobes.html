@@ -28,10 +28,14 @@
 <body>
   <main id="app" aria-busy="true">
     <header class="app-header">
-      <div class="eyebrow">pkpdsim / liver lobe examples</div>
-      <h1>Portal vein ligation and hepatectomy</h1>
-      <p>Click a lobe to ligate or resect it and watch the five days which follow: the flows redistribute at once, the deportalised lobes atrophy and their neighbours grow.</p>
-      <div id="species" class="mode-switch" role="group" aria-label="Species"></div>
+      <div class="title-row">
+        <div>
+          <span class="eyebrow">pkpdsim / liver lobe examples</span>
+          <h1>Plan a portal vein ligation or a hepatectomy</h1>
+        </div>
+        <div id="species" class="mode-switch" role="group" aria-label="Species"></div>
+      </div>
+      <p>Pick the procedure and the lobes it acts on, then run the five days which follow: the flows redistribute at once, the deportalised lobes atrophy and their neighbours grow.</p>
     </header>
 
     <p id="loading" role="status">Loading the reference livers...</p>
@@ -42,40 +46,65 @@
     <noscript>This explorer needs JavaScript. The <a href="../lobes.html">liver lobe documentation</a> explains the same model and gives the Python which builds it.</noscript>
 
     <div id="workspace" hidden>
-      <section class="panel" aria-labelledby="liver-heading">
-        <div class="section-heading"><div>
-          <span class="eyebrow">The anatomy of the simulation</span>
-          <h2 id="liver-heading">The lobes of the liver</h2>
-        </div></div>
-        <p class="explanation">The area of a block is the share of the liver the lobe holds at the shown time, so the atrophy of a deportalised lobe and the hypertrophy of its neighbours are a change of area. Click a block, or focus it and press Enter, to cycle intact, portal vein ligated, hepatic artery ligated and resected. A resected lobe holds no mass, so it leaves the liver and is listed below it, one click from coming back.</p>
-        <div id="liver" class="liver-host"></div>
-        <div id="removed" class="removed" role="group" aria-label="The lobes which were resected" hidden></div>
-        <div id="legend" class="legend" aria-label="The states of a lobe"></div>
-        <div class="scrubber">
-          <label class="slider"><span class="slider-label">time</span><input type="range" id="scrub" value="0"><output id="clock" class="slider-value">day 0</output></label>
+      <section class="panel planner" aria-labelledby="plan-heading">
+        <div class="section-heading">
+          <h2 id="plan-heading">1 &middot; The plan</h2>
+          <div id="presets" class="presets" role="group" aria-label="Named procedures"></div>
         </div>
-        <p id="status" role="status" class="explanation"></p>
+        <div class="plan-grid">
+          <div class="plan-field">
+            <span class="field-label" id="kind-label">procedure</span>
+            <div id="plan-kind" class="mode-switch" role="group" aria-labelledby="kind-label"></div>
+          </div>
+          <div class="plan-field">
+            <span class="field-label" id="lobes-label">lobes it acts on</span>
+            <div id="plan-lobes" class="plan-lobes" role="group" aria-labelledby="lobes-label"></div>
+          </div>
+        </div>
+        <p id="plan-summary" class="plan-summary"></p>
+        <details class="controls">
+          <summary>Model controls and the time of the surgery</summary>
+          <div id="sliders" class="sliders"></div>
+          <p class="explanation">The gain of the buffer response is the fraction of a lost portal inflow the hepatic artery of that lobe compensates, the growth constant sets how fast the anatomy follows, and the time of the surgery decides whether the intervention is applied before the simulation or to the running model. A named procedure at the default controls is a precomputed reference run; anything else runs the compiled model here.</p>
+        </details>
+        <div class="run-row">
+          <button type="button" id="run" class="primary">Run simulation</button>
+          <span id="spinner" class="spinner" role="status" aria-label="the model is running" hidden></span>
+          <span id="runtime" class="runtime"></span>
+          <span class="run-gap"></span>
+          <button type="button" id="reset">Reset</button>
+          <button type="button" id="download">Download CSV</button>
+        </div>
+        <p id="status" role="status" class="explanation run-status"></p>
       </section>
 
-      <section class="panel" aria-labelledby="controls-heading">
-        <div class="section-heading"><div>
-          <span class="eyebrow">The procedures of the literature and the model choices</span>
-          <h2 id="controls-heading">Presets and controls</h2>
-        </div><div class="actions"><button type="button" id="reset">Reset</button><button type="button" id="download">Download CSV</button></div></div>
-        <div id="presets" class="presets" role="group" aria-label="Named procedures"></div>
-        <p class="explanation">A preset at the default controls is a precomputed reference run; moving a control runs the compiled model in a Web Worker, which takes a moment. The gain of the buffer response is the fraction of a lost portal inflow the hepatic artery of that lobe compensates, the growth constant sets how fast the anatomy follows, and the time of the surgery decides whether the intervention is applied before the simulation or to the running model.</p>
-        <div id="sliders" class="sliders"></div>
-      </section>
-
-      <section class="panel plots" aria-labelledby="plots-heading">
-        <div class="section-heading"><div>
-          <span class="eyebrow">Five days after the intervention</span>
-          <h2 id="plots-heading">What the model says</h2>
-        </div></div>
-        <div id="plot-masses" class="plot-host"></div>
-        <div id="plot-flows" class="plot-host"></div>
-        <div id="plot-remnant" class="plot-host"></div>
-        <div id="plot-exposure" class="plot-host"></div>
+      <section class="panel" aria-labelledby="dash-heading">
+        <div class="section-heading">
+          <h2 id="dash-heading">2 &middot; The five days which follow</h2>
+          <div id="views" class="mode-switch" role="group" aria-label="What the dashboard reads out"></div>
+          <div class="player">
+            <button type="button" id="play" aria-pressed="false" title="play the days after the intervention">Play</button>
+            <input type="range" id="scrub" value="0" aria-label="the day which is shown">
+            <output id="clock" class="slider-value">day 0</output>
+          </div>
+        </div>
+        <div class="dashboard">
+          <div class="liver-pane">
+            <div class="liver-row">
+              <div id="body" class="body-host" aria-label="The animal of this run, its liver marked" hidden></div>
+              <div id="liver" class="liver-host"></div>
+            </div>
+            <div id="removed" class="removed" role="group" aria-label="The lobes which were resected" hidden></div>
+            <div id="legend" class="legend" aria-label="The lobes and the states of a lobe"></div>
+            <p class="explanation tight">The area of the whole liver is the mass which is there, so a hepatectomy shrinks it and the regrowth fills it again; the area of a block is the lobe inside it. Click a block to cycle its state.</p>
+          </div>
+          <div class="plots">
+            <div id="plot-masses" class="plot-host"></div>
+            <div id="plot-remnant" class="plot-host"></div>
+            <div id="plot-flows" class="plot-host"></div>
+            <div id="plot-exposure" class="plot-host"></div>
+          </div>
+        </div>
       </section>
 
       <footer class="app-footer">

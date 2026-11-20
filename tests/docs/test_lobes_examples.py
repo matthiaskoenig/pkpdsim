@@ -65,6 +65,30 @@ def test_the_committed_dataset_is_a_current_run(
                 )
 
 
+def test_the_committed_anatomy_is_the_figure_of_the_library() -> None:
+    """The drawn animal of the explorer is the physiology figure of the library.
+
+    The page carries the drawing as data, so the same check as for the dataset:
+    a figure which moved in the library has to be exported again, and the
+    attribution the licence of the anatomograms asks for travels with it.
+    """
+    anatomy = json.loads((EXAMPLES / "lobes-anatomy.json").read_text(encoding="utf-8"))
+    assert anatomy["generated_by"] == "scripts/lobes_examples.py"
+    assert "CC BY 4.0" in anatomy["attribution"]
+    assert anatomy["license"].startswith("https://creativecommons.org/")
+    assert set(anatomy["bodies"]) == {species.value for species in SPECIES}
+    for species in SPECIES:
+        fresh = SCRIPT["anatomy_of"](species)
+        was = anatomy["bodies"][species.value]
+        assert was["svg"] == fresh["svg"], species.value
+        assert was["box"] == fresh["box"], species.value
+        assert was["liver"] == fresh["liver"], species.value
+        # the liver of the drawing is inside the box the page draws
+        left, top, width, height = fresh["box"]
+        assert left <= fresh["liver"][0] <= left + width, species.value
+        assert top <= fresh["liver"][1] <= top + height, species.value
+
+
 def test_the_provenance_names_the_installed_releases(committed: dict[str, Any]) -> None:
     provenance = committed["provenance"]
     assert provenance["generator"] == "scripts/lobes_examples.py"
