@@ -10,6 +10,7 @@ stale `model.wasm` out of the published documentation.
 
 import itertools
 import json
+import re
 import runpy
 import shutil
 import subprocess
@@ -65,6 +66,19 @@ def test_the_committed_dataset_is_a_current_run(
                 )
 
 
+NUMBER = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")
+
+
+def _skeleton(svg: str) -> str:
+    """The drawing without its numbers: its elements, attributes and words."""
+    return NUMBER.sub("#", svg)
+
+
+def _numbers(svg: str) -> list[float]:
+    """The numbers of the drawing, in the order they are written."""
+    return [float(match.group()) for match in NUMBER.finditer(svg)]
+
+
 def test_the_committed_anatomy_is_the_figure_of_the_library() -> None:
     """The drawn animal of the explorer is the physiology figure of the library.
 
@@ -80,9 +94,20 @@ def test_the_committed_anatomy_is_the_figure_of_the_library() -> None:
     for species in SPECIES:
         fresh = SCRIPT["anatomy_of"](species)
         was = anatomy["bodies"][species.value]
-        assert was["svg"] == fresh["svg"], species.value
-        assert was["box"] == fresh["box"], species.value
-        assert was["liver"] == fresh["liver"], species.value
+        # The body of the human is geometry the library computes and writes with
+        # one decimal, so the last bit of a float decides a coordinate exactly on
+        # a half on one platform and not on another. The drawing is compared the
+        # way the dataset is: its structure exactly, its numbers to a tolerance
+        # which no move of a figure stays under.
+        assert _skeleton(was["svg"]) == _skeleton(fresh["svg"]), species.value
+        np.testing.assert_allclose(
+            _numbers(was["svg"]),
+            _numbers(fresh["svg"]),
+            atol=0.25,
+            err_msg=species.value,
+        )
+        assert was["box"] == pytest.approx(fresh["box"], abs=0.01), species.value
+        assert was["liver"] == pytest.approx(fresh["liver"], abs=0.01), species.value
         # the liver of the drawing is inside the box the page draws
         left, top, width, height = fresh["box"]
         assert left <= fresh["liver"][0] <= left + width, species.value
