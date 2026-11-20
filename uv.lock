@@ -987,16 +987,16 @@ wheels = [
 
 [[package]]
 name = "libroadrunner"
-version = "2.12.0.dev693"
+version = "2.12.0.dev700"
 source = { registry = "https://matthiaskoenig.github.io/roadrunner-wheels/simple/" }
 dependencies = [
     { name = "numpy" },
 ]
 wheels = [
-    { url = "https://github.com/matthiaskoenig/roadrunner-wheels/releases/download/v2.12.0.dev693/libroadrunner-2.12.0.dev693-cp310-abi3-macosx_15_0_arm64.whl", hash = "sha256:2d03af9813a1ce54ee54a2e97c8c9235f9c745f186b29069220fc66b6a9f2314" },
-    { url = "https://github.com/matthiaskoenig/roadrunner-wheels/releases/download/v2.12.0.dev693/libroadrunner-2.12.0.dev693-cp310-abi3-macosx_15_0_x86_64.whl", hash = "sha256:0afc54b596bffb086134f3e0eb47a509cd5ee72639f9e3677be9bc431f8651be" },
-    { url = "https://github.com/matthiaskoenig/roadrunner-wheels/releases/download/v2.12.0.dev693/libroadrunner-2.12.0.dev693-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:4204f63a27df882af4cd437b7c6f1b245b5eec5dc22b5c5411f9c380f4e40f9b" },
-    { url = "https://github.com/matthiaskoenig/roadrunner-wheels/releases/download/v2.12.0.dev693/libroadrunner-2.12.0.dev693-cp310-abi3-win_amd64.whl", hash = "sha256:5d4ce9450518b7a9d495c5576bb952878e836b4329993f64ef8ee0059f01f848" },
+    { url = "https://github.com/matthiaskoenig/roadrunner-wheels/releases/download/v2.12.0.dev700/libroadrunner-2.12.0.dev700-cp310-abi3-macosx_15_0_arm64.whl", hash = "sha256:955d3e4fb6cf69c09e4fcb62cb3e4355ff79a2e34c09e817e28c30cf8448e75e" },
+    { url = "https://github.com/matthiaskoenig/roadrunner-wheels/releases/download/v2.12.0.dev700/libroadrunner-2.12.0.dev700-cp310-abi3-macosx_15_0_x86_64.whl", hash = "sha256:56afdce8ed425d300da25deb782af41555d721d9d3cbe6b2f951f8686d5bc706" },
+    { url = "https://github.com/matthiaskoenig/roadrunner-wheels/releases/download/v2.12.0.dev700/libroadrunner-2.12.0.dev700-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:61875a61b9083a6badfef7e8473489bccdd25b71f836ac483d25e830249fddaf" },
+    { url = "https://github.com/matthiaskoenig/roadrunner-wheels/releases/download/v2.12.0.dev700/libroadrunner-2.12.0.dev700-cp310-abi3-win_amd64.whl", hash = "sha256:4c8bf66c296b2702302c9f75e2f120a4dff304b265f40c33f75f453cf6bfb83c" },
 ]
 
 [[package]]
@@ -1663,7 +1663,7 @@ requires-dist = [
     { name = "certifi", specifier = ">=2026.10.19" },
     { name = "contourpy", specifier = ">=1.4.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
-    { name = "libroadrunner", specifier = ">=2.12.0.dev683", index = "https://matthiaskoenig.github.io/roadrunner-wheels/simple/" },
+    { name = "libroadrunner", specifier = ">=2.12.0.dev700", index = "https://matthiaskoenig.github.io/roadrunner-wheels/simple/" },
     { name = "matplotlib", specifier = ">=3.11.2" },
     { name = "mkdocstrings-python", marker = "extra == 'dev'", specifier = ">=2.0.9" },
     { name = "numpy", specifier = ">=2.5.3" },
@@ -1679,7 +1679,7 @@ requires-dist = [
     { name = "python-libsbml", specifier = ">=5.21.2" },
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.3" },
-    { name = "sbmlsim", specifier = ">=0.30.0" },
+    { name = "sbmlsim", specifier = ">=0.32.0" },
     { name = "sbmlsim", extras = ["amici"], marker = "extra == 'amici'" },
     { name = "sbmlutils", specifier = ">=0.17.2" },
     { name = "scipy", specifier = ">=1.18.1" },
@@ -2308,7 +2308,7 @@ wheels = [
 
 [[package]]
 name = "sbmlsim"
-version = "0.30.0"
+version = "0.32.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -2342,9 +2342,9 @@ dependencies = [
     { name = "typst" },
     { name = "xarray" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9d/b5/e54742d62e6f98ead78618eca60ce5cd23d4a422ae1817c1d0143c2aca35/sbmlsim-0.30.0.tar.gz", hash = "sha256:4c563eea7bfa2c67b2ce2070abf5dce1576f5e307a0318adf71865dc42a92bfd", size = 6913813, upload-time = "2026-11-18T23:06:11.442Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/24/30/20a7e09380b8615e17c0c5175f647a23e5b327ef0123c0e3d3247f949cae/sbmlsim-0.32.0.tar.gz", hash = "sha256:dfa23037d0766d1005f3fcc5bacc1dba1854ac7825c9038bccd93a1ea6b90da3", size = 6956562, upload-time = "2026-11-19T21:52:36.874Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3a/84/71ac277019f8d038b1d10443ae88bea0127658d0f0288e396da3ba945273/sbmlsim-0.30.0-py3-none-any.whl", hash = "sha256:9ddb02c7b1954562555502d09a737c18c754b906f08e12baae7bdcc70133c8a6", size = 1602342, upload-time = "2026-11-18T23:06:09.465Z" },
+    { url = "https://files.pythonhosted.org/packages/d0/68/048d90105904da524793ed9bbf8dcb216d6b450da964b356f955e0a70d4d/sbmlsim-0.32.0-py3-none-any.whl", hash = "sha256:8f72af2d1d05a9075598ca09ad016bf8ba9855468e974e14a3bbb1bf66678795", size = 1632267, upload-time = "2026-11-19T21:52:35.319Z" },
 ]
 
 [package.optional-dependencies]
@@ -2355,17 +2355,17 @@ amici = [
 
 [[package]]
 name = "sbmlsim-core"
-version = "0.11.0"
+version = "0.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/61/6b/40c854ca12fb0901cc324bc11513bc7af4d350684660bf3a41b750b0ec7c/sbmlsim_core-0.11.0-cp314-abi3-macosx_10_12_x86_64.whl", hash = "sha256:f970176f5acb4ac58632ef0c2139b2d4ea4e84c8019fc429c55bd8e530ef55ac", size = 6539823, upload-time = "2026-11-18T16:30:33.081Z" },
-    { url = "https://files.pythonhosted.org/packages/78/f7/23609eee2b339089df7ba3f14724ebd01bd0f65cad452b5ff5794feb9196/sbmlsim_core-0.11.0-cp314-abi3-macosx_11_0_arm64.whl", hash = "sha256:a2153595bc11124f27a8d9febab61fee8af5db1e67cab40117174fc501b24af3", size = 5774050, upload-time = "2026-11-18T16:30:34.969Z" },
-    { url = "https://files.pythonhosted.org/packages/7e/da/648d25841a2af9ea03b3e4808bf91e67934f9a5a206559f616e132db82f2/sbmlsim_core-0.11.0-cp314-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:97520e30c1d0b06aee20023d093206265e04cf22050eb54dd309380e0f102acd", size = 5349630, upload-time = "2026-11-18T16:30:36.971Z" },
-    { url = "https://files.pythonhosted.org/packages/9e/23/e174a3f1ed23aa15fd59e4b183334422b7e1c75d155c783d200dbf72b187/sbmlsim_core-0.11.0-cp314-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:b9e9c734985560d89995d019cd00e55023b4ca60431ecd53d30eff4cde90a6fd", size = 6244931, upload-time = "2026-11-18T16:30:38.785Z" },
-    { url = "https://files.pythonhosted.org/packages/0d/5a/46822623f531e0d2ca7abb72d463afcb13a5fcbf516e0d08fceb16662b76/sbmlsim_core-0.11.0-cp314-abi3-win_amd64.whl", hash = "sha256:7f7d065abff3d5b2634ad58bc4714e7da04f6006455414bd7b0eb63e1c711973", size = 6023035, upload-time = "2026-11-18T16:30:41.027Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/f9/edcd9f08a4227bcaa7335d623876ffa887f8e7e887be11a50a730374e6cd/sbmlsim_core-0.13.0-cp314-abi3-macosx_10_12_x86_64.whl", hash = "sha256:849b509e1f91a59cdf94c9e7fa8664943a82b685396332fb0644b9ef267e0787", size = 6892407, upload-time = "2026-11-19T09:57:17.843Z" },
+    { url = "https://files.pythonhosted.org/packages/84/4b/64f80e0ffdad7c2e450bb8abef409b84a29517ed4d2277a2592f93d3c82f/sbmlsim_core-0.13.0-cp314-abi3-macosx_11_0_arm64.whl", hash = "sha256:8d1e9a4b84cff270d1c08fa405ff1d31f9e8ebcb06a39b3f95880594f984d3c7", size = 6115987, upload-time = "2026-11-19T09:57:19.861Z" },
+    { url = "https://files.pythonhosted.org/packages/3a/d2/0fb2f7b0536b300489597c9ff42eefccbb8324fe507cd41550470a5821ee/sbmlsim_core-0.13.0-cp314-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:0aa9dd379a72b7c2d88d3fcd41d6ba27b5b632674d58fd607378fe94ac2fbd7b", size = 5694649, upload-time = "2026-11-19T09:57:22.634Z" },
+    { url = "https://files.pythonhosted.org/packages/d8/f1/5693b0a1b6e69a98c31ec46541e7cee112e52f301b48415fae83ab8ecc66/sbmlsim_core-0.13.0-cp314-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:18b17b10084f4838e9d0f74853a3b1cb83796d96b8063a8cd3dd42abd2cea740", size = 6612275, upload-time = "2026-11-19T09:57:24.49Z" },
+    { url = "https://files.pythonhosted.org/packages/48/f1/aac656fc6f8569e1508f7d615f0d1869d15b1a7366dcd5cbc544262b8a66/sbmlsim_core-0.13.0-cp314-abi3-win_amd64.whl", hash = "sha256:a691c534f424cf5f4320af59defc0699d1628f0ad7ba2abd7bbd26311c762da0", size = 6426066, upload-time = "2026-11-19T09:57:26.21Z" },
 ]
 
 [[package]]

@@ -46,15 +46,18 @@ dependencies = [
     # of the initial value resolvers (sys-bio/roadrunner#1435), which 2.11.0
     # lacks, so a build with the physiology over age (`PBPKDefinition.age`)
     # compiles in seconds instead of minutes and the tests which build one run
-    # on every platform. The floor is the one of sbmlsim 0.30.0, which compares
+    # on every platform. The floor is the one of sbmlsim 0.32.0, which compares
     # the installed libroadrunner with its own requirement at `import sbmlsim`
     # and raises an `ImportError` for an older build, so a lower floor here
     # would let an install resolve to a libroadrunner sbmlsim refuses
-    "libroadrunner>=2.12.0.dev683",
+    "libroadrunner>=2.12.0.dev700",
     # the simulation experiments, their figures and reports, and the fits
     # (0.17 and 0.18 took over the generic modules of pkpdsim, the consolidation;
-    # 0.24.0 has the interactive panels a factory annotates its models with)
-    "sbmlsim>=0.30.0",
+    # 0.24.0 has the interactive panels a factory annotates its models with;
+    # 0.32.0 has the figure of an app, the panels of a readouts sidecar
+    # (`sbmlsim.panel_figure`) and `.json` among the formats of a COMBINE
+    # archive, so the sidecar of a body figure is an entry of the archive)
+    "sbmlsim>=0.32.0",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`)
     "pkpdutils>=1.7.0",
     # the study folders of format 2 of PK-DB, read as `pkdb check` reads them (`pkpdsim.data`)
@@ -144,7 +147,7 @@ markers = [
 [tool.uv.sources]
 # the development environment, its lock, the continuous integration and tox run
 # on the builds of the branch `develop` of libroadrunner, which sbmlsim requires
-# (`libroadrunner>=2.12.0.dev683`) and which are not on PyPI: a package index of
+# (`libroadrunner>=2.12.0.dev700`) and which are not on PyPI: a package index of
 # their wheels (matthiaskoenig/roadrunner-wheels, versions `<version>.dev<run>`).
 # A single table and not a list of sources, which tox-uv cannot read. The source
 # is not part of the built package, which carries the requirement above, so an

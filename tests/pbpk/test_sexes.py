@@ -121,6 +121,7 @@ def test_the_archive_has_both_builds_with_the_male_one_as_master(
         "simple_female_flat_ant",
         "simple_svg",
         "simple_body_svg",
+        "simple_body.readouts_json",
     }
     assert [k for k, v in archive.items() if v["entry"].master] == ["simple_flat"]
     female = archive["simple_female_flat"]

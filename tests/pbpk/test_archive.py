@@ -1,5 +1,6 @@
 """Tests of `create_archive`, the factory of a library model in one call."""
 
+import json
 import zipfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -57,6 +58,7 @@ def test_the_archive_has_the_flat_model_as_master(tmp_path: Path) -> None:
         "simple_flat_ant",
         "simple_svg",
         "simple_body_svg",
+        "simple_body.readouts_json",
     }
     masters = [k for k, v in results.items() if v["entry"].master]
     assert masters == ["simple_flat"]
@@ -79,6 +81,8 @@ def test_the_archive_has_the_flat_model_as_master(tmp_path: Path) -> None:
         "models/simple_flat.md",
         "models/simple_flat.ant",
         "models/simple.svg",
+        "models/simple_body.svg",
+        "models/simple_body.readouts.json",
         "manifest.xml",
     } <= names
 
@@ -94,6 +98,25 @@ def test_the_snippets_lie_beside_the_figures(tmp_path: Path) -> None:
         assert not [name for name in z.namelist() if name.endswith(".html")]
 
 
+def test_the_readouts_of_the_body_figure_are_an_entry(tmp_path: Path) -> None:
+    """The sidecar of the anatomical figure is an entry of the archive, as JSON.
+
+    A reader of the archive has the places of the drawing and what each of
+    them reads without an import of pkpdsim.
+    """
+    results = _create(tmp_path)
+    info = results["simple_body.readouts_json"]
+    assert info["path"] == tmp_path / "models" / "simple_body.readouts.json"
+    assert info["entry"].location == "./models/simple_body.readouts.json"
+    assert info["entry"].format == "https://purl.org/NET/mediatypes/application/json"
+    assert not info["entry"].master
+    payload = json.loads(info["path"].read_text(encoding="utf-8"))
+    assert payload["contract"] == "figurereadouts/1"
+    assert payload["keys"]
+    with zipfile.ZipFile(tmp_path / "simple_model.omex") as z:
+        assert json.loads(z.read("models/simple_body.readouts.json")) == payload
+
+
 def test_the_archive_carries_the_extra_models(tmp_path: Path) -> None:
     """An extra SBML file is an entry by its stem, after the models.
 
@@ -104,7 +127,12 @@ def test_the_archive_carries_the_extra_models(tmp_path: Path) -> None:
     extra = tmp_path / "models" / "simple_fluid.xml"
     extra.write_text(MINIMAL_SBML, encoding="utf-8")
     results = _create(tmp_path, extra=(extra,))
-    assert list(results)[-3:] == ["simple_fluid", "simple_svg", "simple_body_svg"]
+    assert list(results)[-4:] == [
+        "simple_fluid",
+        "simple_svg",
+        "simple_body_svg",
+        "simple_body.readouts_json",
+    ]
     entry = results["simple_fluid"]["entry"]
     assert entry.location == "./models/simple_fluid.xml"
     assert entry.format == EntryFormat.SBML_L3V2
@@ -159,10 +187,11 @@ def test_the_archive_carries_extra_files(tmp_path: Path) -> None:
     png = tmp_path / "figures" / "simple.png"
     png.write_bytes(b"\x89PNG")
     results = _create(tmp_path, extra=(extra,), files=(md, png))
-    assert list(results)[-5:] == [
+    assert list(results)[-6:] == [
         "simple_fluid",
         "simple_svg",
         "simple_body_svg",
+        "simple_body.readouts_json",
         "simple_fluid_md",
         "simple_png",
     ]
@@ -267,6 +296,7 @@ def test_the_built_files_have_the_location_rule_of_the_extra_files(
         "simple_flat_ant": "./sbml/simple_flat.ant",
         "simple_svg": "./sbml/simple.svg",
         "simple_body_svg": "./sbml/simple_body.svg",
+        "simple_body.readouts_json": "./sbml/simple_body.readouts.json",
         "notes_md": "./sbml/notes.md",
     }
     with zipfile.ZipFile(tmp_path / "simple_model.omex") as z:

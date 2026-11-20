@@ -7,6 +7,7 @@ The figures on this page are those of the glimepiride-like model of the [tutoria
 | Figure | Function | Written by `create_archive` |
 | --- | --- | --- |
 | Anatomical figure | `anatomy_figure(definition, path)` | `<sid>_body.svg` (key `<sid>_body_svg`) |
+| Readouts of the anatomical figure | `write_readouts(content, path)` of `pkpdsim.pbpk.visual.interactive` | `<sid>_body.readouts.json` (key `<sid>_body.readouts_json`) |
 | Bodies without annotations | `anatomy_figure(definition, path, annotations=False)` | no |
 | Schematic | `model_figure(definition, path)` | `<sid>.svg` (key `<sid>_svg`) |
 | Interactive page | `interactive_figure(definition, path, figure="anatomy" or "schematic")` | no |
@@ -15,6 +16,8 @@ The figures on this page are those of the glimepiride-like model of the [tutoria
 | Bodies of individuals | `body_strip(individuals)` of `pkpdsim.pbpk.visual.body` | no |
 
 An interactive figure comes in two forms. `interactive_figure(definition, path)` writes a whole page, which a page of the docs embeds in a frame (the page posts its height, `docs/javascripts/figures.js`), and `interactive_figure(definition, path, snippet=True)` writes a snippet, one `<div>` which a page of markdown or HTML embeds as it is: the style sheet of the snippet, the style sheet and the ids of its SVG and its script are scoped to that `<div>` (its id is `pkf-<sid>-<figure>`), so the two snippets of a model stand on one page without touching it or each other, and the snippet brings its own light background, so it reads in a dark theme as well. `create_archive` writes the snippet of each figure beside its SVG, `<sid>.html` and `<sid>_body.html`, which are no entry of the archive (it carries the figures as SVG); the release of a model repository embeds them on the index of its site, while the README, which GitHub shows without scripts, shows the SVG.
+
+`write_readouts(ModelContent.of(definition), body)` writes the readouts of the keys of the anatomical figure beside it as `<sid>_body.readouts.json`, a sidecar of the contract `figurereadouts/1`: every place of the drawing by its key path, with its label and the ids, labels, units and kinds it reads. A reader joins the `data-k` of the ancestors of a clicked element into a path and looks it up, so it needs no import of pkpdsim, and `sbmlsim.panel_figure.panels_from_figure` turns the sidecar and its SVG into the panels and the figure of an app. `create_archive` makes the sidecar an entry of the archive beside the figure it belongs to (`.json` of `sbmlsim.release.archive.EXTRA_FORMATS`), so a reader of the archive has the places of the drawing without pkpdsim; the schematic has no sidecar, since it draws key paths which `readouts` does not return yet.
 
 ## The anatomical figure
 
