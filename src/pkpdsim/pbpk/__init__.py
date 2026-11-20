@@ -42,6 +42,7 @@ from pkpdsim.pbpk.data import Source, cite, load, sources
 from pkpdsim.pbpk.definition import PBPKDefinition, Variants
 from pkpdsim.pbpk.distribution import KCellFloorWarning, interstitial_share
 from pkpdsim.pbpk.figure import model_figure
+from pkpdsim.pbpk.lobes import HABR
 from pkpdsim.pbpk.observers import Observer
 from pkpdsim.pbpk.organ import (
     Boundary,
@@ -74,6 +75,7 @@ from pkpdsim.pbpk.regional import (
     regional_key,
     release_auc_ratios,
 )
+from pkpdsim.pbpk.remodelling import FlowDriven, PrescribedFlow, PrescribedVolume
 from pkpdsim.pbpk.routes import (
     Depot,
     DoseDependentDissolution,
@@ -96,6 +98,7 @@ from pkpdsim.pbpk.units import MODEL_UNITS, UNIT_LABELS, U, axis, unit_label
 from pkpdsim.pbpk.values import Formula, ModelParameter, Q, Value, as_value, fitted
 from pkpdsim.pbpk.variants.intestine import SegmentedIntestine, SingleLumen
 from pkpdsim.pbpk.variants.kidney_nephron import NephronKidney
+from pkpdsim.pbpk.variants.liver_lobes import LobedLiver
 from pkpdsim.pbpk.variants.liver_zonated import ZonatedLiver
 from pkpdsim.pbpk.variants.lumen_options import LumenConversion, RegionalAbsorption
 from pkpdsim.pbpk.virtual import (
@@ -154,6 +157,7 @@ def __dir__() -> list[str]:
 
 
 __all__ = [
+    "HABR",
     "LINEAR",
     "MM",
     "MODEL_UNITS",
@@ -177,6 +181,7 @@ __all__ = [
     "Excretion",
     "FirstOrder",
     "FirstOrderDissolution",
+    "FlowDriven",
     "Formula",
     "GutComponent",
     "Hill",
@@ -186,6 +191,7 @@ __all__ = [
     "KidneyOutflow",
     "Kp",
     "KpMethod",
+    "LobedLiver",
     "LumenConversion",
     "Membrane",
     "Metabolism",
@@ -203,6 +209,8 @@ __all__ = [
     "Parts",
     "Pool",
     "Pregnancy",
+    "PrescribedFlow",
+    "PrescribedVolume",
     "PressureFlow",
     "Protein",
     "Q",

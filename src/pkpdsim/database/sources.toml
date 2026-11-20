@@ -1218,3 +1218,31 @@ doi = "10.1186/1476-5926-1-1"
 [Boyer1974]
 citation = "Boyer JL, Bloomer JR. Canalicular bile secretion in man. Studies utilizing the biliary clearance of [14C]mannitol. J Clin Invest 54(4):773-781, 1974."
 doi = "10.1172/JCI107817"
+
+[Madrahimov2006]
+citation = "Madrahimov N, Dirsch O, Broelsch C, Dahmen U. Marginal hepatectomy in the rat: from anatomy to surgery. Ann Surg 244(1):89-98, 2006."
+doi = "10.1097/01.sla.0000218093.12408.0f"
+
+[Aller2009]
+citation = "Aller MA, Lorente L, Prieto I, Moquillaza LM, Arias J. Hepatectomies in the rat: a look at the caudate process through microsurgery. Dig Liver Dis 41(10):695-699, 2009."
+doi = "10.1016/j.dld.2009.01.012"
+
+[Brennan2024]
+citation = "Brennan P, Patel N, Aridi T, Zhan M, Angolano C, Ferran C. Extended 78% hepatectomy in a mouse surgical model. J Vis Exp, 2024."
+doi = "10.3791/66528"
+
+[Mise2014]
+citation = "Mise Y, Satou S, Shindoh J, Conrad C, Aoki T, Hasegawa K, Sugawara Y, Kokudo N. Three-dimensional volumetry in 107 normal livers reveals clinically relevant inter-segment variation in size. HPB (Oxford) 16(5):439-447, 2014."
+doi = "10.1111/hpb.12157"
+
+[Lautt1985]
+citation = "Lautt WW, Legare DJ, d'Almeida MS. Adenosine as putative regulator of hepatic arterial flow (the buffer response). Am J Physiol 248(3 Pt 2):H331-H338, 1985."
+doi = "10.1152/ajpheart.1985.248.3.H331"
+
+[Lautt1990]
+citation = "Lautt WW, Legare DJ, Ezzat WR. Quantitation of the hepatic arterial buffer response to graded changes in portal blood flow. Gastroenterology 98(4):1024-1028, 1990."
+doi = "10.1016/0016-5085(90)90029-z"
+
+[Rocheleau1999]
+citation = "Rocheleau B, Ethier C, Houle R, Huet PM, Bilodeau M. Hepatic artery buffer response following left portal vein ligation: its role in liver tissue homeostasis. Am J Physiol 277(5):G1000-G1007, 1999."
+doi = "10.1152/ajpgi.1999.277.5.G1000"

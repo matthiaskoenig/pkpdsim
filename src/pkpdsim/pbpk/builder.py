@@ -115,7 +115,13 @@ from pkpdsim.pbpk.observers import (
     observer_objects,
     readout_ids,
 )
-from pkpdsim.pbpk.organ import Boundary, GutComponent, OrganComponent, OrganContext
+from pkpdsim.pbpk.organ import (
+    BodyComponent,
+    Boundary,
+    GutComponent,
+    OrganComponent,
+    OrganContext,
+)
 from pkpdsim.pbpk.organs import Organ, Part, Pool
 from pkpdsim.pbpk.parts import parts_for
 from pkpdsim.pbpk.pd import PDComponent, ports
@@ -133,6 +139,7 @@ from pkpdsim.pbpk.placement import (
     value_parameter,
 )
 from pkpdsim.pbpk.pregnancy import pregnancy_objects, pregnancy_physiology_factors
+from pkpdsim.pbpk.remodelling import lobes_dynamic
 from pkpdsim.pbpk.routes import DEPOT, ORAL, depot_site, route_objects
 from pkpdsim.pbpk.sinks import sink_objects
 from pkpdsim.pbpk.stationary import (
@@ -639,6 +646,12 @@ def _body(
     top.add(sink_objects(definition, lumen=gut is not None))
     if gut is not None:
         top.add(gut.body_objects(definition))
+    for organ in organs:
+        component = organ_component(definition, organ)
+        if isinstance(component, GutComponent):
+            continue
+        if isinstance(component, BodyComponent):
+            top.add(component.body_objects(definition))
     top.routes()
 
     if definition.readouts and gut is None:
@@ -746,6 +759,7 @@ def _body(
             *(f for f in rhythms if f not in definition.dynamic),
             *(b for b in adipose_dynamic(definition) if b not in definition.dynamic),
             *circulation_dynamic(definition),
+            *(b for b in lobes_dynamic(definition) if b not in definition.dynamic),
         ),
         top.objects,
         model_definitions,

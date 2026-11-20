@@ -177,3 +177,60 @@ def test_without_a_pregnancy_the_model_has_none_of_its_elements(tmp_path: Path) 
     assert pregnancy_factor(PLACENTA_SHARE) in parameters
     assert ids.Q_PLACENTA not in parameters
     assert individuals(mother)()[ids.GA] == 30.0
+
+
+def test_a_pregnant_individual_with_a_lobed_liver_builds_and_runs(
+    tmp_path: Path,
+) -> None:
+    """The pregnancy and the lobes of the liver are independent.
+
+    The pregnancy raises the body weight, so the liver of the pregnant
+    individual is larger and better perfused, and the lobes follow it: they
+    hold their shares of the volume and of the flows of the liver at every
+    gestational age, which is the whole liver at either end of the gestation.
+    The pregnancy with the pressure driven circulation is a different matter
+    and refused (`cardiovascular.check_circulation`, no placental circulation
+    yet).
+    """
+    from pkpdsim.pbpk.lobes import lobe_table
+    from pkpdsim.pbpk.remodelling import FlowDriven
+    from pkpdsim.pbpk.variants.liver_lobes import LobedLiver
+
+    tokens = [lobe.token for lobe in lobe_table(Species.HUMAN)]
+    liver = LobedLiver(remodelling=FlowDriven())
+    at = individuals(
+        build(
+            definition(
+                sid="pregnant_lobes",
+                sex=Sex.FEMALE,
+                pregnancy=Pregnancy(),
+                variants=_lobed(liver),
+            ),
+            tmp_path,
+        ).flat_path
+    )
+    volumes: list[float] = []
+    flows: list[float] = []
+    for ga in (0.0, TERM):
+        r = at(**{ids.GA: ga})
+        shares = [r[ids.lobe_volume_fraction(t)] for t in tokens]
+        assert sum(shares) == pytest.approx(1.0, rel=1e-9)
+        assert r[ids.organ_volume(Organ.LIVER)] == pytest.approx(
+            sum(r[ids.lobe_volume(t)] for t in tokens), rel=1e-9
+        )
+        assert r[ids.QH] == pytest.approx(
+            sum(r[ids.lobe_flow(ids.QH, t)] for t in tokens), rel=1e-9
+        )
+        volumes.append(r[ids.organ_volume(Organ.LIVER)])
+        flows.append(r[ids.QH])
+    # the liver of the pregnant individual is larger and better perfused, and
+    # its lobes hold all of it at either gestational age (the loop above)
+    assert volumes[1] > volumes[0]
+    assert flows[1] > flows[0]
+
+
+def _lobed(liver: object) -> object:
+    """The variants of a definition whose liver is the given component."""
+    from pkpdsim.pbpk import Variants
+
+    return Variants(organs={Organ.LIVER: liver})  # ty: ignore[invalid-argument-type]

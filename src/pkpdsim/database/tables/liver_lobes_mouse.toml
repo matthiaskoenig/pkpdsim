@@ -1,0 +1,27 @@
+# The liver lobes of the adult mouse. The mass fractions are the lobe weights of
+# male Balb/c mice (n = 32, 18 to 26 g) which the hepatectomy protocol of
+# Brennan 2024 reports: left 34.4 +- 1.9 %, median 26.2 +- 1.9 %, right upper
+# 16.6 +- 1.4 %, right lower 14.7 +- 1.4 %, caudate 8.1 +- 1.0 %. They sum to
+# 1.000 as reported. Other sources count seven lobes, a finer division of the
+# left and the right lobe. No arterial or portal supply fraction was found: a
+# lobe without one is supplied in proportion to its mass.
+
+[cl]
+name = "caudate lobe"
+mass_fraction = { value = 0.081, unit = "dimensionless", source = "Brennan2024", notes = "male Balb/c, n = 32: 8.1 +- 1.0 % of the liver mass" }
+
+[ll]
+name = "left lobe"
+mass_fraction = { value = 0.344, unit = "dimensionless", source = "Brennan2024", notes = "male Balb/c, n = 32: 34.4 +- 1.9 % of the liver mass" }
+
+[ml]
+name = "median lobe"
+mass_fraction = { value = 0.262, unit = "dimensionless", source = "Brennan2024", notes = "male Balb/c, n = 32: 26.2 +- 1.9 % of the liver mass" }
+
+[ri]
+name = "right inferior lobe"
+mass_fraction = { value = 0.147, unit = "dimensionless", source = "Brennan2024", notes = "male Balb/c, n = 32: 14.7 +- 1.4 % of the liver mass (the right lower lobe)" }
+
+[rs]
+name = "right superior lobe"
+mass_fraction = { value = 0.166, unit = "dimensionless", source = "Brennan2024", notes = "male Balb/c, n = 32: 16.6 +- 1.4 % of the liver mass (the right upper lobe)" }

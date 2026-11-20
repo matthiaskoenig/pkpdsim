@@ -1,0 +1,170 @@
+/* The liver lobe explorer. Every colour is a variable of `:root` and is
+   redefined for the dark theme, which the page follows from the documentation
+   around it (lobes.mjs sets `data-theme`). */
+
+:root {
+  color-scheme: light dark;
+  --paper: #ffffff;
+  --panel: #f7f8f9;
+  --ink: #1f2429;
+  --muted: #5c6670;
+  --line: #d7dde2;
+  --accent: #007c78;
+  --accent-ink: #ffffff;
+  --grid: #e6eaee;
+  --lobe-intact: #cfe6e5;
+  --lobe-portal: #f6d7a8;
+  --lobe-arterial: #d9d3ef;
+  --lobe-resected: #e4e7ea;
+  --edge-ha: #e15759;
+  --edge-po: #4e79a7;
+  --shadow: 0 1px 2px rgba(31, 36, 41, 0.08);
+}
+
+:root[data-theme="dark"] {
+  --paper: #14181b;
+  --panel: #1b2024;
+  --ink: #e8edf1;
+  --muted: #9aa5ae;
+  --line: #2c343a;
+  --accent: #4fd1c5;
+  --accent-ink: #07211f;
+  --grid: #252d33;
+  --lobe-intact: #1f4b48;
+  --lobe-portal: #5c4420;
+  --lobe-arterial: #3b3357;
+  --lobe-resected: #262c31;
+  --edge-ha: #ff8a8c;
+  --edge-po: #7fb0dd;
+  --shadow: none;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 16px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+h1 { font-size: 1.5rem; margin: 0 0 6px; }
+h2 { font-size: 1.05rem; margin: 0; }
+a { color: var(--accent); }
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.app-header { margin-bottom: 16px; }
+.app-header p { color: var(--muted); margin: 0 0 12px; max-width: 70ch; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow);
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.explanation { color: var(--muted); margin: 6px 0 10px; max-width: 80ch; }
+
+button {
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 5px 11px;
+  cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button.active, button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+.mode-switch, .presets { display: flex; flex-wrap: wrap; gap: 8px; }
+.actions { display: flex; gap: 8px; flex: none; }
+
+.liver-host { width: 100%; max-width: 640px; margin: 0 auto; }
+svg.liver { width: 100%; height: auto; display: block; }
+
+.liver-block {
+  fill: var(--lobe-intact);
+  stroke: var(--line);
+  stroke-width: 1;
+  transition: fill 120ms ease;
+}
+.liver-lobe { cursor: pointer; }
+.liver-lobe:hover .liver-block, .liver-lobe:focus-visible .liver-block { stroke: var(--accent); stroke-width: 2; }
+.liver-lobe[data-state="portal"] .liver-block { fill: var(--lobe-portal); }
+.liver-lobe[data-state="arterial"] .liver-block { fill: var(--lobe-arterial); }
+.liver-lobe[data-state="resected"] .liver-block { fill: var(--lobe-resected); stroke-dasharray: 4 3; }
+.liver-lobe:focus { outline: none; }
+
+.liver-token { font-size: 13px; font-weight: 600; fill: var(--ink); }
+.liver-value, .liver-state { font-size: 11px; fill: var(--muted); }
+
+.liver-edge { fill: none; stroke-linecap: round; }
+.liver-edge-ha { stroke: var(--edge-ha); }
+.liver-edge-po { stroke: var(--edge-po); }
+.liver-edge[data-closed="true"] { stroke-dasharray: 3 4; opacity: 0.45; }
+
+.removed { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 4px 0 0; }
+.chip {
+  background: var(--lobe-resected);
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.chip:hover { color: var(--ink); border-style: solid; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0; }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 0.85rem; }
+.legend-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--line); display: inline-block; background: var(--lobe-intact); }
+.legend-item[data-state="portal"] .legend-swatch { background: var(--lobe-portal); }
+.legend-item[data-state="arterial"] .legend-swatch { background: var(--lobe-arterial); }
+.legend-item[data-state="resected"] .legend-swatch { background: var(--lobe-resected); }
+
+.sliders { display: grid; gap: 10px; }
+.slider { display: grid; grid-template-columns: minmax(7rem, 13rem) 1fr 4.5rem; align-items: center; gap: 10px; }
+.slider-label { color: var(--muted); }
+.slider-value { font-variant-numeric: tabular-nums; }
+.scrubber { margin: 8px 0; }
+.scrubber .slider { grid-template-columns: 3rem 1fr 4.5rem; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+.plots { display: grid; gap: 14px 20px; grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); }
+.plots .section-heading { grid-column: 1 / -1; }
+.plot-host { width: 100%; max-width: 560px; margin: 0 auto; }
+svg.plot { width: 100%; height: auto; display: block; }
+.cd-title { font-size: 12px; font-weight: 600; fill: var(--ink); }
+.cd-label { font-size: 12px; fill: var(--ink); }
+.cd-sub { font-size: 10px; fill: var(--muted); }
+.plot-grid { stroke: var(--grid); stroke-width: 1; }
+.plot-axis { stroke: var(--line); stroke-width: 1; }
+.plot-curve { fill: none; stroke-width: 2; }
+.plot-marker { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3; }
+.plot-bar { opacity: 0.9; }
+.plot-legend { font-size: 10px; }
+
+.notice { border: 1px solid var(--line); border-left: 4px solid var(--edge-ha); border-radius: 8px; padding: 10px 14px; background: var(--panel); }
+.app-footer { color: var(--muted); font-size: 0.85rem; }
+
+@media (max-width: 520px) {
+  .slider, .scrubber .slider { grid-template-columns: 1fr; }
+  .section-heading { flex-direction: column; }
+}

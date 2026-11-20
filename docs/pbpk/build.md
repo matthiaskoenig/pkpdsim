@@ -379,6 +379,29 @@ Every other id of the scheme, the ids a model rarely reads: the physiology, the 
 | `J_mu_in_<seg>_<s>` | a flow of the mucosa of a segment (local id) | `ids.mucosa_reaction('in', s, seg)` |
 | `J_tub_<tseg>_<s>` | the tubular flow out of a tubule segment (local id) | `ids.tubule_reaction(s, tseg)` |
 | `J_reab_<s>` | the reabsorbed fraction out of the collecting duct (local id) | `ids.tubule_reabsorption_reaction(s)` |
+| `Vli_<lobe>` | the volume of a lobe of the liver, a state while it remodels | `ids.lobe_volume(lobe)` |
+| `Vli_lobes` | the volume of the lobes which are there | `ids.VLI_LOBES` |
+| `Vli_ref` | the volume of the intact liver of the individual | `ids.VLI_REF` |
+| `f_remnant` | the fraction of the intact liver which is there, the remnant of a resection | `ids.F_REMNANT` |
+| `f_vol_<lobe>` | the share of the liver volume a lobe holds at a time | `ids.lobe_volume_fraction(lobe)` |
+| `f_vol_ref_<lobe>` | the share of the intact liver of a lobe, the anatomy of the lobe table | `ids.lobe_reference_fraction(lobe)` |
+| `f_present_<lobe>` | whether a lobe is in place, 0 once it is resected | `ids.lobe_present(lobe)` |
+| `f_ha_<lobe>` | the share of the hepatic arterial inflow a lobe takes | `ids.arterial_fraction(lobe)` |
+| `f_po_<lobe>` | the share of the portal inflow a lobe takes | `ids.portal_fraction(lobe)` |
+| `g_ha_<lobe>` | the patency of the hepatic artery branch of a lobe, 0 once it is ligated | `ids.arterial_conductance(lobe)` |
+| `g_po_<lobe>` | the patency of the portal vein branch of a lobe | `ids.portal_conductance(lobe)` |
+| `Qpo_<lobe>` | a hepatic flow of a single lobe, one per branch | `ids.lobe_flow(ids.QPO, lobe)` |
+| `Qpo_ref_<lobe>` | the flow of a branch of a lobe of the liver at rest, the reference of the resistances and of the buffer response | `ids.lobe_reference_flow(ids.QPO, lobe)` |
+| `CV_R_po_<lobe>` | the resistance of a branch of a lobe in the pressure network | `ids.lobe_resistance(ids.QPO, lobe)` |
+| `CV_P_li_<lobe>` | the sinusoidal pressure node of a lobe | `ids.lobe_pressure(lobe)` |
+| `CV_hepatic_balance_<lobe>` | the algebraic balance of the three branches at the node of a lobe | `ids.lobe_balance(lobe)` |
+| `f_habr_<lobe>` | the factor the hepatic arterial buffer response puts on the arterial conductance of a lobe | `ids.buffer_factor(lobe)` |
+| `habr_gain` | the gain of the hepatic arterial buffer response | `ids.HABR_GAIN` |
+| `q_<lobe>` | the perfusion per volume of a lobe, the stimulus of the growth law | `ids.lobe_perfusion(lobe)` |
+| `dVli_<lobe>` | the growth rate of the volume of a lobe | `ids.lobe_growth(lobe)` |
+| `Cout_<o>_<lobe>_<s>` | the concentration of the blood leaving a lobe, the exposure of the lobe | `ids.lobe_outflow(o, lobe, s)` |
+| `<lobe>_<zone>` | a site of the liver, the lobe and the zone of a part of the tissue | `ids.site(lobe, zone)` |
+| `J_remodel_<lobe>_<zone>_<part>_<s>` | the amount atrophied tissue carries out of a site (local id) | `ids.remodelling_reaction(part, s, ids.site(lobe, zone))` |
 
 </div>
 

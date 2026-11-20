@@ -572,33 +572,59 @@ class ZonatedBuilder(StandardBuilder):
             )
         return weight
 
+    def _zone_of(self, site: str | None) -> str:
+        """The zone of a site: the site itself, a lobed liver strips the lobe.
+
+        A quantity of the chain which the zone alone decides (the fenestral
+        porosity of the endothelium, the relative abundance of a profile)
+        reads it, so the lobes of a lobed liver share one set of them.
+        """
+        assert site is not None
+        return site
+
+    def _site_share(self, key: str | None, site: str | None) -> str | None:
+        """The share of a site of the capacity of the liver, `None` for all of it.
+
+        The share of its lobe (the volume share, `_share`) times the share of
+        its zone (the placement weight of the profile `key`, which sums to 1
+        over the zones), so the sites of the liver sum to its whole capacity.
+        """
+        factors: list[str] = []
+        lobe = self._lobe_of(site)
+        if lobe is not None:
+            factors.append(self._lobe_fraction(lobe))
+        if self.zones:
+            factors.append(self._weight(key, self._zone_of(site)))
+        return " * ".join(factors) if factors else None
+
     def _chemistry(self) -> None:
-        """The processes of the liver in every zone, each with its share of the capacity.
+        """The processes of the liver in every site, each with its share of the capacity.
 
         A metabolism and a transport take the share of the capacity of their
-        zone; a custom reaction is placed in every zone with its own rate law
-        over the ids of the zone, and the constants of the rate law and the
+        site; a custom reaction is placed in every site with its own rate law
+        over the ids of the site, and the constants of the rate law and the
         species it brings itself are created once for the liver.
         """
         self._proteins_and_sinks([*self.processes, *self.customs])
         capacity = self._capacity()
         assert capacity is not None
         for p in self.processes:
-            for zone in self.zones:
-                share = f"{capacity} * {self._weight(self.profile_of[p.sid], zone)}"
-                for reaction in place(p, self.ctx, self.ctx.parts, share, zone):
+            for site in self._each_zone:
+                share = self._site_share(self.profile_of[p.sid], site)
+                full = capacity if share is None else f"{capacity} * {share}"
+                for reaction in place(p, self.ctx, self.ctx.parts, full, site):
                     for par in reaction.pars:
                         self.parameters.setdefault(str(par.sid), par)
                     reaction.pars = []
                     self.reactions.append(reaction)
         for p in self.customs:
             self._custom_species(p)
-            for k, zone in enumerate(self.zones):
-                for reaction in place(p, self.ctx, self.ctx.parts, None, zone):
+            for k, site in enumerate(self._each_zone):
+                for reaction in place(p, self.ctx, self.ctx.parts, None, site):
                     if k:
                         # the constants of the rate law belong to the liver,
-                        # not to a zone: they are created with the reaction
-                        # of the first zone and read by the others
+                        # not to a site: they are created with the reaction
+                        # of the first site and read by the others
                         reaction.pars = []
                     self.reactions.append(reaction)
 
@@ -609,14 +635,15 @@ class ZonatedBuilder(StandardBuilder):
             ValueError: if a species of the zone has the id of a species of
                 the liver already.
         """
-        for zone in self.zones:
-            mapping = zone_ids(self.ctx, self.ctx.parts, zone)
+        for site in self._each_zone:
+            assert site is not None
+            mapping = zone_ids(self.ctx, self.ctx.parts, site)
             for sp in p.species:
-                sid = ids.segment_process(str(sp.sid), zone)
+                sid = ids.segment_process(str(sp.sid), site)
                 if sid in self.species:
                     raise ValueError(
                         f"Custom reaction '{p.sid}': species '{sid}' is a species "
-                        f"of the zone {zone} of the liver already."
+                        f"of the site {site} of the liver already."
                     )
                 species = copy.copy(sp)
                 species.sid = sid
@@ -631,21 +658,24 @@ class ZonatedBuilder(StandardBuilder):
         self, p: CustomReaction, placed: set[str]
     ) -> frozenset[str] | None:
         """The ids of the reactions of a custom process, one per zone."""
-        reactions = frozenset(ids.segment_process(p.sid, zone) for zone in self.zones)
+        reactions = frozenset(
+            ids.segment_process(p.sid, site) for site in self._each_zone
+        )
         return reactions if reactions <= placed else None
 
     def _custom_read(self, p: CustomReaction) -> set[str]:
         """The ids which the reaction of a custom process reads in every zone.
 
         The ids of its rate law and of its declared steady state, each the id
-        of the zone where the liver has one (`zone_ids`), so that the inputs
+        of the site where the liver has one (`zone_ids`), so that the inputs
         of the ids of the top model are those of the rewritten rate laws.
         """
         read = formula_ids(p.formula) | stationary_ids(p)
         out: set[str] = set()
-        for zone in self.zones:
+        for site in self._each_zone:
+            assert site is not None
             mapping = zone_ids(
-                self.ctx, self.ctx.parts, zone, [str(sp.sid) for sp in p.species]
+                self.ctx, self.ctx.parts, site, [str(sp.sid) for sp in p.species]
             )
             out |= {mapping.get(i, i) for i in read}
         return out
@@ -683,9 +713,10 @@ class ZonatedBuilder(StandardBuilder):
         2002): the pericentral endothelium is the more open one.
         """
         values = porosities(len(self.zones), self._geometry())
+        z = self._zone_of(zone)
         return self._constant(
-            zids.porosity(zone),
-            values[self.zones.index(zone)],
+            zids.porosity(z),
+            values[self.zones.index(z)],
             U.dimensionless,
             in_zone("fenestral porosity of the endothelium", zone),
             "Fraction of the endothelium of the zone which the fenestrae open, "
@@ -873,21 +904,56 @@ class ZonatedBuilder(StandardBuilder):
         """
         n = len(self.zones)
         for part in built_parts(self.ctx.parts[s.sid]):
-            of_zones = [ids.species(part, s.sid, zone) for zone in self.zones]
-            for periportal in (True, False):
-                third = "periportal" if periportal else "pericentral"
-                self._rule(
-                    ids.zonal_mean(part, s.sid, periportal),
-                    weighted_mean(of_zones, third_weights(n, periportal)),
-                    U.mM,
-                    f"{third} mean {s.sid} {_PART_NAMES[part]}",
-                    f"Mean concentration of {s.sid} in the {_PART_NAMES[part]} of "
-                    f"the {third} third of the sinusoid, the zones of the third "
-                    "weighted by their overlap with it (the observers of the "
-                    "zonation engine, `pkpdsim.zonation.observers`). It reads the "
-                    "zones and nothing reads it.",
-                    kind="organ_concentration",
-                )
+            self._whole_zonal_means(s, part)
+            for lobe, sites in self._chains:
+                of_zones = [ids.species(part, s.sid, site) for site in sites]
+                where = "" if lobe is None else f" of lobe {lobe}"
+                for periportal in (True, False):
+                    third = "periportal" if periportal else "pericentral"
+                    self._rule(
+                        ids.zonal_mean(part, s.sid, periportal, lobe),
+                        weighted_mean(of_zones, third_weights(n, periportal)),
+                        U.mM,
+                        f"{third} mean {s.sid} {_PART_NAMES[part]}{where}",
+                        f"Mean concentration of {s.sid} in the "
+                        f"{_PART_NAMES[part]} of the {third} third of the "
+                        f"sinusoid{where}, the zones of the third weighted by "
+                        "their overlap with it (the observers of the zonation "
+                        "engine, `pkpdsim.zonation.observers`). It reads the "
+                        "zones and nothing reads it.",
+                        kind="organ_concentration",
+                    )
+
+    def _whole_zonal_means(self, s: Substance, part: Part) -> None:
+        """The two means over the whole liver of a lobed liver.
+
+        The means of the lobes weighted by the volume each lobe has of the
+        liver, `f_vol_<lobe>` of a lobe which is gone being 0: a model which
+        reads `Cpl_pp_<s>` of a zonated liver reads the same id of a lobed
+        one, which is what the whole organ reports. A liver without lobes has
+        the means over its zones under these ids and needs none of this.
+        """
+        if not self.lobes:
+            return
+        for periportal in (True, False):
+            third = "periportal" if periportal else "pericentral"
+            weights = [(self._lobe_fraction(lobe), lobe) for lobe in self.lobes]
+            formula = " + ".join(
+                f"{weight} * {ids.zonal_mean(part, s.sid, periportal, lobe)}"
+                for weight, lobe in weights
+            )
+            self._rule(
+                ids.zonal_mean(part, s.sid, periportal),
+                formula,
+                U.mM,
+                f"{third} mean {s.sid} {_PART_NAMES[part]} of the liver",
+                f"Mean concentration of {s.sid} in the {_PART_NAMES[part]} "
+                f"of the {third} third of the sinusoid over the whole liver, "
+                "the mean of every lobe weighted by the volume the lobe has "
+                "of the liver (`f_vol_<lobe>`, 0 for a lobe which is gone). "
+                "It reads the means of the lobes and nothing reads it.",
+                kind="organ_concentration",
+            )
 
     def _axial_diffusion(self, s: Substance) -> None:
         """The diffusion of a substance along the sinusoid, between consecutive zones.
@@ -908,21 +974,24 @@ class ZonatedBuilder(StandardBuilder):
         d = self._diffusion(s)
         length = self._length()
         for part in parts:
-            for k, (upstream, downstream) in enumerate(
-                itertools.pairwise(self.zones), start=1
-            ):
-                a = ids.species(part, s.sid, upstream)
-                b = ids.species(part, s.sid, downstream)
-                self._reaction(
-                    ids.axial_reaction(part, s.sid, upstream),
-                    f"{a} <-> {b}",
-                    axial_diffusion_formula(
-                        d, ids.compartment(part, upstream), length, n, a, b
-                    ),
-                    f"axial diffusion {s.sid} {_DIFFUSING[part]}, zones {k} "
-                    f"and {k + 1}",
-                    kind="exchange",
-                )
+            for lobe, sites in self._chains:
+                where = "" if lobe is None else f" of lobe {lobe}"
+                for k, (upstream, downstream) in enumerate(
+                    itertools.pairwise(sites), start=1
+                ):
+                    assert upstream is not None
+                    a = ids.species(part, s.sid, upstream)
+                    b = ids.species(part, s.sid, downstream)
+                    self._reaction(
+                        ids.axial_reaction(part, s.sid, upstream),
+                        f"{a} <-> {b}",
+                        axial_diffusion_formula(
+                            d, ids.compartment(part, upstream), length, n, a, b
+                        ),
+                        f"axial diffusion {s.sid} {_DIFFUSING[part]}{where}, "
+                        f"zones {k} and {k + 1}",
+                        kind="exchange",
+                    )
 
     def _unbound_in_cell(self, sid: str, protein: str) -> str:
         """The unbound concentration in the cells which drives the turnover of a protein.
@@ -935,8 +1004,8 @@ class ZonatedBuilder(StandardBuilder):
         s = next(s for s in self.ctx.substances if s.sid == sid)
         key = self.protein_profile.get(protein)
         terms = [
-            f"{self._weight(key, zone)} * "
-            + inhibitor_unbound(Part.INTRACELLULAR, s, self.organ, self.ctx.parts, zone)
-            for zone in self.zones
+            f"{self._site_share(key, site)} * "
+            + inhibitor_unbound(Part.INTRACELLULAR, s, self.organ, self.ctx.parts, site)
+            for site in self._each_zone
         ]
         return f"({' + '.join(terms)})"
