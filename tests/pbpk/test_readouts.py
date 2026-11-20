@@ -142,7 +142,9 @@ def _key_paths(root: ElementTree.Element) -> set[str]:
 
 def test_every_key_path_of_the_drawn_figure_has_a_group(tmp_path: Path) -> None:
     d = seven_substances()
-    html = interactive_figure(d, tmp_path / "f.html", snippet=True).read_text()
+    html = interactive_figure(d, tmp_path / "f.html", snippet=True).read_text(
+        encoding="utf-8"
+    )
     svg = html[html.index("<svg") : html.rindex("</svg>") + 6]
     paths = _key_paths(ElementTree.fromstring(svg))
     assert paths
@@ -190,7 +192,7 @@ def test_every_key_the_figure_draws_is_a_key_of_the_sidecar(tmp_path: Path) -> N
     svg = anatomy_figure(definition, tmp_path / "m_body.svg")
     sidecar = write_readouts(ModelContent.of(definition), svg)
     assert sidecar.name == "m_body.readouts.json"
-    payload = json.loads(sidecar.read_text())
+    payload = json.loads(sidecar.read_text(encoding="utf-8"))
     assert payload["contract"] == "figurereadouts/1"
     assert payload["model"] == definition.sid
     drawn = _key_paths_of(svg)
@@ -205,7 +207,7 @@ def test_every_key_the_figure_draws_is_a_key_of_the_sidecar(tmp_path: Path) -> N
 def test_the_sidecar_follows_the_vein_of_an_animal_figure(tmp_path: Path) -> None:
     content = ModelContent.of(seven_substances())
     sidecar = write_readouts(content, tmp_path / "m.svg", vein="tail vein")
-    keys = json.loads(sidecar.read_text())["keys"]
+    keys = json.loads(sidecar.read_text(encoding="utf-8"))["keys"]
     assert any(k.startswith("blood/txt:OBS: tail vein") for k in keys)
     assert not any("arm vein" in k for k in keys)
 
@@ -217,7 +219,7 @@ def test_the_archive_writes_the_sidecar_beside_the_anatomy_figure(
 
     _create(tmp_path)
     sidecar = tmp_path / "models" / "simple_body.readouts.json"
-    assert json.loads(sidecar.read_text())["model"] == "simple"
+    assert json.loads(sidecar.read_text(encoding="utf-8"))["model"] == "simple"
     assert not (tmp_path / "models" / "simple.readouts.json").exists()
 
 
@@ -227,7 +229,7 @@ def test_the_sidecar_covers_the_figure_of_an_animal(tmp_path: Path) -> None:
     sidecar = write_readouts(
         ModelContent.of(definition), svg, vein=vein_of(str(definition.species))
     )
-    keys = set(json.loads(sidecar.read_text())["keys"])
+    keys = set(json.loads(sidecar.read_text(encoding="utf-8"))["keys"])
     drawn = _key_paths_of(svg)
     assert any("tail vein" in k for k in drawn)
     assert drawn <= keys

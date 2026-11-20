@@ -77,7 +77,7 @@ def test_the_pig_is_drawn_with_the_human_organs(sex: str, tmp_path: Path) -> Non
 
 def test_the_cards_of_an_animal_carry_its_organ_masses(tmp_path: Path) -> None:
     d = dataclasses.replace(seven_substances(), species=Species.RAT)
-    html = interactive_figure(d, tmp_path / "a.html").read_text()
+    html = interactive_figure(d, tmp_path / "a.html").read_text(encoding="utf-8")
     liver = reference_volumes("rat")["li"]
     assert f"{liver:.3g} (reference rat)" in html
 
@@ -85,11 +85,13 @@ def test_the_cards_of_an_animal_carry_its_organ_masses(tmp_path: Path) -> None:
 def test_the_publication_figure_of_an_animal(tmp_path: Path) -> None:
     d = dataclasses.replace(seven_substances(), species=Species.MOUSE)
     path = publication_figure(d, tmp_path / "f.svg")
-    assert "mouse male, 25 g" in path.with_name("f_panels.svg").read_text()
+    assert "mouse male, 25 g" in path.with_name("f_panels.svg").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_an_animal_alone_has_no_annotations(tmp_path: Path) -> None:
     d = dataclasses.replace(seven_substances(), species=Species.RAT)
     path = anatomy_figure(d, tmp_path / "a.svg", annotations=False)
     assert _texts(path) == []
-    assert "<path" in path.read_text()
+    assert "<path" in path.read_text(encoding="utf-8")

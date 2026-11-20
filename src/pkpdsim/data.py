@@ -314,6 +314,7 @@ def _git(folder: Path, *args: str) -> str | None:
             ["git", "-C", str(folder), *args],
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
             timeout=GIT_TIMEOUT,
         )

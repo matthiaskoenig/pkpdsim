@@ -111,7 +111,7 @@ def main() -> None:
     """Write the maps from the rules, which read no model."""
     for name in DEFINITIONS:
         submodel = SUBMODEL[name]
-        before = json.loads(ids_file(name).read_text())
+        before = json.loads(ids_file(name).read_text(encoding="utf-8"))
         renamed = {
             old: new
             for old in before

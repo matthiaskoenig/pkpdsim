@@ -211,6 +211,7 @@ def test_a_failed_retry_restores_the_only_earlier_result(tmp_path: Path) -> None
         [sys.executable, "-c", command, str(target)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
         timeout=60,
     )

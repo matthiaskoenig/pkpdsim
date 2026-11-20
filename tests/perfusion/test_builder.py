@@ -400,8 +400,8 @@ def test_two_definitions_in_one_folder_have_a_cell_model_each(tmp_path: Path) ->
     build(liver_definition(2, sid="two", profiles={"OXPHOS": [2, 1]}), tmp_path)
     assert (tmp_path / "one_core.xml").is_file()
     assert (tmp_path / "two_core.xml").is_file()
-    assert "p_OXPHOS" not in (tmp_path / "one_core.xml").read_text()
-    assert "p_OXPHOS" in (tmp_path / "two_core.xml").read_text()
+    assert "p_OXPHOS" not in (tmp_path / "one_core.xml").read_text(encoding="utf-8")
+    assert "p_OXPHOS" in (tmp_path / "two_core.xml").read_text(encoding="utf-8")
 
 
 def test_every_element_has_a_name_and_an_sbo_term(tmp_path: Path) -> None:

@@ -58,7 +58,7 @@ def organ(
 
 
 def _map(name: str) -> dict[str, object]:
-    return json.loads(map_file(name).read_text())
+    return json.loads(map_file(name).read_text(encoding="utf-8"))
 
 
 def _renamed(name: str) -> dict[str, str]:
@@ -74,7 +74,7 @@ def _dropped(name: str) -> set[str]:
 
 
 def _before(name: str) -> set[str]:
-    return set(json.loads(ids_file(name).read_text()))
+    return set(json.loads(ids_file(name).read_text(encoding="utf-8")))
 
 
 def _images(name: str) -> set[str]:
@@ -146,7 +146,7 @@ def test_the_trajectories_are_the_trajectories_before_through_the_map(
 ) -> None:
     """Every series of the model before, its fluxes included, and its image agree."""
     name, path = organ
-    reference = json.loads(trajectories_file(name).read_text())
+    reference = json.loads(trajectories_file(name).read_text(encoding="utf-8"))
     now = simulate(path)
     document = libsbml.readSBMLFromFile(str(path))  # keeps the model alive
     model = document.getModel()
@@ -192,7 +192,7 @@ def test_the_states_of_the_low_flux_reactions_are_compared(
     dropped. A reaction without any flux in the reference is inert and pins
     nothing."""
     name, path = organ
-    reference = json.loads(trajectories_file(name).read_text())
+    reference = json.loads(trajectories_file(name).read_text(encoding="utf-8"))
     now = simulate(path)
     document = libsbml.readSBMLFromFile(str(path))  # keeps the model alive
     model = document.getModel()

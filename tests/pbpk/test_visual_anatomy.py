@@ -78,7 +78,9 @@ def test_organs_with_processes_show_their_submodel() -> None:
 
 
 def test_the_figure_has_no_credit(tmp_path: Path) -> None:
-    svg = anatomy_figure(seven_substances(), tmp_path / "a.svg").read_text()
+    svg = anatomy_figure(seven_substances(), tmp_path / "a.svg").read_text(
+        encoding="utf-8"
+    )
     assert "Created with" not in svg and "CC BY" not in svg
 
 
@@ -90,7 +92,7 @@ def test_fig1_is_deterministic(tmp_path: Path) -> None:
 
 def test_an_iv_only_definition_has_no_oral_route(tmp_path: Path) -> None:
     d = definition(sid="iv_only", routes=[Route.iv("drg")])
-    svg = anatomy_figure(d, tmp_path / "a.svg").read_text()
+    svg = anatomy_figure(d, tmp_path / "a.svg").read_text(encoding="utf-8")
     assert 'data-k="route:oral"' not in svg
     assert 'data-k="route:iv"' in svg
     assert ">oral<" not in svg
@@ -102,7 +104,9 @@ def test_a_female_definition_shows_both_builds(tmp_path: Path) -> None:
 
 
 def test_the_interactive_page_has_cards_and_the_credit(tmp_path: Path) -> None:
-    html = interactive_figure(seven_substances(), tmp_path / "a.html").read_text()
+    html = interactive_figure(seven_substances(), tmp_path / "a.html").read_text(
+        encoding="utf-8"
+    )
     match = re.search(r"const CARDS = (\{.*?\});\n", html, re.S)
     assert match is not None
     cards = json.loads(match.group(1))
@@ -133,7 +137,7 @@ def test_the_snippets_of_a_model_are_scoped_to_their_div(tmp_path: Path) -> None
     snippets = {
         kind: interactive_figure(
             d, tmp_path / f"{kind}.html", figure=kind, snippet=True
-        ).read_text()
+        ).read_text(encoding="utf-8")
         for kind in ("anatomy", "schematic")
     }
     ids: dict[str, set[str]] = {}
@@ -176,7 +180,7 @@ def test_a_style_sheet_which_cannot_be_scoped_is_refused() -> None:
 def test_the_interactive_schematic_has_process_cards(tmp_path: Path) -> None:
     html = interactive_figure(
         seven_substances(), tmp_path / "s.html", figure="schematic"
-    ).read_text()
+    ).read_text(encoding="utf-8")
     assert 'data-k="txt:MET: API3A4: api -&gt; api_m1, api_m2 by CYP3A4' in html
     assert 'data-k="li"' in html
     # the schematic draws no anatomy, its organ icons are the anatomograms
@@ -188,7 +192,7 @@ def test_the_bodies_alone_have_no_annotations(tmp_path: Path) -> None:
     """The bodies with their organs, for a slide: no text, transparent."""
     path = anatomy_figure(definition(), tmp_path / "a.svg", annotations=False)
     assert _texts(path) == []
-    svg = path.read_text()
+    svg = path.read_text(encoding="utf-8")
     assert 'fill="#fff"/>' not in svg.split("</style>", 1)[1][:200]
     for organ in ("br", "lu", "he", "li", "ki"):
         assert palette.ORGAN_COLORS[organ] in svg, organ

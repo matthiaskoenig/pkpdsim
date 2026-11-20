@@ -299,7 +299,7 @@ def test_the_figures_are_owned_not_pyplot_state() -> None:
 
 def test_the_figures_save_as_svg(tmp_path: Path) -> None:
     zone_profiles(_result(), _profiles(1), times=(0,)).savefig(tmp_path / "f.svg")
-    assert (tmp_path / "f.svg").read_text().startswith("<?xml")
+    assert (tmp_path / "f.svg").read_text(encoding="utf-8").startswith("<?xml")
 
 
 def test_no_figure_embeds_a_raster_image(tmp_path: Path) -> None:
@@ -314,10 +314,12 @@ def test_no_figure_embeds_a_raster_image(tmp_path: Path) -> None:
     for name, fig in figures.items():
         path = tmp_path / f"{name}.svg"
         fig.savefig(path)
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         assert "<image" not in text, name
     # the heatmap is drawn: a path per cell
-    assert (tmp_path / "space_time.svg").read_text().count("<path") > 25 * N
+    assert (tmp_path / "space_time.svg").read_text(encoding="utf-8").count(
+        "<path"
+    ) > 25 * N
 
 
 def test_a_rasterized_colorbar_would_embed_an_image(tmp_path: Path) -> None:
@@ -327,7 +329,7 @@ def test_a_rasterized_colorbar_would_embed_an_image(tmp_path: Path) -> None:
     mesh = ax.pcolormesh(np.arange(12.0).reshape(3, 4))
     fig.colorbar(mesh, ax=ax)
     fig.savefig(tmp_path / "default.svg")
-    assert "<image" in (tmp_path / "default.svg").read_text()
+    assert "<image" in (tmp_path / "default.svg").read_text(encoding="utf-8")
 
 
 def test_the_figures_draw_the_result_of_a_built_chain(tmp_path: Path) -> None:
@@ -375,7 +377,7 @@ def test_the_figures_draw_the_result_of_a_built_chain(tmp_path: Path) -> None:
     assert values.max() > 0
     assert np.isfinite(flow_out.lines[0].get_ydata()).all()
     fig.savefig(tmp_path / "chain.svg")
-    assert "<image" not in (tmp_path / "chain.svg").read_text()
+    assert "<image" not in (tmp_path / "chain.svg").read_text(encoding="utf-8")
 
 
 def _drawn(fig: Figure) -> Figure:
@@ -851,7 +853,7 @@ def test_the_svg_of_a_grid_holds_no_image(tmp_path: Path) -> None:
     ]
     path = tmp_path / "grid.svg"
     zone_profiles(columns, profiles, times=times).savefig(path)
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     assert text.startswith("<?xml")
     assert "<image" not in text
 
@@ -1190,7 +1192,7 @@ def test_the_colorbar_of_several_axes_is_vector(tmp_path: Path) -> None:
     assert bar.ax.get_ylabel() == "Drug [mM]"
     assert data_axes(fig) == [left, right]
     fig.savefig(tmp_path / "grid.svg")
-    assert "<image" not in (tmp_path / "grid.svg").read_text()
+    assert "<image" not in (tmp_path / "grid.svg").read_text(encoding="utf-8")
     # the budget of this figure, two lobules of ten zones with one colorbar:
     # it writes 236 kB at the default sampling of the bands, which is what the
     # picture weighs: `points=256` (1.4 MB a panel) would be a regression.

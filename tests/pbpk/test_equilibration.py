@@ -888,7 +888,11 @@ def test_the_sensitivity_analyses_do_not_import_the_library() -> None:
         "print(sorted(m for m in sys.modules if m.startswith('pkpdsim.pbpk')))"
     )
     out = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
     )
     assert out.stdout.strip() == "[]"
 

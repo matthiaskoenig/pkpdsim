@@ -87,4 +87,4 @@ def describe_objects(objects: core.CoreObjects) -> dict[str, dict[str, Any]]:
 
 def load() -> Mapping[str, dict[str, dict[str, Any]]]:
     """Get the golden file, by configuration."""
-    return json.loads(GOLDEN.read_text())
+    return json.loads(GOLDEN.read_text(encoding="utf-8"))
