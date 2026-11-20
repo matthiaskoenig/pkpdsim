@@ -312,8 +312,8 @@ class Kind:
             flow-limited organ), so the terms of the place are `BQB.IS`.
         domain: the values the model accepts for an element of the kind (an
             interval, and whether every real number in it, the integers or
-            the two truth values), written as its `domain` uncertainty. `None` for a kind
-            whose element holds no number (a reaction) and for the two kinds
+            the two truth values), written as its `domain` uncertainty.
+            `None` for a kind whose element holds no number (a reaction) and for the two kinds
             of a constant the model states itself (`definition_parameter`,
             `custom_parameter`), whose `ModelParameter` states its own.
     """

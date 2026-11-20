@@ -96,6 +96,18 @@ class Domain:
     upper: float
     values: Values = Values.CONTINUOUS
 
+    def __post_init__(self) -> None:
+        """Reject an integer or boolean domain whose interval holds no integer."""
+        if self.values is Values.CONTINUOUS:
+            return
+        lowest = math.ceil(self.lower) if math.isfinite(self.lower) else self.lower
+        highest = math.floor(self.upper) if math.isfinite(self.upper) else self.upper
+        if lowest > highest:
+            raise ValueError(
+                f"the interval [{_bound(self.lower)}, {_bound(self.upper)}] "
+                f"holds no integer, so no {self.values.value} domain has a value"
+            )
+
     @overload
     def clip(self, lower: float, upper: float) -> tuple[float, float]: ...
 
@@ -118,11 +130,16 @@ class Domain:
         Returns:
             The interval with each bound limited to the domain, or the value
             which `contains` accepts.
+
+        Raises:
+            ValueError: If a single value is not a number.
         """
         if upper is not None:
             return max(lower, self.lower), min(upper, self.upper)
+        if math.isnan(lower):
+            raise ValueError("a value which is not a number cannot be clipped")
         x = min(max(lower, self.lower), self.upper)
-        if self.values is Values.CONTINUOUS:
+        if self.values is Values.CONTINUOUS or not math.isfinite(x):
             return x
         x = float(round(x))
         if x < self.lower:
@@ -170,6 +187,9 @@ def integers(lower: float, upper: float) -> Domain:
 
     Returns:
         The domain which accepts the integers of the interval.
+
+    Raises:
+        ValueError: If no integer lies in `[lower, upper]`.
     """
     return Domain(lower, upper, Values.INTEGER)
 

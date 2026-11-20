@@ -336,13 +336,13 @@ def check_domain(
         domain: the domain the parameter states, `None` when it states none.
 
     Returns:
-        The problems: no domain, or a number outside it.
+        The problems: no domain, or a number it does not admit.
     """
     if domain is None:
         return [f"{where}: {name} states no domain"]
     x = number(q)
     if x is not None and not domain.contains(x):
-        return [f"{where}: {name} {x} is outside its domain {domain}"]
+        return [f"{where}: {name} {x} is not admitted by its domain {domain}"]
     return []
 
 

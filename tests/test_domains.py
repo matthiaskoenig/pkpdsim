@@ -277,7 +277,34 @@ def test_writing_a_domain_logs_no_sbmlutils_warning(
 
 
 def test_a_boolean_domain_is_the_integers_of_zero_and_one() -> None:
-    assert Domain(0, 1, Values.BOOLEAN) == BOOLEAN
+    assert BOOLEAN.contains(0) and BOOLEAN.contains(1)
+    assert not BOOLEAN.contains(0.5)
+    assert (BOOLEAN.lower, BOOLEAN.upper) == (0, 1)
+
+
+def test_an_integer_domain_clips_onto_its_integers_across_zero() -> None:
+    d = integers(-2, 2)
+    for value, expected in [(-2.6, -2.0), (-0.4, 0.0), (0.5, 0.0), (7.0, 2.0)]:
+        clipped = d.clip(value)
+        assert clipped == expected
+        assert d.contains(clipped)
+
+
+def test_an_integer_domain_without_an_integer_is_rejected() -> None:
+    with pytest.raises(ValueError, match=r"\[0\.2, 0\.8\]"):
+        integers(0.2, 0.8)
+    with pytest.raises(ValueError, match="no integer"):
+        Domain(0.2, 0.8, Values.BOOLEAN)
+
+
+def test_clipping_an_infinite_value_returns_the_infinite_bound() -> None:
+    assert integers(0, math.inf).clip(math.inf) == math.inf
+    assert integers(-math.inf, 0).clip(-math.inf) == -math.inf
+
+
+def test_clipping_not_a_number_raises() -> None:
+    with pytest.raises(ValueError, match="not a number"):
+        integers(0, 3).clip(math.nan)
 
 
 def test_an_integer_domain_does_not_contain_a_non_integral_value() -> None:

@@ -101,4 +101,6 @@ def test_check_domain_passes_a_formula() -> None:
 def test_check_domain_reports_a_non_integral_value_of_a_boolean() -> None:
     """A flag of 0.5 is neither off nor on."""
     (problem,) = check_domain("parameter 'ckd'", "value", 0.5, BOOLEAN)
-    assert "0.5" in problem and "[0, 1] boolean" in problem
+    assert (
+        "0.5" in problem and "not admitted" in problem and "[0, 1] boolean" in problem
+    )
