@@ -80,6 +80,17 @@ NONNEGATIVE = Domain(0.0, math.inf)
 REAL = Domain(-math.inf, math.inf)
 
 
+class MetadataUncertainty(Uncertainty):
+    """An uncertainty which asks for no SBO term.
+
+    An SBO term classifies a component of a model, an uncertainty is metadata
+    about a value; sbmlutils says so for `UncertParameter` and `UncertSpan`
+    and this is the local stand-in until `Uncertainty` says it too.
+    """
+
+    _hint_sbo_term = False
+
+
 def domain_uncertainty(d: Domain) -> Uncertainty:
     """Build the uncertainty which writes a domain.
 
@@ -89,7 +100,7 @@ def domain_uncertainty(d: Domain) -> Uncertainty:
     Returns:
         An uncertainty named `DOMAIN` with one `range` span.
     """
-    return Uncertainty(
+    return MetadataUncertainty(
         uncertParameters=[
             UncertSpan(
                 type=libsbml.DISTRIB_UNCERTTYPE_RANGE,

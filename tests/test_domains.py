@@ -1,9 +1,11 @@
 """Tests of the domain of a quantity, written and read as a distrib range span."""
 
+import logging
 import math
 from pathlib import Path
 
 import libsbml
+import pytest
 from sbmlutils.factory import (
     Compartment,
     Model,
@@ -248,3 +250,23 @@ def test_text_of_a_non_finite_bound_does_not_raise() -> None:
     assert str(Domain(math.inf, math.inf)) == "(inf, inf)"
     assert str(Domain(-math.inf, -math.inf)) == "(-inf, -inf)"
     assert str(Domain(math.nan, 1.0)) == "(nan, 1]"
+
+
+def test_writing_a_domain_logs_no_sbmlutils_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A domain is metadata of a value: it asks for no SBO term (no hint)."""
+    p = Parameter(
+        sid="f",
+        value=0.5,
+        unit="dimensionless",
+        name="fraction",
+        sboTerm="SBO:0000002",
+        uncertainties=[domain_uncertainty(FRACTION)],
+    )
+    with caplog.at_level(logging.WARNING, logger="sbmlutils"):
+        create_model(
+            model=Model(sid="m", name="m", objects=[p]),
+            filepath=tmp_path / "m.xml",
+        )
+    assert [r.getMessage() for r in caplog.records] == []
