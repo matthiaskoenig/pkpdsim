@@ -20,6 +20,7 @@ from pkpdsim.sbml.domains import (
     FRACTION,
     NONNEGATIVE,
     REAL,
+    Domain,
     domain_of,
     domain_uncertainty,
     domains,
@@ -205,3 +206,45 @@ def test_compartments_and_species_carry_a_domain(tmp_path: Path) -> None:
         ],
     )
     assert domains(path) == {"C": NONNEGATIVE, "S": NONNEGATIVE}
+
+
+def test_an_uncertainty_named_domain_without_a_range_span_reads_as_none(
+    tmp_path: Path,
+) -> None:
+    interval = Uncertainty(
+        uncertParameters=[
+            UncertSpan(
+                type=libsbml.DISTRIB_UNCERTTYPE_CONFIDENCEINTERVAL,
+                valueLower=0.3,
+                valueUpper=0.7,
+            )
+        ],
+        name=DOMAIN,
+    )
+    spread = Uncertainty(
+        uncertParameters=[
+            UncertParameter(
+                type=libsbml.DISTRIB_UNCERTTYPE_STANDARDDEVIATION, value=0.1
+            )
+        ],
+        name=DOMAIN,
+    )
+    path = _write(
+        tmp_path,
+        [
+            Parameter(
+                sid="a", value=0.5, unit="dimensionless", uncertainties=[interval]
+            ),
+            Parameter(sid="b", value=0.5, unit="dimensionless", uncertainties=[spread]),
+        ],
+    )
+    model = _read(path)
+    assert domain_of(model.getParameter("a")) is None
+    assert domain_of(model.getParameter("b")) is None
+    assert domains(path) == {}
+
+
+def test_text_of_a_non_finite_bound_does_not_raise() -> None:
+    assert str(Domain(math.inf, math.inf)) == "(inf, inf)"
+    assert str(Domain(-math.inf, -math.inf)) == "(-inf, -inf)"
+    assert str(Domain(math.nan, 1.0)) == "(nan, 1]"

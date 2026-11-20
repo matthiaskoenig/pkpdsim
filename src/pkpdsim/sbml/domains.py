@@ -41,8 +41,8 @@ DOMAIN = "domain"
 
 
 def _bound(x: float) -> str:
-    """Render a bound: an integral value without the trailing `.0`."""
-    return str(int(x)) if x == int(x) else str(x)
+    """Render a bound: an integral value without the trailing `.0`, else its text."""
+    return str(int(x)) if math.isfinite(x) and x == int(x) else str(x)
 
 
 @dataclass(frozen=True)
@@ -70,11 +70,9 @@ class Domain:
 
     def __str__(self) -> str:
         """Interval notation: a finite bound is inclusive, an infinite one open."""
-        left = "(" if math.isinf(self.lower) else "["
-        right = ")" if math.isinf(self.upper) else "]"
-        lo = "-inf" if self.lower == -math.inf else _bound(self.lower)
-        up = "inf" if self.upper == math.inf else _bound(self.upper)
-        return f"{left}{lo}, {up}{right}"
+        left = "[" if math.isfinite(self.lower) else "("
+        right = "]" if math.isfinite(self.upper) else ")"
+        return f"{left}{_bound(self.lower)}, {_bound(self.upper)}{right}"
 
 
 FRACTION = Domain(0.0, 1.0)
