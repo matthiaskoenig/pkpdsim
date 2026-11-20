@@ -270,7 +270,10 @@ def library_parameters(
     of every parameter are intersected with the domain the model states for it
     (`pkpdsim.sbml.domains.domains`), and every bound which moves is logged as
     a warning. A parameter which states no domain keeps its bounds, which one
-    summary warning counts. A pair of bounds whose lower bound is above its
+    summary warning counts. A model which states no domain for any quantity
+    was built before the domain contract: it gets the plain relative span for
+    every parameter, severities included, and one warning, and raises nothing.
+    A pair of bounds whose lower bound is above its
     upper bound (the relative bounds of a negative value) is left as it is. The
     two ways out of the clip are `clip=False` for the whole analysis and
     `unclipped` for single parameters, which keep the span they were given.
@@ -295,9 +298,10 @@ def library_parameters(
 
     Raises:
         ValueError: naming every id which is no parameter of the model, and
-            every id of `fit_ids`, `scaling_ids` or `references` which is not
-            in `ids`, a severity whose domain has no finite upper bound, and a
-            clipped parameter whose value is outside its domain.
+            every id of `fit_ids`, `scaling_ids`, `references` or `unclipped`
+            which is not in `ids`, a severity without a finite upper bound of
+            its domain in a model which states domains, and a clipped
+            parameter whose value is outside its domain.
     """
     by_uid = {
         p.uid: p
@@ -310,7 +314,7 @@ def library_parameters(
             f"parameters of the model {model_path.name}."
         )
     outside = sorted(
-        {*fit_ids, *scaling_ids, *references}.difference(ids),
+        {*fit_ids, *scaling_ids, *references, *unclipped}.difference(ids),
     )
     if outside:
         raise ValueError(
@@ -333,12 +337,26 @@ def library_parameters(
     # the severities, whose relative bounds around 0 would be 0, up to the top
     # of their domain
     domain_of = domains(model_path)
-    severities = [uid for uid in ids if uid in SEVERITIES]
+    # a model which states no domain at all predates the contract: the plain
+    # relative span for every parameter, no clip
+    predates = not domain_of
+    if predates:
+        logger.warning(
+            "The model %s states no domain for any quantity, so it was built "
+            "before the domain contract: the bounds are the plain relative span, "
+            "no severity is varied over its domain and nothing is clipped. "
+            "Rebuilding the model gives the clip.",
+            model_path.name,
+        )
+    severities = [] if predates else [uid for uid in ids if uid in SEVERITIES]
     for uid in severities:
         if uid not in domain_of or not math.isfinite(domain_of[uid].upper):
             raise ValueError(
                 f"The severity {uid} of the sensitivity analysis has no finite "
-                f"upper bound of its domain in the model {model_path.name}."
+                f"upper bound of its domain in the model {model_path.name}: the "
+                "model states domains but none for this quantity, or one without "
+                "an upper bound. A model built before the domain contract has to "
+                "be rebuilt."
             )
     set_bounds(
         parameters,
@@ -364,7 +382,7 @@ def library_parameters(
 
     # every parameter without bounds varies around its value
     set_relative_bounds(parameters, relative)
-    if clip:
+    if clip and not predates:
         _clip_to_domains(parameters, domain_of, set(unclipped), model_path.name)
     return parameters
 
@@ -397,7 +415,8 @@ def _clip_to_domains(
             continue
         if math.isnan(p.value):
             not_a_number.append(p.uid)
-        elif not domain.contains(p.value):
+            continue
+        if not domain.contains(p.value):
             raise ValueError(
                 f"The value {p.value:g} of the parameter {p.uid} is outside its "
                 f"domain {domain} in the model {name}."

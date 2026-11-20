@@ -1084,7 +1084,8 @@ def test_a_definition_parameter_without_a_domain_is_a_problem() -> None:
     message = _message(
         _definition(parameters=[ModelParameter("k_prod", 0.001, U.mmole_per_min)])
     )
-    assert "parameter 'k_prod': value states no domain" in message
+    assert "parameter 'k_prod': states no domain" in message
+    assert "ModelParameter(domain=...)" in message and "NONNEGATIVE" in message
 
 
 def test_a_definition_parameter_outside_its_domain_is_a_problem() -> None:

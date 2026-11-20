@@ -55,10 +55,12 @@ The domain of a quantity comes from its kind, the row of `KINDS` of `pkpdsim.pbp
 | `REAL` | (-inf, inf) | a quantity which may be negative: a difference, an offset |
 | `integers(lower, upper)`, `BOOLEAN` | stated | a class or a count, a switch |
 
+`domains(model_path)` reads only the top-level model, so hand it the flat file of a model: the elements of a submodel of a composed document are not in the result, and their absence says nothing about their domain.
+
 A positive and a non-negative quantity have the same domain, because `distrib` cannot say whether a bound is attained; the strict checks of the definition (`check_positive`) keep their own wording. Every kind of the library, the number of kinds by domain first:
 
 <!-- generated: domains-summary (scripts/pbpk_tables.py), do not edit -->
-*Generated from `KINDS` of `pkpdsim.pbpk.annotation` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
+*Generated from `KINDS` of `pkpdsim.pbpk.annotation` by `scripts/pbpk_tables.py`; a domain is classified by hand, no database entry stands behind it.*
 
 | domain | kinds |
 | --- | ---: |
@@ -76,7 +78,7 @@ A positive and a non-negative quantity have the same domain, because `distrib` c
 The full list follows, one row per kind. Most kinds are `[0, inf)`, because most quantities of a physiological model are a volume, a flow, a rate or a concentration; the rows worth looking at are the fractions, the few which may be negative and the switches.
 
 <!-- generated: domains-kinds (scripts/pbpk_tables.py), do not edit -->
-*Generated from `KINDS` of `pkpdsim.pbpk.annotation` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
+*Generated from `KINDS` of `pkpdsim.pbpk.annotation` by `scripts/pbpk_tables.py`; a domain is classified by hand, no database entry stands behind it.*
 
 | kind | domain | PBPKO term |
 | --- | --- | --- |
@@ -459,6 +461,6 @@ the interval [0.2, 0.8] holds no integer, so no integer domain has a value
 
 The table is a classification by hand, read off the meaning of each quantity (a fraction is [0, 1] because it is a fraction), never fitted to the values which happen to be in the reference models. `tests/pbpk/test_domains_build.py` is the evidence for it. It builds 20 shapes of a model, reads every quantity which has a domain at t=0 and every 30 minutes along a time course, and requires it inside its domain; it found no wrong domain and no wrong value. The shapes reach 204 of the 207 kinds which state a domain. The three it does not reach are `buffer_response`, `lobe_pressure` and `lobe_resistance`, all of the `PressureFlow` network of the lobes, whose algebraic rules roadrunner cannot simulate, so no shape can read their values.
 
-The check has two limits, and a green test is no proof of more. The sweep shows that no domain is too narrow for the values these models actually reach; it cannot show that an upper bound is too wide when no value ever approaches it. And it reads sample points and not an envelope, so a brief excursion between two points is not seen; a monotone quantity like the fraction absorbed of pkpdsim#207 is caught either way.
+The check has two limits, and a green test is no proof of more. The sweep shows that no domain is too narrow for the values these models actually reach; it cannot show that an upper bound is too wide when no value ever approaches it. And it reads sample points and not an envelope, so a brief excursion between two points is not seen; a monotone quantity like the fraction absorbed of pkpdsim#207 is caught either way. The sweep covers the individuals these 20 shapes build, so a domain can still be wrong for a covariate combination no shape instantiates.
 
 The domain is also not enforced while a model runs: roadrunner ignores SBML constraints, and nothing in the stack stops a simulation whose concentration goes negative. The domain says what the model accepts, it does not police a simulation.

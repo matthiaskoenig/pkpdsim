@@ -339,7 +339,10 @@ def check_domain(
         The problems: no domain, or a number it does not admit.
     """
     if domain is None:
-        return [f"{where}: {name} states no domain"]
+        return [
+            f"{where}: states no domain, set `ModelParameter(domain=...)`, "
+            "`NONNEGATIVE` of `pkpdsim.sbml.domains` is the ordinary choice"
+        ]
     x = number(q)
     if x is not None and not domain.contains(x):
         return [f"{where}: {name} {x} is not admitted by its domain {domain}"]

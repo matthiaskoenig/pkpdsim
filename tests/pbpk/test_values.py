@@ -76,9 +76,11 @@ def test_values_with_equal_uncertainties_are_equal_by_value() -> None:
 
 def test_check_domain_requires_a_domain() -> None:
     """A parameter which states no domain is a problem."""
-    assert check_domain("parameter 'k'", "value", 0.5, None) == [
-        "parameter 'k': value states no domain"
-    ]
+    problems = check_domain("parameter 'k'", "value", 0.5, None)
+    assert len(problems) == 1
+    assert problems[0].startswith("parameter 'k': states no domain")
+    assert "ModelParameter(domain=...)" in problems[0]
+    assert "NONNEGATIVE" in problems[0]
 
 
 def test_check_domain_reports_a_value_outside_it() -> None:

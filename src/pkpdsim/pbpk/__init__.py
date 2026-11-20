@@ -95,7 +95,20 @@ from pkpdsim.pbpk.substance import (
     ThresholdReabsorption,
 )
 from pkpdsim.pbpk.units import MODEL_UNITS, UNIT_LABELS, U, axis, unit_label
-from pkpdsim.pbpk.values import Formula, ModelParameter, Q, Value, as_value, fitted
+from pkpdsim.pbpk.values import (
+    BOOLEAN,
+    FRACTION,
+    NONNEGATIVE,
+    REAL,
+    Domain,
+    Formula,
+    ModelParameter,
+    Q,
+    Value,
+    as_value,
+    fitted,
+    integers,
+)
 from pkpdsim.pbpk.variants.intestine import SegmentedIntestine, SingleLumen
 from pkpdsim.pbpk.variants.kidney_nephron import NephronKidney
 from pkpdsim.pbpk.variants.liver_lobes import LobedLiver
@@ -157,11 +170,15 @@ def __dir__() -> list[str]:
 
 
 __all__ = [
+    "BOOLEAN",
+    "FRACTION",
     "HABR",
     "LINEAR",
     "MM",
     "MODEL_UNITS",
+    "NONNEGATIVE",
     "PROTEINS",
+    "REAL",
     "REFERENCE_GFR",
     "REST",
     "UNIT_LABELS",
@@ -174,6 +191,7 @@ __all__ = [
     "CustomReaction",
     "Depot",
     "Direction",
+    "Domain",
     "DoseDependentDissolution",
     "DynamicHeart",
     "Equilibration",
@@ -253,6 +271,7 @@ __all__ = [
     "equilibrated_simulation",
     "fitted",
     "healthy_gfr",
+    "integers",
     "interactive_figure",
     "interstitial_share",
     "kidney_outflow",

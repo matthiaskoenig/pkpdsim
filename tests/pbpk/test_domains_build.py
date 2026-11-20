@@ -16,7 +16,9 @@ values the models actually reach, and it cannot show that an upper bound is too
 wide when no value ever approaches it. A green file is no proof of more.
 The check reads sample points (every 30 min of the course), not an envelope, so
 a brief excursion between two points is not seen; a monotone quantity like the
-fraction absorbed of pkpdsim#207 is caught either way.
+fraction absorbed of pkpdsim#207 is caught either way. The sweep covers the
+individuals these 20 shapes build, so a domain can still be wrong for a
+covariate combination no shape instantiates.
 """
 
 import math
@@ -668,3 +670,14 @@ def test_the_lookups_of_a_build_do_not_depend_on_the_cache(
     assert len(list((tmp_path / "cache").glob("*.zip"))) == 1
     assert cold == warm
     assert len(cold) > 10
+
+
+def test_the_elements_of_a_submodel_are_not_in_the_result_of_a_composed_document(
+    tmp_path: Path,
+) -> None:
+    """`domains` reads the top-level model only, so it takes the flat file."""
+    built = build(definition(), tmp_path)
+    flat = domains(built.flat_path)
+    composed = domains(built.comp_path)
+    assert composed
+    assert set(composed) < set(flat)

@@ -19,7 +19,7 @@ from sbmlsim.simulation import Simulation
 from pkpdsim.pbpk import ModelParameter, Organ, U, Variants
 from pkpdsim.pbpk.builder import build
 from pkpdsim.pbpk.variants.intestine import SegmentedIntestine
-from pkpdsim.sbml.domains import Domain
+from pkpdsim.sbml.domains import Domain, domains
 from pkpdsim.sensitivity import (
     SEVERITIES,
     NonzeroLocalAnalysis,
@@ -204,21 +204,75 @@ def test_a_parameter_inside_its_domain_is_untouched(tmp_path: Path) -> None:
     )
 
 
+def _without_domains(path: Path, tmp_path: Path) -> Path:
+    """Write a copy of the model whose elements state no domain."""
+    document = libsbml.readSBMLFromFile(str(path))
+    model = document.getModel()
+    for elements in (
+        model.getListOfParameters(),
+        model.getListOfCompartments(),
+        model.getListOfSpecies(),
+    ):
+        for element in elements:
+            plugin = element.getPlugin("distrib")
+            while plugin.getNumUncertainties():
+                plugin.removeUncertainty(0)
+    stripped = tmp_path / "stripped_all.xml"
+    libsbml.writeSBMLToFile(document, str(stripped))
+    return stripped
+
+
 def test_a_model_without_domains_changes_no_bound_and_says_so(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    path = fraction_model(tmp_path)
-    document = libsbml.readSBMLFromFile(str(path))
-    for parameter in document.getModel().getListOfParameters():
-        plugin = parameter.getPlugin("distrib")
-        while plugin.getNumUncertainties():
-            plugin.removeUncertainty(0)
-    stripped = tmp_path / "stripped.xml"
-    libsbml.writeSBMLToFile(document, str(stripped))
+    stripped = _without_domains(fraction_model(tmp_path), tmp_path)
     with caplog.at_level(logging.INFO, logger="pkpdsim.sensitivity"):
         p = fraction(stripped)
-    assert "state no domain" in caplog.text
+    assert "states no domain for any quantity" in caplog.text
     assert (p.lower_bound, p.upper_bound) == pytest.approx((LOWER, UPPER))
+
+
+def test_a_model_without_domains_varies_a_severity_by_the_relative_rule(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    path = _without_domains(library_model(tmp_path), tmp_path)
+    assert not domains(path)
+    with caplog.at_level(logging.WARNING, logger="pkpdsim.sensitivity"):
+        p = library_parameters(
+            path, ["CP_severity", "BW"], fit_ids=[], scaling_ids=[], relative=RELATIVE
+        )
+    assert "built before the domain contract" in caplog.text
+    assert "no severity is varied over its domain" in caplog.text
+    assert len([r for r in caplog.records if r.levelno >= logging.WARNING]) == 1
+    severity, weight = p
+    assert (severity.lower_bound, severity.upper_bound) == (0.0, 0.0)
+    assert weight.lower_bound == pytest.approx(0.85 * weight.value)
+
+
+def test_a_severity_without_a_domain_in_a_model_with_domains_raises(
+    tmp_path: Path,
+) -> None:
+    document = libsbml.readSBMLFromFile(str(library_model(tmp_path)))
+    plugin = document.getModel().getParameter("CP_severity").getPlugin("distrib")
+    while plugin.getNumUncertainties():
+        plugin.removeUncertainty(0)
+    partial = tmp_path / "partial.xml"
+    libsbml.writeSBMLToFile(document, str(partial))
+    assert domains(partial)
+    with pytest.raises(ValueError, match="CP_severity") as error:
+        library_parameters(partial, ["CP_severity"], fit_ids=[], scaling_ids=[])
+    assert "has to be rebuilt" in str(error.value)
+
+
+def test_an_unclipped_id_outside_the_parameters_raises(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="fabs_typo"):
+        library_parameters(
+            fraction_model(tmp_path),
+            ["fabs_drg"],
+            fit_ids=[],
+            scaling_ids=[],
+            unclipped=["fabs_typo"],
+        )
 
 
 def test_a_value_outside_its_domain_raises(tmp_path: Path) -> None:
@@ -264,3 +318,19 @@ def test_values_which_are_not_a_number_are_counted(
     assert "not a number" in caplog.text
     assert "fabs_drg" in caplog.text
     assert math.isnan(p.lower_bound)
+
+
+def test_a_nan_value_with_finite_bounds_is_not_clipped(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The warning says "not clipped", so a NaN value keeps its finite bounds."""
+    path = fraction_model(tmp_path)
+    p = fraction(path)
+    p.value = math.nan
+    p.lower_bound, p.upper_bound = -0.5, 2.0
+    from pkpdsim.sensitivity import _clip_to_domains
+
+    with caplog.at_level(logging.WARNING, logger="pkpdsim.sensitivity"):
+        _clip_to_domains([p], domains(path), (), path.name)
+    assert (p.lower_bound, p.upper_bound) == (-0.5, 2.0)
+    assert "not clipped" in caplog.text

@@ -131,7 +131,9 @@ class Domain:
 
         Returns:
             The interval with each bound limited to the domain, or the value
-            which `contains` accepts.
+            limited to it. An infinite value is returned at the infinite bound
+            of a domain which has one, so the result of `clip` lies inside the
+            interval but is not necessarily a value `contains` accepts.
 
         Raises:
             ValueError: If a single value is not a number.
@@ -288,8 +290,13 @@ def _values_of(uncertainty: libsbml.Uncertainty) -> Values:
 def domains(model_path: Path) -> dict[str, Domain]:
     """Read the domains of the parameters, compartments and species of a model.
 
+    Only the top-level model is read, the elements of a submodel are not in
+    the result.
+
     Args:
-        model_path: Path of an SBML file.
+        model_path: Path of the flat SBML file of a model. A composed document
+            gives only the quantities of its top-level model, and the silence
+            about the others is not a statement that they have no domain.
 
     Returns:
         The domain by id, for the elements which state one.

@@ -5,6 +5,7 @@ every library of pkpdsim shares (`pkpdsim.sbml.values`); this module is the
 import path of the library and re-exports them unchanged.
 """
 
+from pkpdsim.sbml.domains import BOOLEAN, FRACTION, NONNEGATIVE, REAL, Domain, integers
 from pkpdsim.sbml.values import (
     CHOICE,
     SID,
@@ -27,8 +28,13 @@ from pkpdsim.sbml.values import (
 )
 
 __all__ = [
+    "BOOLEAN",
     "CHOICE",
+    "FRACTION",
+    "NONNEGATIVE",
+    "REAL",
     "SID",
+    "Domain",
     "Formula",
     "FrozenMap",
     "ModelParameter",
@@ -42,6 +48,7 @@ __all__ = [
     "derived",
     "equal_by_value",
     "fitted",
+    "integers",
     "model_choice",
     "number",
     "unit_text",
