@@ -544,7 +544,11 @@ def test_fitted_factors_keep_their_uncertainty(tmp_path: Path) -> None:
         assert p.getValue() == number
         plugin = p.getPlugin("distrib")
         assert plugin is not None
-        assert plugin.getNumUncertainties() == 1
+        # the fit, then the domain of the kind
+        assert [
+            plugin.getUncertainty(i).getName()
+            for i in range(plugin.getNumUncertainties())
+        ] == ["fit F1", "domain"]
         assert "Fitted value." in p.getNotesString()
 
 

@@ -22,7 +22,7 @@ from pymetadata.core.annotation import ProviderType, RDFAnnotation
 from pymetadata.ontologies.pbpko import PBPKO
 from sbmlutils.factory import Parameter, Reaction, Species, UncertParameter, UncertSpan
 from sbmlutils.factory import Uncertainty as SbmlUncertainty
-from sbmlutils.metadata import BQB
+from sbmlutils.metadata import BQB, SBO
 
 from pkpdsim.annotations import compartments
 from pkpdsim.pbpk import (
@@ -66,7 +66,14 @@ from pkpdsim.pbpk.annotation import (
 )
 from pkpdsim.pbpk.builder import BuildResult, build
 from pkpdsim.pbpk.values import Value
-from pkpdsim.sbml.domains import DOMAIN, FRACTION, domain_uncertainty
+from pkpdsim.sbml.domains import (
+    DOMAIN,
+    FRACTION,
+    NONNEGATIVE,
+    REAL,
+    Domain,
+    domain_uncertainty,
+)
 from pkpdsim.sbml.parameters import value_parameter
 
 from .conftest import cardiac_pd
@@ -559,3 +566,123 @@ def test_annotate_appends_the_domain_after_the_uncertainty_of_a_source() -> None
     )
     annotate(p, "organ_volume", organ=Organ.LIVER)
     assert _uncertainty_names(p) == ["source fit", DOMAIN]
+
+
+#: the kinds which state no domain: the elements of a reaction hold no number, and
+#: the two kinds of a constant which the `ModelParameter` states the domain of
+_WITHOUT_DOMAIN = [
+    "absorption",
+    "bile_flow",
+    "biliary_excretion",
+    "blood_flow",
+    "custom_parameter",
+    "custom_reaction",
+    "definition_parameter",
+    "depot_absorption_im",
+    "depot_absorption_inhaled",
+    "depot_absorption_rectal",
+    "depot_absorption_sc",
+    "depot_application_im",
+    "depot_application_inhaled",
+    "depot_application_rectal",
+    "depot_application_sc",
+    "depot_loss_im",
+    "depot_loss_inhaled",
+    "depot_loss_rectal",
+    "depot_loss_sc",
+    "dissolution_reaction",
+    "exchange",
+    "fecal_excretion",
+    "filtration",
+    "gut_metabolism",
+    "iv_application",
+    "lumen_conversion",
+    "metabolism",
+    "metabolism_product",
+    "metabolism_saturable",
+    "oral_application",
+    "reabsorption",
+    "remodelling",
+    "renal_secretion",
+    "transit",
+    "transport",
+    "tubular_flow",
+]
+
+#: the kinds whose element is a share, a probability or a switch of 0 and 1
+_FRACTIONS = [
+    "absorbed_fraction",
+    "arm_weight",
+    "ckd",
+    "depot_fraction_im",
+    "depot_fraction_inhaled",
+    "depot_fraction_rectal",
+    "depot_fraction_sc",
+    "fed",
+    "flow_fraction",
+    "fraction_absorbed",
+    "fraction_reabsorbed",
+    "fu",
+    "hematocrit",
+    "inhaled_swallowed_fraction",
+    "interstitial_fraction",
+    "lobe_patency",
+    "lobe_present",
+    "lobe_supply_fraction",
+    "placement_weight",
+    "pool_fraction",
+    "product_fraction",
+    "rectal_portal_fraction",
+    "shunt",
+    "tissue_composition",
+    "tubular_share",
+    "tubule_fraction",
+    "vascular_fraction",
+    "zone_fraction",
+]
+
+#: the kinds which take both signs
+_REAL = ["lobe_growth", "observer", "steady_rate"]
+
+_REACTION_SBO = frozenset(
+    {
+        SBO.TRANSPORT_REACTION,
+        SBO.BIOCHEMICAL_REACTION,
+        SBO.DEGRADATION,
+        SBO.BIOCHEMICAL_OR_TRANSPORT_REACTION,
+    }
+)
+
+
+def test_the_kinds_which_state_no_domain() -> None:
+    # a kind added to the table has to state a domain or join the list on purpose
+    assert sorted(k for k, v in KINDS.items() if v.domain is None) == _WITHOUT_DOMAIN
+
+
+def test_the_kinds_without_domain_are_the_reactions_and_two_constants() -> None:
+    reactions = {k for k, v in KINDS.items() if v.sbo in _REACTION_SBO}
+    assert set(_WITHOUT_DOMAIN) - reactions == {
+        "custom_parameter",
+        "definition_parameter",
+    }
+    assert reactions <= set(_WITHOUT_DOMAIN)
+
+
+def test_the_fractions_of_the_library() -> None:
+    assert sorted(k for k, v in KINDS.items() if v.domain == FRACTION) == _FRACTIONS
+
+
+def test_the_kinds_which_take_both_signs() -> None:
+    assert sorted(k for k, v in KINDS.items() if v.domain == REAL) == _REAL
+
+
+def test_the_kinds_with_an_interval_of_their_own() -> None:
+    assert KINDS["child_pugh"].domain == Domain(0.0, 3.0)
+    assert KINDS["heart_failure"].domain == Domain(0.0, 4.0)
+    assert KINDS["clock_time"].domain == Domain(0.0, 24.0)
+
+
+def test_a_factor_is_not_bounded_by_one() -> None:
+    # induction and hypertrophy are real states of the model
+    for kind in ("scaling_factor", "age_factor", "pregnancy", "remnant_fraction"):
+        assert KINDS[kind].domain == NONNEGATIVE
