@@ -88,11 +88,29 @@
 
 body {
   margin: 0;
-  padding: 10px 12px 12px;
+  padding: 8px 10px 10px;
   background: var(--paper);
   color: var(--ink);
   font: 14.5px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
+
+/* A page of its own takes the window: the dashboard is the part which grows,
+   so the liver and the plots are as large as the screen allows and the page
+   needs no scrolling to be read. As a figure of the documentation the page is
+   in a frame which follows the height it posts, where a viewport height is
+   the height of that frame, so there it stays as tall as its content. */
+html:not([data-framed="true"]) { height: 100%; }
+html:not([data-framed="true"]) body { min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
+html:not([data-framed="true"]) #app { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+html:not([data-framed="true"]) #workspace { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+html:not([data-framed="true"]) #workspace > .panel:last-of-type { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+html:not([data-framed="true"]) .dashboard { flex: 1 1 auto; min-height: 0; align-items: stretch; }
+html:not([data-framed="true"]) .liver-pane { display: flex; flex-direction: column; min-height: 0; }
+html:not([data-framed="true"]) .liver-row { flex: 1 1 auto; min-height: 0; }
+html:not([data-framed="true"]) svg.liver { height: 100%; width: 100%; }
+html:not([data-framed="true"]) .plots { grid-auto-rows: 1fr; min-height: 0; }
+html:not([data-framed="true"]) .plot-host { min-height: 0; display: flex; align-items: stretch; }
+html:not([data-framed="true"]) svg.plot { height: 100%; width: 100%; }
 
 h1 { font-size: 1.22rem; margin: 0 0 2px; }
 h2 { font-size: 0.98rem; margin: 0; }
@@ -105,27 +123,41 @@ a { color: var(--accent); }
   color: var(--muted);
 }
 
-.app-header { margin-bottom: 8px; }
-.app-header p { color: var(--muted); margin: 4px 0 0; max-width: 95ch; }
-.title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.app-header { margin-bottom: 6px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.app-header p { color: var(--muted); margin: 0; }
+.section-note { color: var(--muted); margin: 0; font-size: 0.82rem; }
 
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 9px;
-  padding: 9px 11px 10px;
-  margin-bottom: 8px;
+  padding: 8px 10px 9px;
+  margin-bottom: 7px;
   box-shadow: var(--shadow);
 }
 
 .section-heading {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: 7px;
+  margin-bottom: 6px;
 }
+
+/* the line of the controls of the dashboard: the settings of the run, the
+   player, what is read out and what is taken away, in one line while the
+   window has the room for it */
+.section-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  /* the controls are one line of their own as soon as they do not fit beside
+     the heading, which keeps the buttons at the end of it from wrapping under
+     the heading one at a time */
+  flex: 1 1 760px;
+}
+.section-heading h2 { flex: 0 0 auto; }
 
 .explanation { color: var(--muted); margin: 4px 0 6px; max-width: 95ch; }
 .explanation.tight { margin: 2px 0 0; font-size: 0.82rem; }
@@ -146,9 +178,70 @@ button.primary:hover { filter: brightness(1.08); }
 button[disabled] { opacity: 0.55; cursor: progress; }
 
 .mode-switch, .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.presets { gap: 6px 14px; align-items: center; }
+
+/* a species is picked by its animal: the drawing of the physiology figures,
+   muted on the button and in the ink of the page once it is the one */
+.species-switch { display: flex; flex-wrap: wrap; gap: 6px; }
+.species {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 5px;
+}
+.species-icon { width: 30px; height: 26px; display: block; opacity: 0.6; }
+.species-icon [data-k] { opacity: 0.35; }
+.species-icon [data-k="li"] { opacity: 1; fill: var(--accent); }
+.species[aria-pressed="true"] .species-icon { opacity: 1; }
+.species[aria-pressed="true"] .species-icon [data-k="li"] { fill: var(--accent-ink); }
+.species-name { text-transform: capitalize; }
+.sex-switch { margin-top: 2px; }
+.sex-switch .tab { padding: 1px 8px; font-size: 0.8rem; }
+
+/* an operation carries the shade its lobes are drawn in, the one the legend
+   of the dashboard names */
+.operation { display: inline-flex; align-items: center; gap: 6px; }
+.operation-shade {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  display: inline-block;
+  flex: none;
+  border: 1px solid currentColor;
+  background: color-mix(in srgb, currentColor 22%, transparent);
+}
+.operation[data-state="portal"] .operation-shade { background: repeating-linear-gradient(45deg, currentColor 0 2.4px, transparent 2.4px 5.4px); }
+.operation[data-state="arterial"] .operation-shade { background: repeating-linear-gradient(135deg, currentColor 0 1.6px, transparent 1.6px 6.4px); }
+.operation[data-state="resected"] .operation-shade { background: repeating-linear-gradient(135deg, currentColor 0 2px, transparent 2px 5px); border-style: dashed; }
+
+/* the named plans of an operation, under the name of that operation */
+.preset-group { display: inline-flex; align-items: center; gap: 5px; }
+.preset-group-label {
+  color: var(--muted);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.preset { padding: 2px 9px; }
+
+/* the settings of one run, beside the player which walks it */
+.sim { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; }
+.sim-setting { display: inline-flex; align-items: center; gap: 5px; }
+.sim-label { color: var(--muted); font-size: 0.78rem; }
+.sim-select {
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 4px;
+}
 
 /* the planner: the procedure, the lobes it acts on and what it costs */
-.plan-grid { display: flex; flex-wrap: wrap; gap: 8px 22px; align-items: flex-start; }
+.plan-grid { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: flex-start; }
+.plan-field.grow { flex: 1 1 320px; }
+.plan-field.species-field { gap: 2px; }
 .plan-field { display: flex; flex-direction: column; gap: 4px; }
 .field-label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
 .plan-lobes { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -180,7 +273,7 @@ button[disabled] { opacity: 0.55; cursor: progress; }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
 
 /* the dashboard: the liver beside the plots of what the run says */
-.dashboard { display: grid; gap: 10px 16px; grid-template-columns: minmax(300px, 400px) minmax(320px, 1fr); align-items: start; }
+.dashboard { display: grid; gap: 8px 14px; grid-template-columns: minmax(300px, 29%) minmax(340px, 1fr); align-items: start; }
 .player { display: flex; align-items: center; gap: 8px; flex: 1 1 320px; max-width: 460px; }
 .player input[type="range"] { flex: 1 1 auto; }
 .player output { white-space: nowrap; min-width: 4.1rem; text-align: right; }
@@ -197,7 +290,7 @@ button[disabled] { opacity: 0.55; cursor: progress; }
 .body-figure [data-k="li"] { opacity: 1; stroke: var(--accent); stroke-width: 1.1; }
 .body-liver { fill: none; stroke: var(--accent); stroke-width: 1.8; opacity: 0.9; }
 .body-liver-dot { fill: none; }
-.liver-host { flex: 1 1 auto; min-width: 0; margin: 0 auto; }
+.liver-host { flex: 1 1 auto; min-width: 0; }
 svg.liver { width: 100%; height: auto; display: block; }
 
 .liver-block {
@@ -258,8 +351,9 @@ svg.liver { width: 100%; height: auto; display: block; }
 .slider-value { font-variant-numeric: tabular-nums; font-size: 0.85rem; }
 input[type="range"] { width: 100%; accent-color: var(--accent); }
 
-.plots { display: grid; gap: 8px 12px; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); }
-.plot-host { width: 100%; max-width: 460px; margin: 0 auto; }
+.plots { display: grid; gap: 8px 12px; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+@media (min-width: 1180px) { .plots { grid-template-columns: repeat(2, minmax(340px, 1fr)); } }
+.plot-host { width: 100%; }
 svg.plot { width: 100%; height: auto; display: block; }
 .cd-title { font-size: 12px; font-weight: 600; fill: var(--ink); }
 .cd-label { font-size: 12px; fill: var(--ink); }
@@ -281,7 +375,7 @@ svg.plot { width: 100%; height: auto; display: block; }
 
 @media (max-width: 1000px) {
   .dashboard { grid-template-columns: 1fr; }
-  .liver-host { max-width: 520px; }
+  .liver-host { max-width: 520px; margin: 0 auto; }
 }
 
 @media (max-width: 520px) {

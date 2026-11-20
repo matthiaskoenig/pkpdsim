@@ -306,10 +306,12 @@ export function createLiver(host, lobes, {onPick} = {}) {
         shape.group.setAttribute("aria-label", `${shape.block.name}: ${STATE_LABEL[state] ?? state}`);
         shape.shade.setAttribute("fill", state in SHADES ? `url(#${uid}-${token}-${state})` : "none");
         // a small block carries the token alone: the colour and the legend
-        // say what was done to it, and two labels in 30 px would collide
+        // say what was done to it, and two labels in 30 px would collide. A
+        // narrow block carries none either, since a value of nine characters
+        // is about 50 px wide and would be drawn over the edge of the block.
         const shown = values[token];
         const room = shape.block.height;
-        shape.value.textContent = room < 34 ? "" : (shown ?? "");
+        shape.value.textContent = room < 34 || shape.block.width < 54 ? "" : (shown ?? "");
         shape.state.textContent = room < 58 || state === "intact" ? "" : (STATE_SHORT[state] ?? state);
       }
       const cut = [];

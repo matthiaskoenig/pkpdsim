@@ -7,7 +7,7 @@
 
 import {STATES, VIEWS, caseChanges, csv, duration, exposure, lobeColors, planSummary, sampleAt, stateOfCase, trim} from "./lobes-model.mjs";
 import {createLiver} from "./lobes-schematic.mjs";
-import {CONTROLS, createLobeSolver, inflowChanges, normalizeControls} from "./lobes-solver.mjs";
+import {CONTROLS, SIMULATION, createLobeSolver, inflowChanges, normalizeControls, normalizeSimulation} from "./lobes-solver.mjs";
 
 const DAY = 24 * 60;
 const SPECIES = ["rat", "mouse", "human"];
@@ -15,12 +15,37 @@ const SEXES = ["male", "female"];
 const SVG = "http://www.w3.org/2000/svg";
 // the days of the course one second of the animation covers
 const PLAY_DAYS_PER_SECOND = 0.8;
-// the procedures a reader plans, the states of a lobe which are not intact
-const PROCEDURES = STATES.filter(state => state.id !== "intact").map(state => ({
+// the operations a reader plans: the intact liver and the three states a lobe
+// is put in, in the order of the states, so the row of the planner, the shades
+// of the legend and the groups of the named plans are read in one order
+const PROCEDURES = STATES.map(state => ({
   id: state.id,
   label: state.label,
-  button: {portal: "portal vein ligation", arterial: "hepatic artery ligation", resected: "resection"}[state.id] ?? state.label,
+  short: state.short,
+  // what the button of the operation says, and the name of the group of named
+  // plans it heads
+  button: {
+    intact: "intact",
+    portal: "PVL - portal vein ligation",
+    arterial: "HAL - hepatic artery ligation",
+    resected: "resection",
+  }[state.id] ?? state.label,
+  group: {intact: "intact", portal: "PVL", arterial: "HAL", resected: "resection"}[state.id] ?? state.short,
 }));
+
+/** What a named plan is called under the operation it is grouped with.
+ *
+ * The case names of the data say the operation and the lobes it acts on
+ * (`pvl70`, `right_hepatectomy`); the group above them already says the
+ * operation, so the button says what is left of the name: the share of the
+ * mass, the side or the lobe. A name which is nothing but its operation keeps
+ * it.
+ */
+export function presetLabel(label, kind) {
+  const rest = label.replaceAll(/pvl|hal|hepatectomy|resection|intact/gi, " ").replaceAll(/[\s_]+/g, " ").trim();
+  if (rest === "") return kind === "intact" ? "whole liver" : label.replaceAll("_", " ");
+  return /^\d+$/.test(rest) ? `${rest} %` : rest;
+}
 
 function element(tag, attributes = {}, text) {
   const node = document.createElement(tag);
@@ -139,7 +164,7 @@ export function createApp(root, {data, anatomy = null, loadData = defaultLoadDat
     kind: root.querySelector("#plan-kind"),
     lobes: root.querySelector("#plan-lobes"),
     summary: root.querySelector("#plan-summary"),
-    run: root.querySelector("#run"),
+    sim: root.querySelector("#sim"),
     spinner: root.querySelector("#spinner"),
     runtime: root.querySelector("#runtime"),
     play: root.querySelector("#play"),
@@ -163,6 +188,7 @@ export function createApp(root, {data, anatomy = null, loadData = defaultLoadDat
     sex: data.provenance.sex ?? "male",
     states: {},
     controls: normalizeControls({}),
+    simulation: normalizeSimulation({}),
     time: 0,
     series: null,
     source: "precomputed",
@@ -184,7 +210,9 @@ export function createApp(root, {data, anatomy = null, loadData = defaultLoadDat
   const sexesOf = species => dataset().species[species]?.sexes ?? ["male"];
   const tokens = () => of_species().lobes.map(lobe => lobe.token);
   const reset = () => { state.states = Object.fromEntries(tokens().map(token => [token, "intact"])); };
-  const endTime = () => dataset().provenance.end_time;
+  // the end of the course is the run which is drawn, not the one which was
+  // precomputed: a reader who asks for ten days scrubs over ten days
+  const endTime = () => state.series?.time?.at(-1) ?? dataset().provenance.end_time;
 
   // a set of changes as one string, so two sets are the same when they set the
   // same parameters to the same values whatever order they were written in
@@ -200,7 +228,12 @@ export function createApp(root, {data, anatomy = null, loadData = defaultLoadDat
     return name;
   };
 
-  const defaults = () => Object.entries(CONTROLS).every(([key, control]) => state.controls[key] === control.value);
+  // a precomputed case is the run of the default physiology over the days and
+  // the dose it was precomputed with: a reader who moves any of them is asking
+  // for another run, which the compiled model answers here
+  const defaults = () =>
+    Object.entries(CONTROLS).every(([key, control]) => state.controls[key] === control.value)
+    && Object.entries(SIMULATION).every(([key, setting]) => state.simulation[key] === setting.value);
 
   const show = () => {
     const sample = sampleAt(state.series, state.time);
@@ -303,7 +336,7 @@ export function createApp(root, {data, anatomy = null, loadData = defaultLoadDat
       // the exposure of a lobe is the area under its own outflow over the days
       // which are shown, the readout a study of a regional intervention takes
       barPlot(parts.exposure, {
-        title: "exposure of the lobes over the five days", unit: "mM*min",
+        title: `exposure of the lobes over ${trim(endTime() / DAY)} days`, unit: "mM*min",
         bars: shown.map(token => ({
           label: token, parts: ["area under the concentration leaving the lobe"], colour: colours[token],
           values: [exposure(times, state.series[`Cout_li_${token}_drg`] ?? [])],
@@ -312,6 +345,9 @@ export function createApp(root, {data, anatomy = null, loadData = defaultLoadDat
     }
     parts.status.textContent = `${state.source === "live" ? "Live run of the compiled model" : "Precomputed reference run"}: ${describe()}.`;
     parts.clock.textContent = `day ${trim(state.time / DAY)}`;
+    const span = endTime();
+    parts.scrub.max = String(span);
+    parts.scrub.step = String(span / Math.max((times.length || 2) - 1, 1));
     parts.scrub.value = String(state.time);
     showPlan();
     parts.provenance.textContent = [
@@ -345,6 +381,23 @@ export function createApp(root, {data, anatomy = null, loadData = defaultLoadDat
       svgNode("circle", {class: "body-liver-dot", cx: drawn.liver[0], cy: drawn.liver[1], r: reach / 4}),
     );
     parts.body.replaceChildren(svg);
+  };
+
+  /** The animal of a species as the icon of its button.
+   *
+   * The drawing is the one of the dashboard (`lobes-anatomy.json`), at the
+   * sex which is picked where the database has it: the page carries no second
+   * silhouette, and without the drawings a button is its name alone.
+   */
+  const speciesIcon = species => {
+    const bodies = anatomy?.bodies?.[species];
+    const drawn = bodies?.[state.sex] ?? bodies?.male ?? Object.values(bodies ?? {})[0];
+    if (!drawn) return null;
+    const svg = svgNode("svg", {class: "species-icon", viewBox: drawn.box.join(" "), "aria-hidden": "true", focusable: "false"});
+    const group = svgNode("g", {});
+    group.innerHTML = drawn.svg;
+    svg.append(group);
+    return svg;
   };
 
   /** The volume of the intact liver of the species, the area the frame holds. */
@@ -385,14 +438,14 @@ export function createApp(root, {data, anatomy = null, loadData = defaultLoadDat
     return changed.map(([token, value]) => `${token} ${STATES.find(s => s.id === value).short}`).join(", ");
   };
 
-  const render = async ({force = false} = {}) => {
+  const render = async ({force = false, replay = true} = {}) => {
     const name = matching();
     if (!force && name !== undefined && defaults()) {
       state.series = of_species().cases[name].series;
       state.source = "precomputed";
       state.ran = null;
       parts.runtime.textContent = "";
-      show();
+      if (replay) restart(); else show();
       return;
     }
     // a click while a run is on its way is not lost: it is run once the
@@ -410,12 +463,12 @@ export function createApp(root, {data, anatomy = null, loadData = defaultLoadDat
         species: SPECIES.filter(name => sexesOf(name).includes(state.sex)),
         sex: state.sex,
       });
-      const result = await solvers[state.sex].simulate(state.species, state.controls, changesOfRun());
+      const result = await solvers[state.sex].simulate(state.species, state.controls, changesOfRun(), {simulation: state.simulation});
       state.series = result.series;
       state.source = "live";
       state.ran = clock() - started;
       parts.runtime.textContent = `ran in ${duration(state.ran)}`;
-      show();
+      if (replay) restart(); else show();
     } catch (error) {
       parts.runtime.textContent = "";
       parts.status.textContent = `The live run failed: ${error.message} The page keeps the last result.`;
@@ -425,16 +478,25 @@ export function createApp(root, {data, anatomy = null, loadData = defaultLoadDat
     }
     if (state.again) {
       state.again = false;
-      await render();
+      await render({replay});
     }
   };
 
-  /** The spinner and the run button say whether the model is running. */
-  const busy = running => {
-    parts.spinner.hidden = !running;
-    if (running) parts.run.setAttribute("disabled", "");
-    else parts.run.removeAttribute?.("disabled");
+  /** A run which is back is played from its first day.
+   *
+   * The page has no run button: a change of the plan, of the physiology or of
+   * the settings runs the model and the course it produced is played at once,
+   * which is what an intervention looks like. A reader who takes the scrub
+   * bar pauses it and stays where they put it.
+   */
+  const restart = () => {
+    state.time = 0;
+    show();
+    if (!state.playing) play();
   };
+
+  /** The spinner says whether the model is running. */
+  const busy = running => { parts.spinner.hidden = !running; };
 
   const clock = () => (globalThis.performance?.now ? globalThis.performance.now() : Date.now());
 
@@ -510,10 +572,11 @@ export function createApp(root, {data, anatomy = null, loadData = defaultLoadDat
       });
       return button;
     }));
-    parts.run.addEventListener("click", () => void render({force: true}));
     parts.reset.addEventListener("click", () => {
       reset();
+      state.plan = {kind: "portal"};
       state.controls = normalizeControls({});
+      state.simulation = normalizeSimulation({});
       state.time = 0;
       parts.scrub.value = "0";
       build();
@@ -530,6 +593,9 @@ export function createApp(root, {data, anatomy = null, loadData = defaultLoadDat
   };
 
   const build = () => {
+    // the sex is a subselection of the species: the parameter database has the
+    // female of the human and the male alone of the rat and of the mouse, so
+    // the row below the animals offers what the species which is picked has
     parts.sex.replaceChildren(...SEXES.map(name => {
       const has = sexesOf(state.species).includes(name);
       const button = element("button", {
@@ -543,22 +609,36 @@ export function createApp(root, {data, anatomy = null, loadData = defaultLoadDat
       else button.addEventListener("click", () => void setSex(name));
       return button;
     }));
+    // a species is picked by its animal, the drawing of the physiology figures
+    // the dashboard shows beside the liver; a page served without the drawings
+    // has the name alone
     parts.species.replaceChildren(...SPECIES.map(name => {
-      const button = element("button", {class: name === state.species ? "tab active" : "tab", type: "button"}, name);
+      const button = element("button", {
+        class: name === state.species ? "species active" : "species", type: "button",
+        "data-species": name, "aria-pressed": String(name === state.species),
+        title: `the reference ${name} of the parameter database`,
+      });
+      const icon = speciesIcon(name);
+      if (icon) button.append(icon);
+      button.append(element("span", {class: "species-name"}, name));
       button.addEventListener("click", () => void setSpecies(name));
       return button;
     }));
     // the procedures of the planner and the lobes each one can act on
     parts.kind.replaceChildren(...PROCEDURES.map(procedure => {
       const button = element("button", {
-        class: "tab", type: "button", "data-kind": procedure.id,
+        class: "tab operation", type: "button", "data-kind": procedure.id, "data-state": procedure.id,
         "aria-pressed": String(procedure.id === state.plan.kind), title: procedure.label,
-      }, procedure.button);
+      });
+      button.append(element("span", {class: "operation-shade"}), element("span", {}, procedure.button));
       button.addEventListener("click", () => {
-        // the lobes already chosen move to the procedure which was picked
+        // the lobes already chosen move to the operation which was picked, and
+        // the intact liver is the operation which puts every lobe back
         const chosen = Object.entries(state.states).filter(([, value]) => value !== "intact").map(([token]) => token);
         state.plan = {kind: procedure.id};
-        state.states = {...state.states, ...Object.fromEntries(chosen.map(token => [token, procedure.id]))};
+        state.states = procedure.id === "intact"
+          ? Object.fromEntries(tokens().map(token => [token, "intact"]))
+          : {...state.states, ...Object.fromEntries(chosen.map(token => [token, procedure.id]))};
         void render();
       });
       return button;
@@ -594,6 +674,24 @@ export function createApp(root, {data, anatomy = null, loadData = defaultLoadDat
       return item;
     });
     parts.legend.replaceChildren(...lobeItems, element("span", {class: "legend-break"}), ...stateItems);
+    // the settings of one simulation: how long it runs, how finely it is read
+    // out and the dose of the marker drug the exposure is read from
+    parts.sim.replaceChildren(...Object.entries(SIMULATION).map(([key, setting]) => {
+      const row = element("label", {class: "sim-setting"});
+      const select = element("select", {class: "sim-select", "data-setting": key, "aria-label": setting.label});
+      for (const choice of setting.choices) {
+        const option = element("option", {value: String(choice)}, String(choice));
+        if (choice === state.simulation[key]) option.setAttribute("selected", "");
+        select.append(option);
+      }
+      select.value = String(state.simulation[key]);
+      select.addEventListener("change", () => {
+        state.simulation = normalizeSimulation({...state.simulation, [key]: Number(select.value)});
+        void render();
+      });
+      row.append(element("span", {class: "sim-label"}, setting.label), select);
+      return row;
+    }));
     parts.sliders.replaceChildren(...Object.entries(CONTROLS).map(([key, control]) => {
       const row = element("label", {class: "slider"});
       const value = element("output", {class: "slider-value"}, String(state.controls[key]));
@@ -635,17 +733,44 @@ export function createApp(root, {data, anatomy = null, loadData = defaultLoadDat
     return render();
   };
 
+  /** The named plans of the species, grouped by the operation they are.
+   *
+   * A reader who looks for a hepatectomy should not read a row of names to
+   * find one: the plans sit under the operation they belong to, in the order
+   * of the operations and with the shade of that operation, so the row of the
+   * planner, the legend of the drawing and these buttons agree.
+   */
   const buildPresets = () => {
-    parts.presets.replaceChildren(...Object.entries(of_species().cases).map(([name, entry]) => {
-      const button = element("button", {class: "preset", type: "button"}, entry.label);
-      button.addEventListener("click", () => {
-        state.states = stateOfCase(entry, tokens());
-        const kind = planSummary(of_species().lobes, state.states).kind;
-        if (kind !== undefined && kind !== "mixed") state.plan = {kind};
-        void render();
-      });
-      return button;
-    }));
+    const groups = new Map([...PROCEDURES.map(procedure => [procedure.id, []]), ["mixed", []]]);
+    for (const [name, entry] of Object.entries(of_species().cases)) {
+      const states = stateOfCase(entry, tokens());
+      const kind = planSummary(of_species().lobes, states).kind ?? "intact";
+      (groups.get(kind) ?? groups.get("mixed")).push({name, entry, states});
+    }
+    const nodes = [];
+    for (const [kind, cases] of groups) {
+      if (cases.length === 0) continue;
+      const procedure = PROCEDURES.find(entry => entry.id === kind);
+      const group = element("div", {class: "preset-group", "data-state": kind});
+      group.append(
+        element("span", {class: "preset-group-label", title: procedure?.label ?? "several operations at once"}, procedure?.group ?? "mixed"),
+      );
+      for (const {name, entry, states} of cases) {
+        const button = element("button", {
+          class: "preset", type: "button", "data-state": kind, "data-case": name,
+          title: `${entry.label}: the reference run of ${name}`,
+        }, presetLabel(entry.label, kind));
+        button.addEventListener("click", () => {
+          state.states = states;
+          const picked = planSummary(of_species().lobes, state.states).kind;
+          state.plan = {kind: picked === undefined || picked === "mixed" ? state.plan.kind : picked};
+          void render();
+        });
+        group.append(button);
+      }
+      nodes.push(group);
+    }
+    parts.presets.replaceChildren(...nodes);
   };
 
   colours = lobeColors(of_species().lobes);
@@ -688,6 +813,9 @@ export async function start(root = document) {
   const anatomy = drawings?.ok ? await drawings.json() : null;
   const app = createApp(root, {data, anatomy});
   await app.render();
+  // the explorer is both a page of its own and a figure of the documentation:
+  // on its own it takes the window, in a frame it is as tall as it needs to be
+  document.documentElement.dataset.framed = String(globalThis.parent !== undefined && globalThis.parent !== globalThis);
   const theme = () => {
     const parent = globalThis.parent?.document?.body?.dataset?.mdColorScheme;
     const dark = parent === "slate" || (parent === undefined && globalThis.matchMedia?.("(prefers-color-scheme: dark)").matches);
