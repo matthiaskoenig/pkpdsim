@@ -183,9 +183,14 @@ class Readout:
     """One timecourse of the model which a place of the figure reports.
 
     Attributes:
-        id: the id of the selection in the compiled model (`LI__Cpl_api`), as
+        id: the selection in the compiled model whose values this reports, as
             the id scheme gives it; it is not checked against a compiled model,
-            the consumer filters the ids the model does not contain.
+            the consumer filters the ids the model does not contain. The
+            concentration of a species is the bracket form (`[LI__Cpl_api]`),
+            since the plain id of a species with `hasOnlySubstanceUnits="false"`
+            selects its amount in `mmole` and not its concentration in `mM`; a
+            concentration which is a parameter (`Carm_api`, `LI__Cu_is_api`) and
+            every amount, rate and flux is the plain id.
         label: what it is, in words (`apixaban, liver plasma`).
         unit: the unit the model uses for it (`mmole/liter`).
         kind: `concentration`, `amount`, `rate` or `flux`.
@@ -219,6 +224,10 @@ _RATE = unit_text(U.mmole_per_min)
 def _compartments(organ: Organ, sid: str, name: str, form: str) -> tuple[Readout, ...]:
     """The readouts of a substance in an organ, by the tissue form of the substance.
 
+    The concentrations of the bound forms are the bracket selections of their
+    species (`[LI__Cpl_api]`), the unbound ones the plain ids of their
+    parameters; see `Readout.id`.
+
     Known limit: the ids are those of an organ without zones. A zonated organ
     (`OrganContent.variant` `zonated, N zones`) has the zone in its ids
     (`ids.species(..., zone=)`, `LI__Cpl_z1_api`), which are not given here.
@@ -226,10 +235,16 @@ def _compartments(organ: Organ, sid: str, name: str, form: str) -> tuple[Readout
     title = TITLES.get(organ.value, organ.value)
 
     def conc(part: Part, text: str, *, unbound: bool = False) -> Readout:
-        local = ids.unbound(part, sid) if unbound else ids.species(part, sid)
-        return Readout(
-            ids.flat(organ, local), f"{name}, {title} {text}", _CONC, "concentration"
-        )
+        if unbound:
+            # the unbound concentration is a parameter in `mM`, so its id is
+            # the selection of its values
+            selection = ids.flat(organ, ids.unbound(part, sid))
+        else:
+            # the bound forms are species with `hasOnlySubstanceUnits="false"`,
+            # whose plain id selects the amount in `mmole`; the concentration
+            # in `mM` is the bracket form, which is what this readout reports
+            selection = f"[{ids.flat(organ, ids.species(part, sid))}]"
+        return Readout(selection, f"{name}, {title} {text}", _CONC, "concentration")
 
     out = [conc(Part.PLASMA, "plasma")]
     if form == "organ":

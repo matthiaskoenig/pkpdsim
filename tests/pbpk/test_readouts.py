@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from xml.etree import ElementTree
 
-from pkpdsim.pbpk import Species, ids
+from pkpdsim.pbpk import Species, build, ids
 from pkpdsim.pbpk.figure import model_figure
 from pkpdsim.pbpk.organs import Organ
 from pkpdsim.pbpk.visual.anatomy import anatomy_figure
@@ -33,7 +33,7 @@ def test_an_organ_reports_its_substance_in_the_compartments_of_its_form() -> Non
             f = content.organs[organ].parts[chip.sid]
             got = [r.id for r in groups[f"{organ}/sub:{chip.sid}"].readouts]
             pre = ids.flat(Organ(organ), "")
-            assert got[0] == f"{pre}Cpl_{chip.sid}"
+            assert got[0] == f"[{pre}Cpl_{chip.sid}]"
             n = {"none": 1, "organ": 2, "merged": 3, "full": 5}[f]
             assert len(got) == n
     forms = {f for o in content.organs.values() for f in o.parts.values()}
@@ -52,7 +52,10 @@ def test_a_full_organ_reports_both_unbound_forms() -> None:
     pre = ids.flat(Organ(o), "")
     got = _groups()[f"{o}/sub:{s}"].readouts
     assert [r.id for r in got] == [
-        f"{pre}{x}_{s}" for x in ("Cpl", "Cis", "Cic", "Cu_is", "Cu_ic")
+        f"[{pre}{x}_{s}]"
+        if x.startswith("C") and not x.startswith("Cu_")
+        else f"{pre}{x}_{s}"
+        for x in ("Cpl", "Cis", "Cic", "Cu_is", "Cu_ic")
     ]
     assert {r.kind for r in got} == {"concentration"}
     assert {r.unit for r in got} == {"mmole/liter"}
@@ -68,7 +71,7 @@ def test_a_plasma_only_substance_reports_its_plasma_alone() -> None:
     ]
     o, s = hits[0]
     got = _groups()[f"{o}/sub:{s}"].readouts
-    assert [r.id for r in got] == [ids.flat(Organ(o), f"Cpl_{s}")]
+    assert [r.id for r in got] == [f"[{ids.flat(Organ(o), f'Cpl_{s}')}]"]
 
 
 def test_the_three_ways_to_point_at_the_sample_agree() -> None:
@@ -157,7 +160,7 @@ def test_a_zonated_organ_reports_the_ids_without_a_zone() -> None:
     content = ModelContent.of(seven_substances())
     assert "zonated" in (content.organs["li"].variant or "")
     got = [r.id for r in _groups()["li/sub:api"].readouts]
-    assert got[0] == "LI__Cpl_api"
+    assert got[0] == "[LI__Cpl_api]"
     assert not any("_z1_" in i for i in got)
 
 
@@ -247,3 +250,46 @@ def test_the_schematic_draws_keys_the_readouts_do_not_return(tmp_path: Path) -> 
     assert "gu" in missing
     assert "ki/urine" in missing
     assert "lumen/feces" in missing
+
+
+def test_a_concentration_readout_selects_a_concentration_of_the_model(
+    tmp_path: Path,
+) -> None:
+    """Every readout names a selection whose values carry the unit it reports.
+
+    The plain id of a species with `hasOnlySubstanceUnits="false"` selects its
+    amount in `mmole`, so a concentration readout of such a species has to be
+    the bracket form; a concentration which is a parameter is the plain id.
+    Checked against the compiled model rather than against the id scheme,
+    because the scheme alone cannot say which ids are species.
+    """
+    definition = seven_substances()
+    sbml = build(definition, tmp_path).flat_path.read_text(encoding="utf-8")
+    root = ElementTree.fromstring(sbml)
+    ns = {"s": root.tag.split("}")[0].strip("{")}
+    amounts = {
+        e.get("id")
+        for e in root.iter(f"{{{ns['s']}}}species")
+        if e.get("hasOnlySubstanceUnits") == "false"
+    }
+    parameters = {e.get("id") for e in root.iter(f"{{{ns['s']}}}parameter")}
+
+    seen = 0
+    for group in readouts(ModelContent.of(definition)).values():
+        for readout in group.readouts:
+            if readout.kind != "concentration":
+                continue
+            bare = readout.id[1:-1] if readout.id.startswith("[") else readout.id
+            if bare not in amounts and bare not in parameters:
+                continue  # an id the model does not carry, the consumer filters it
+            seen += 1
+            if bare in amounts:
+                assert readout.id == f"[{bare}]", (
+                    f"{bare} is a species whose plain id selects an amount, so the "
+                    f"concentration readout has to be its bracket form"
+                )
+            else:
+                assert readout.id == bare, (
+                    f"{bare} is a parameter, so its concentration is the plain id"
+                )
+    assert seen > 20, f"only {seen} concentration readouts were checked"
