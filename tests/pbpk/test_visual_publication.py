@@ -44,11 +44,11 @@ def test_the_legend_is_below_the_panels(figure: Path) -> None:
 
 
 def test_the_legend_names_the_credit_once(figure: Path) -> None:
-    md = figure.with_name("figure_legend.md").read_text()
+    md = figure.with_name("figure_legend.md").read_text(encoding="utf-8")
     assert md.count("[pkpdsim](https://github.com/matthiaskoenig/pkpdsim)") == 1
     assert md.count("https://matthiaskoenig.github.io/pkpdsim/pbpk/") == 1
     assert "Routes: iv api" in md
-    svg = figure.read_text()
+    svg = figure.read_text(encoding="utf-8")
     assert len(re.findall(r"Created with", svg)) == 1
 
 

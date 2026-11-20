@@ -270,15 +270,15 @@ def test_write_replaces_an_older_version_of_the_cell_model(tmp_path: Path) -> No
         tmp_path,
         cell_model=_toy(),
     )
-    older = (tmp_path / f"{TOY_ID}.xml").read_text()
+    older = (tmp_path / f"{TOY_ID}.xml").read_text(encoding="utf-8")
     newer = toy_cell_model(processes=("UP",))
     write(
         compose(_builder(), TOY_ID, CellPorts(), exchange=("drg",)),
         tmp_path,
         cell_model=newer,
     )
-    assert (tmp_path / f"{TOY_ID}.xml").read_text() != older
-    assert "p_UP" in (tmp_path / f"{TOY_ID}.xml").read_text()
+    assert (tmp_path / f"{TOY_ID}.xml").read_text(encoding="utf-8") != older
+    assert "p_UP" in (tmp_path / f"{TOY_ID}.xml").read_text(encoding="utf-8")
 
 
 def test_write_refuses_to_overwrite_another_model(tmp_path: Path) -> None:
@@ -291,14 +291,14 @@ def test_write_refuses_to_overwrite_another_model(tmp_path: Path) -> None:
         sbml_version=2,
         validate=False,
     )
-    before = (tmp_path / f"{TOY_ID}.xml").read_text()
+    before = (tmp_path / f"{TOY_ID}.xml").read_text(encoding="utf-8")
     with pytest.raises(FileExistsError, match="something_else"):
         write(
             compose(_builder(), TOY_ID, CellPorts(), exchange=("drg",)),
             tmp_path,
             cell_model=_toy(),
         )
-    assert (tmp_path / f"{TOY_ID}.xml").read_text() == before
+    assert (tmp_path / f"{TOY_ID}.xml").read_text(encoding="utf-8") == before
 
 
 def test_write_refuses_a_cell_model_of_another_id(tmp_path: Path) -> None:

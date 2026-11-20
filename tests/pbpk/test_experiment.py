@@ -278,7 +278,11 @@ def test_importing_the_library_imports_no_simulator() -> None:
         "and REFERENCE_GFR == experiment.REFERENCE_GFR == 101.0)"
     )
     result = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
     )
     assert result.stdout.split() == ["[]", "True"]
     import pkpdsim.pbpk

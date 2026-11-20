@@ -21,6 +21,10 @@ def test_import_is_light() -> None:
         "or m.startswith('pkpdsim.')))"
     )
     result = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
     )
     assert result.stdout.strip() == "[]"

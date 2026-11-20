@@ -49,6 +49,7 @@ def _commit(repo: Path, day: str, message: str) -> str:
         check=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     ).stdout.strip()
 
 

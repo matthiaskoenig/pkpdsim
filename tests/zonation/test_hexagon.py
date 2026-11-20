@@ -205,7 +205,7 @@ def test_the_map_is_vector_and_uses_no_pyplot(tmp_path: Path) -> None:
     assert isinstance(fig, Figure)
     assert plt.get_fignums() == before
     fig.savefig(tmp_path / "lobule.svg")
-    text = (tmp_path / "lobule.svg").read_text()
+    text = (tmp_path / "lobule.svg").read_text(encoding="utf-8")
     assert "<image" not in text
     assert text.count("<path") >= N
 
