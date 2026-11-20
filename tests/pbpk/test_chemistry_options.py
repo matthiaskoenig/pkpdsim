@@ -42,6 +42,7 @@ from pkpdsim.pbpk import (
     ids,
 )
 from pkpdsim.pbpk.builder import BuildResult
+from pkpdsim.pbpk.chemistry import fraction_range
 from pkpdsim.sbml.domains import NONNEGATIVE
 
 from .conftest import (
@@ -763,6 +764,18 @@ def _split(
 _F_M1 = _fitted(0.3, "normal(0.3, 0.05, 0.01, 0.6)")
 
 
+def test_the_range_of_a_fitted_fraction_stays_in_the_unit_interval() -> None:
+    """The support of an untruncated fit is cut to the unit interval."""
+    f = _fitted(0.9, "normal(0.9, 0.2)")
+    assert fraction_range(f) == (0.0, 1.0)
+
+
+def test_the_range_of_a_truncated_fit_is_its_support() -> None:
+    """A support inside the unit interval is not widened to it."""
+    f = _fitted(0.9, "normal(0.9, 0.2, 0.5, 0.95)")
+    assert fraction_range(f) == (0.5, 0.95)
+
+
 @pytest.mark.parametrize(
     ("products", "match"),
     [
@@ -775,20 +788,8 @@ _F_M1 = _fitted(0.3, "normal(0.3, 0.05, 0.01, 0.6)")
             "DRG2M: the product fractions can sum to 1.1",
         ),
         (
-            {"drg_m1": _fitted(0.5, "normal(0.5, 0.1)"), "drg_m3": REST},
-            "DRG2M: the product fractions can sum to inf > 1",
-        ),
-        (
             {"drg_m1": Value(0.7, U.dimensionless), "drg_m2": 0.5, "drg_m3": REST},
             "DRG2M: the product fractions can sum to 1.2",
-        ),
-        (
-            {"drg_m1": _fitted(0.5, "uniform(0.0, 1.5)"), "drg_m3": REST},
-            "DRG2M: the product fractions can sum to 1.5",
-        ),
-        (
-            {"drg_m1": _fitted(0.5, "normal(0.5, 0.1, -0.1, 0.6)"), "drg_m3": REST},
-            "DRG2M: product fraction of 'drg_m1' can be -0.1",
         ),
         (
             {"drg_m1": 1.0, "drg_m3": REST},
@@ -838,6 +839,29 @@ def test_fractions_which_can_exceed_one_are_refused(
     a formula cannot be bounded.
     """
     assert match in _problems(_definition([_split(products)]))
+
+
+@pytest.mark.parametrize(
+    ("distribution", "expected"),
+    [
+        ("normal(0.5, 0.1)", (0.0, 1.0)),
+        ("uniform(0.0, 1.5)", (0.0, 1.0)),
+        ("normal(0.5, 0.1, -0.1, 0.6)", (0.0, 0.6)),
+    ],
+)
+def test_a_fit_beyond_the_unit_interval_is_cut_to_the_fraction(
+    distribution: str, expected: tuple[float, float]
+) -> None:
+    """The support of a fit is intersected with the unit interval.
+
+    These distributions leave it (an unbounded normal, a uniform up to 1.5, a
+    truncation below 0), but a fraction is in it: the range ends at 0 and 1,
+    so the fraction alone cannot make the remainder negative and the
+    definition is valid.
+    """
+    f = _fitted(0.5, distribution)
+    assert fraction_range(f) == expected
+    _definition([_split({"drg_m1": f, "drg_m3": REST})]).validate()
 
 
 def test_the_fractions_of_a_metabolism_are_parameters(tmp_path: Path) -> None:

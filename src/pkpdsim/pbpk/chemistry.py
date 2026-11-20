@@ -38,6 +38,7 @@ from pkpdsim.pbpk.values import (
     check_unit,
     number,
 )
+from pkpdsim.sbml.domains import FRACTION
 
 __all__ = [
     "LINEAR",
@@ -420,7 +421,8 @@ def check_products(p: Metabolism) -> list[str]:
     sum at 1 for every value; the remainder is never negative: the sum of
     the upper ends of the ranges of the other fractions (`fraction_range`)
     is at most 1, and not always 1 (a remainder of 0). Every fraction is
-    positive and its range not negative; a `Formula` cannot be bounded.
+    positive and its range is cut to the unit interval (`fraction_range`); a
+    `Formula` cannot be bounded.
 
     Args:
         p: the metabolism.
@@ -438,7 +440,6 @@ def check_products(p: Metabolism) -> list[str]:
         problems.append(f"{p.sid}: the remainder REST needs another product")
     low_sum = high_sum = total = 0.0
     values: list[str] = []
-    ranges: list[str] = []
     for product, f in p.products.items():
         if isinstance(f, Rest):
             continue
@@ -454,11 +455,6 @@ def check_products(p: Metabolism) -> list[str]:
         low, high = fraction_range(f)
         if x is None or not x > 0:
             problems.append(f"{p.sid}: {where} must be positive, got {x}")
-        elif low < 0:
-            ranges.append(
-                f"{p.sid}: {where} can be {low:g} (the support of the "
-                "distribution of its draws), a fraction is never negative"
-            )
         total += x or 0.0
         low_sum += low
         high_sum += high
@@ -466,7 +462,6 @@ def check_products(p: Metabolism) -> list[str]:
             values.append(product)
     if problems:
         return problems
-    problems += ranges
     if rest:
         if high_sum > 1.0 + 1e-9:
             problems.append(
@@ -496,7 +491,18 @@ def fraction_range(f: float | Value) -> tuple[float, float]:
 
     The distribution of the draws of a fitted value (the uncertainty of
     `fitted`, truncated to the bounds of the fit) is the range a fit or an
-    uncertainty run gives the fraction (`sbmlsim.distrib.support`).
+    uncertainty run gives the fraction (`sbmlsim.distrib.support`). The
+    support is intersected with the domain of a fraction (`FRACTION`, the unit
+    interval), which an untruncated distribution leaves: a fraction a fit
+    gives is never below 0 or above 1. A support inside the unit interval is
+    kept as it is. The value itself is never moved, so a value outside the
+    unit interval stays visible to the checks of the caller.
+
+    Args:
+        f: a fixed fraction or a `Value`, fixed or fitted.
+
+    Returns:
+        The lower and the upper end of the range.
     """
     if not isinstance(f, Value):
         return float(f), float(f)
@@ -505,7 +511,7 @@ def fraction_range(f: float | Value) -> tuple[float, float]:
         for child in u.uncertParameters or []:
             if child.type != libsbml.DISTRIB_UNCERTTYPE_DISTRIBUTION or not child.math:
                 continue
-            lo, hi = distrib.support(child.math)
+            lo, hi = FRACTION.clip(*distrib.support(child.math))
             low, high = min(low, lo), max(high, hi)
     return low, high
 
