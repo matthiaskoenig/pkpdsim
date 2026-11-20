@@ -11,6 +11,8 @@ Every compartment, species, parameter and reaction which the PBPK library create
 
 An input of an organ or of a PD component, which the element of the body replaces in the comp model, takes the annotation of that element, so the comp model and the flat model carry the same terms.
 
+`annotate` also writes the domain of the kind, the interval of values the model accepts for the element, as a `distrib` uncertainty named `domain`, unless the element already carries one; see [Domains](domains.md).
+
 ## Ontology and qualifiers
 
 The PBPKO terms are those of the pinned pymetadata (`pymetadata.ontologies.pbpko`). A kind takes the organ-specific PBPKO term where PBPKO has one for the organ (`VOLUME_OF_LIVER`, `BLOOD_FLOW_RATE_TO_KIDNEY`, `LIVER_PLASMA_PARTITION_COEFFICIENT`, `MAXIMUM_RATE_IN_LIVER`); the small and the large intestine take the term of the intestine where PBPKO has none of their own (`MAXIMUM_RATE_IN_INTESTINE`), adipose tissue is `FAT` in PBPKO.

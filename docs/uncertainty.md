@@ -45,6 +45,8 @@ A parameter which no adopted fit has, and a parameter which two adopted fits hav
 
 The uncertainty is a `distrib:uncertainty` of the SBML parameter with the confidence interval, the standard error and the distribution the draws come from, see [The uncertainty in the SBML](https://matthiaskoenig.github.io/sbmlsim/uncertainty/#the-uncertainty-in-the-sbml) of sbmlsim for the children and the rule by which the distribution follows from the profile. The draws are independent per parameter; the correlations of the Fisher information stay in the record.
 
+The uncertainty of a parameter is not its domain. The uncertainty says what is known about the value, the domain says what values the model accepts for the quantity at all (a fraction lies in [0, 1] however well or badly its value is known), and the posterior of a fit is a third statement. A model states the domain in its own `distrib` uncertainty named `domain`, next to the uncertainty of the value, and the draws and the bounds of an analysis are checked against it, never taken for it; see [Domains](pbpk/domains.md).
+
 ## Running over the draws
 
 `run_simulation <package> --uncertainty` runs the experiments over draws of the fitted parameters of the model into the folder `simulation_uncertainty` of the results; without the option the experiments run once into `simulation`, as before:

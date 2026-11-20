@@ -83,3 +83,17 @@ def test_a_citation_of_an_unknown_source_is_refused() -> None:
         assert "Nobody1900" in str(err)
     else:
         raise AssertionError("an unknown citation was accepted")
+
+
+def test_the_domain_table_has_a_row_per_kind() -> None:
+    """The table of the domains lists every kind once, as the summary counts it."""
+    script = _script()
+    kinds = script.ANNOTATION_KINDS
+    rows = script.domains_kinds().splitlines()
+    assert [r.split("|")[1].strip() for r in rows if r.startswith("| `")] == [
+        f"`{name}`" for name in kinds
+    ]
+    summary = script.domains_summary()
+    assert f"| all kinds | {len(kinds)} |" in summary
+    stated = sum(k.domain is not None for k in kinds.values())
+    assert f"| none | {len(kinds) - stated} |" in summary
