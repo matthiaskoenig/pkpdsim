@@ -16,16 +16,20 @@ from sbmlutils.factory import (
     UncertSpan,
     create_model,
 )
+from sbmlutils.io.antimony import sbml_to_antimony
 
 from pkpdsim.sbml.domains import (
+    BOOLEAN,
     DOMAIN,
     FRACTION,
     NONNEGATIVE,
     REAL,
     Domain,
+    Values,
     domain_of,
     domain_uncertainty,
     domains,
+    integers,
 )
 
 
@@ -270,3 +274,79 @@ def test_writing_a_domain_logs_no_sbmlutils_warning(
             filepath=tmp_path / "m.xml",
         )
     assert [r.getMessage() for r in caplog.records] == []
+
+
+def test_a_boolean_domain_is_the_integers_of_zero_and_one() -> None:
+    assert Domain(0, 1, Values.BOOLEAN) == BOOLEAN
+
+
+def test_an_integer_domain_does_not_contain_a_non_integral_value() -> None:
+    assert not integers(0, 3).contains(2.5)
+    assert integers(0, 3).contains(2)
+
+
+def test_a_continuous_domain_contains_a_non_integral_value() -> None:
+    assert FRACTION.contains(0.94)
+
+
+def test_clip_of_an_integer_domain_returns_a_value_it_contains() -> None:
+    d = integers(0, 3)
+    for x in (-1.0, 0.4, 2.5, 7.0):
+        assert d.contains(d.clip(x))
+
+
+def test_the_text_of_an_integer_domain_states_its_value_set() -> None:
+    assert str(integers(0, 3)) == "[0, 3] integer"
+    assert str(BOOLEAN) == "[0, 1] boolean"
+    assert str(FRACTION) == "[0, 1]"
+
+
+def _one_parameter(tmp_path: Path, d: Domain) -> Path:
+    return _write(
+        tmp_path,
+        [
+            Parameter(
+                sid="x",
+                value=1,
+                unit="dimensionless",
+                uncertainties=[domain_uncertainty(d)],
+            )
+        ],
+    )
+
+
+def test_an_integer_domain_round_trips_through_sbml(tmp_path: Path) -> None:
+    path = _one_parameter(tmp_path, integers(0, 3))
+    assert domains(path) == {"x": integers(0, 3)}
+    assert domains(path)["x"].values is Values.INTEGER
+
+
+def test_a_boolean_domain_round_trips_through_sbml(tmp_path: Path) -> None:
+    path = _one_parameter(tmp_path, BOOLEAN)
+    assert domains(path) == {"x": BOOLEAN}
+
+
+def test_a_continuous_domain_writes_no_value_set(tmp_path: Path) -> None:
+    path = _one_parameter(tmp_path, FRACTION)
+    model = _read(path)  # the model owns the elements, keep it alive
+    uncertainty = model.getParameter("x").getPlugin("distrib").getUncertainty(0)
+    assert uncertainty.getNumUncertParameters() == 1
+    assert isinstance(uncertainty.getUncertParameter(0), libsbml.UncertSpan)
+
+
+@pytest.mark.parametrize("d", [integers(0, 3), BOOLEAN])
+def test_a_document_with_an_integer_domain_validates(tmp_path: Path, d: Domain) -> None:
+    path = _one_parameter(tmp_path, d)
+    doc = libsbml.readSBMLFromFile(str(path))
+    doc.checkConsistency()
+    assert doc.getNumErrors() == 0
+
+
+@pytest.mark.parametrize("d", [integers(0, 3), BOOLEAN])
+def test_antimony_loads_a_document_with_an_integer_domain(
+    tmp_path: Path, d: Domain
+) -> None:
+    # the archive of a model is written through antimony, which refuses an
+    # externalParameter without a value
+    path = _one_parameter(tmp_path, d)
+    assert sbml_to_antimony(path)

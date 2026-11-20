@@ -67,6 +67,7 @@ from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.substance import Mode, Substance
 from pkpdsim.sbml.annotation import TAXA, initial_assignment
 from pkpdsim.sbml.domains import (
+    BOOLEAN,
     DOMAIN,
     FRACTION,
     NONNEGATIVE,
@@ -309,8 +310,9 @@ class Kind:
             (the kinetics of the processes, `MICHAELIS_CONSTANT__LIVER`).
         is_place: the element is the place itself (the whole organ of a
             flow-limited organ), so the terms of the place are `BQB.IS`.
-        domain: the interval of values the model accepts for an element of
-            the kind, written as its `domain` uncertainty. `None` for a kind
+        domain: the values the model accepts for an element of the kind (an
+            interval, and whether every real number in it, the integers or
+            the two truth values), written as its `domain` uncertainty. `None` for a kind
             whose element holds no number (a reaction) and for the two kinds
             of a constant the model states itself (`definition_parameter`,
             `custom_parameter`), whose `ModelParameter` states its own.
@@ -678,7 +680,7 @@ KINDS: dict[str, Kind] = {
         _P,
         _PHYS,
         requested="presence of a lobe of the liver (1 in place, 0 resected)",
-        domain=FRACTION,
+        domain=BOOLEAN,
     ),
     "remnant_fraction": Kind(
         _P,
@@ -776,8 +778,8 @@ KINDS: dict[str, Kind] = {
         _P,
         _PHYS,
         terms=(_DISEASES["ckd"],),
-        requested="stage of chronic kidney disease",
-        domain=FRACTION,
+        requested="switch of the hepatic changes of chronic kidney disease",
+        domain=BOOLEAN,
     ),
     "cirrhosis_factor": Kind(
         _P,
@@ -1135,7 +1137,7 @@ KINDS: dict[str, Kind] = {
         _MISC,
         terms=((BQB.IS_VERSION_OF, "ncit/C65056"),),  # postprandial
         requested="prandial state (fed or fasted)",
-        domain=FRACTION,
+        domain=BOOLEAN,
     ),
     "intestine_geometry": Kind(
         _P,

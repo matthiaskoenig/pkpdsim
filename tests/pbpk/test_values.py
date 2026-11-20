@@ -5,7 +5,7 @@ from sbmlutils.factory import Uncertainty, UncertParameter
 
 from pkpdsim.pbpk import MODEL_UNITS, Formula, U, Value, as_value, fitted
 from pkpdsim.pbpk.values import check_domain, equal_by_value
-from pkpdsim.sbml.domains import FRACTION
+from pkpdsim.sbml.domains import BOOLEAN, FRACTION
 
 
 def test_fitted_takes_fit_record_kwargs() -> None:
@@ -96,3 +96,9 @@ def test_check_domain_passes_a_formula() -> None:
     """A formula has no number to check."""
     formula = Formula("1 - fabs_drg", U.dimensionless)
     assert check_domain("parameter 'f'", "value", formula, FRACTION) == []
+
+
+def test_check_domain_reports_a_non_integral_value_of_a_boolean() -> None:
+    """A flag of 0.5 is neither off nor on."""
+    (problem,) = check_domain("parameter 'ckd'", "value", 0.5, BOOLEAN)
+    assert "0.5" in problem and "[0, 1] boolean" in problem

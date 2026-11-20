@@ -68,11 +68,13 @@ from pkpdsim.pbpk.builder import BuildResult, build
 from pkpdsim.pbpk.distribution import constant
 from pkpdsim.pbpk.values import Value
 from pkpdsim.sbml.domains import (
+    BOOLEAN,
     DOMAIN,
     FRACTION,
     NONNEGATIVE,
     REAL,
     Domain,
+    Values,
     domain_uncertainty,
 )
 from pkpdsim.sbml.parameters import value_parameter
@@ -613,12 +615,10 @@ _WITHOUT_DOMAIN = [
 #: the kinds whose element is a share, a probability or a switch of 0 and 1
 _FRACTIONS = [
     "arm_weight",
-    "ckd",
     "depot_fraction_im",
     "depot_fraction_inhaled",
     "depot_fraction_rectal",
     "depot_fraction_sc",
-    "fed",
     "flow_fraction",
     "fraction_absorbed",
     "fraction_reabsorbed",
@@ -627,7 +627,6 @@ _FRACTIONS = [
     "inhaled_swallowed_fraction",
     "interstitial_fraction",
     "lobe_patency",
-    "lobe_present",
     "lobe_supply_fraction",
     "placement_weight",
     "pool_fraction",
@@ -709,3 +708,32 @@ def test_a_gross_fraction_and_an_abundance_are_not_shares() -> None:
     assert KINDS["absorbed_fraction"].domain == NONNEGATIVE
     assert KINDS["relative_abundance"].domain == NONNEGATIVE
     assert KINDS["placement_weight"].domain == FRACTION
+
+
+def test_the_switch_of_renal_impairment_is_a_boolean() -> None:
+    assert KINDS["ckd"].domain == BOOLEAN
+
+
+def test_the_flags_of_the_library_are_booleans() -> None:
+    assert sorted(k for k, v in KINDS.items() if v.domain == BOOLEAN) == [
+        "ckd",
+        "fed",
+        "lobe_present",
+    ]
+
+
+def test_the_severities_stay_continuous_between_their_classes() -> None:
+    # the model interpolates every factor linearly between the classes and a
+    # scan or the severity of a MELD score takes values like 1.5, so an integer
+    # domain would forbid what the model computes
+    for kind in ("child_pugh", "heart_failure"):
+        domain = KINDS[kind].domain
+        assert domain is not None
+        assert domain.values is Values.CONTINUOUS
+
+
+def test_the_bounds_of_every_integer_kind_are_integral() -> None:
+    for kind in KINDS.values():
+        d = kind.domain
+        if d is not None and d.values is not Values.CONTINUOUS:
+            assert d.lower == int(d.lower) and d.upper == int(d.upper)

@@ -69,7 +69,7 @@ PBPKO has no term for some of the quantities, compartments and processes of the 
 | portosystemic shunt fraction | `PHYSIOLOGICAL_PARAMETER` |
 | severity of hepatic impairment | `PHYSIOLOGICAL_PARAMETER` |
 | severity of heart failure | `PHYSIOLOGICAL_PARAMETER` |
-| stage of chronic kidney disease | `PHYSIOLOGICAL_PARAMETER` |
+| switch of the hepatic changes of chronic kidney disease | `PHYSIOLOGICAL_PARAMETER` |
 | impairment factor | `PHYSIOLOGICAL_PARAMETER` |
 | factor of the age on a physiological quantity | `PHYSIOLOGICAL_PARAMETER` |
 | factor of the sex on a physiological quantity | `PHYSIOLOGICAL_PARAMETER` |
