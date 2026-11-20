@@ -12,6 +12,40 @@ export const CONTROLS = {
   portal: {parameter: null, label: "portal inflow [x reference]", min: 0, max: 2, step: 0.05, value: 1},
 };
 
+/** The settings of one simulation: how long it runs, how finely it is read
+ * out and how much of the marker drug the individual is given.
+ *
+ * They are not parameters of the model: `end`, `points` and `dose` of the
+ * request of the contract are what they set (`lobeRequest`), so a reader who
+ * moves them asks for another run of the same liver. The defaults are the ones
+ * `scripts/lobes_examples.py` precomputed the reference runs with, so a named
+ * plan at the defaults is served from the committed data and anything else is
+ * run here.
+ */
+export const SIMULATION = {
+  days: {label: "days simulated", short: "days", choices: [1, 2, 3, 5, 7, 10, 14], value: 5},
+  points: {label: "time points of the output", short: "points", choices: [31, 61, 121, 241, 481], value: 121},
+  dose: {label: "dose of the marker [mg]", short: "dose [mg]", choices: [0, 1, 5, 10, 25, 50], value: 10},
+};
+
+/** The settings of the page with every value checked, the defaults filled in. */
+export function normalizeSimulation(simulation = {}) {
+  const values = {};
+  for (const [key, setting] of Object.entries(SIMULATION)) {
+    const value = Number(simulation[key] ?? setting.value);
+    if (!Number.isFinite(value)) throw new RangeError(`The setting ${key} must be a finite number.`);
+    if (!setting.choices.includes(value)) throw new RangeError(`The setting ${key} must be one of ${setting.choices.join(", ")}.`);
+    values[key] = value;
+  }
+  return values;
+}
+
+/** The configuration of a run: the shipped one, with the settings on top. */
+export function configOf(config, simulation = {}) {
+  const values = normalizeSimulation(simulation);
+  return {...config, end: values.days * 24 * 60, points: values.points, dose: values.dose};
+}
+
 /** The gates of the lobes an inflow control asks for.
  *
  * A branch of a lobe is opened and closed by the gate `pkpdsim.pbpk.lobes`
@@ -171,11 +205,11 @@ export async function createLobeSolver({host = globalThis.sbmlsimCore, loadAsset
   return {
     configs,
     config(name) { return configs[name]; },
-    async simulate(name, controls, changes, {signal} = {}) {
+    async simulate(name, controls, changes, {signal, simulation} = {}) {
       if (closed) throw new Error("The solver of the lobes is closed.");
       if (!configs[name]) throw new RangeError(`The ${name} has no compiled model on this page.`);
       signal?.throwIfAborted();
-      const request = lobeRequest(controls, changes, configs[name]);
+      const request = lobeRequest(controls, changes, configOf(configs[name], simulation));
       if (!worker) spawn();
       const result = await new Promise((resolve, reject) => {
         const id = ++nextId;

@@ -48,6 +48,11 @@ class Element {
 
 const descendants = element => [element, ...element.children.flatMap(descendants)];
 
+// the named plans sit in a group per operation, so a button of one is found by
+// the case of the dataset it carries and not by the row it is in
+const presets = byId => byId.get("presets").children.flatMap(group => group.children).filter(node => node.getAttribute("data-case"));
+const preset = (byId, name) => presets(byId).find(button => button.getAttribute("data-case") === name);
+
 function stub() {
   const elements = [...html.matchAll(/<([a-z][\w-]*)\s+([^>]*?)>/gi)].map(match => {
     const attributes = Object.fromEntries([...match[2].matchAll(/([\w-]+)(?:="([^"]*)")?/g)].map(a => [a[1], a[2] ?? ""]));
@@ -77,8 +82,8 @@ function fakeSolver(calls) {
   return async () => ({
     configs: {},
     config: () => ({}),
-    async simulate(species, controls, changes) {
-      calls.push({species, controls, changes});
+    async simulate(species, controls, changes, options = {}) {
+      calls.push({species, controls, changes, options});
       const series = data.species[species].cases.intact.series;
       // a recognizable live result: the remnant falls to half
       return {series: {...series, f_remnant: series.f_remnant.map(() => 0.5)}, provenance: {}};
@@ -128,9 +133,9 @@ test("the explorer shows a preset, cycles a lobe and runs live when a control mo
   assert.equal(byId.get("removed").children.length, 0);
 
   // the presets fill the liver
-  const preset = byId.get("presets").children.find(button => button.textContent === "hepatectomy70");
-  assert.ok(preset, "the named procedures of the rat are presets");
-  preset.click();
+  const chosen = preset(byId, "hepatectomy70");
+  assert.ok(chosen, "the named procedures of the rat are presets");
+  chosen.click();
   await delay(0);
   assert.equal(app.state.states.lll, "resected");
   assert.equal(app.state.states.cl, "intact");
@@ -263,9 +268,9 @@ test("the planner selects the lobes of a procedure and the presets fill it", asy
   const app = createApp(host, {data, solverFactory: fakeSolver([])});
   await app.render();
 
-  // the planner offers the three procedures of the library
+  // the planner offers the intact liver and the three procedures of the library
   const kinds = byId.get("plan-kind").children;
-  assert.deepEqual(kinds.map(button => button.getAttribute("data-kind")), ["portal", "arterial", "resected"]);
+  assert.deepEqual(kinds.map(button => button.getAttribute("data-kind")), ["intact", "portal", "arterial", "resected"]);
   // and one chip per lobe of the species, in the order of the lobe table
   const chips = () => byId.get("plan-lobes").children;
   assert.deepEqual(chips().map(chip => chip.getAttribute("data-lobe")), data.species.rat.lobes.map(lobe => lobe.token));
@@ -284,7 +289,7 @@ test("the planner selects the lobes of a procedure and the presets fill it", asy
   assert.equal(app.state.states.lll, "intact");
 
   // a preset sets the procedure and its lobes, and the planner shows both
-  byId.get("presets").children.find(button => button.textContent === "pvl70").click();
+  preset(byId, "pvl70").click();
   await delay(0);
   assert.equal(app.state.plan.kind, "portal");
   const lit = chips().filter(chip => chip.getAttribute("aria-pressed") === "true").map(chip => chip.getAttribute("data-lobe"));
@@ -294,8 +299,7 @@ test("the planner selects the lobes of a procedure and the presets fill it", asy
   // the summary of the plan is the mass of the liver it covers
   assert.match(byId.get("plan-summary").textContent, /[Pp]ortal vein ligation of lll, lml, rml/);
   assert.match(byId.get("plan-summary").textContent, /70 %/);
-  const h90 = byId.get("presets").children.find(button => button.textContent === "hepatectomy90");
-  h90.click();
+  preset(byId, "hepatectomy90").click();
   await delay(0);
   assert.equal(app.state.plan.kind, "resected");
   assert.match(byId.get("plan-summary").textContent, /10 %/, "the remnant of a 90 % hepatectomy");
@@ -303,20 +307,69 @@ test("the planner selects the lobes of a procedure and the presets fill it", asy
   app.close();
 });
 
-test("the run button runs the compiled model even for a committed case", async () => {
+test("a setting of the simulation runs the compiled model with what it asks for", async () => {
   const {byId, root: host} = stub();
   const calls = [];
   const app = createApp(host, {data, solverFactory: fakeSolver(calls)});
   await app.render();
   assert.equal(app.state.source, "precomputed");
-  assert.equal(calls.length, 0);
-  byId.get("run").click();
+  assert.equal(calls.length, 0, "the committed run answers the defaults");
+
+  // the page has no run button: a setting of the simulation is a run of its own
+  assert.equal(byId.get("run"), undefined, "there is no run button");
+  const setting = key => byId.get("sim").children.find(row => row.children[1].getAttribute("data-setting") === key).children[1];
+  const days = setting("days");
+  days.value = "10";
+  days.dispatch("change");
   await delay(0);
-  assert.equal(calls.length, 1, "the reader asked for a run of their own");
+  assert.equal(calls.length, 1, "the days which are asked for are run");
+  assert.equal(calls.at(-1).options.simulation.days, 10);
   assert.equal(app.state.source, "live");
   // and the time it took is on the page
   assert.match(byId.get("runtime").textContent, /\d+ (ms|s)$/);
   assert.equal(byId.get("spinner").hidden, true, "the spinner is gone once the run is back");
+
+  const dose = setting("dose");
+  dose.value = "25";
+  dose.dispatch("change");
+  await delay(0);
+  assert.equal(calls.at(-1).options.simulation.dose, 25);
+  assert.equal(calls.at(-1).options.simulation.days, 10, "the settings hold together");
+
+  // the reset puts the settings back, so the committed run answers again
+  byId.get("reset").click();
+  await delay(0);
+  assert.deepEqual(app.state.simulation, {days: 5, points: 121, dose: 10});
+  assert.equal(app.state.source, "precomputed");
+  app.close();
+});
+
+test("a run which is back is played from its first day", async () => {
+  const {byId, root: host} = stub();
+  const app = createApp(host, {data, solverFactory: fakeSolver([])});
+  await app.render();
+  // the course of a run is played as soon as it is there: a reader sees what
+  // the intervention does without asking for it
+  assert.equal(app.state.playing, true);
+  assert.equal(app.state.time, 0);
+  assert.equal(byId.get("play").getAttribute("aria-pressed"), "true");
+
+  app.advance(1000);
+  const walked = app.state.time;
+  assert.ok(walked > 0, `${walked}`);
+
+  // a plan which is picked plays its own course from the first day again
+  preset(byId, "hepatectomy70").click();
+  await delay(0);
+  assert.equal(app.state.time, 0, "the new course starts at day 0");
+  assert.equal(app.state.playing, true);
+
+  // a reader who takes the scrub bar keeps the day they put it on
+  const scrub = byId.get("scrub");
+  scrub.value = String(2 * 24 * 60);
+  scrub.dispatch("input");
+  assert.equal(app.state.playing, false, "the scrub bar pauses the course");
+  assert.equal(byId.get("clock").textContent, "day 2");
   app.close();
 });
 
@@ -333,11 +386,9 @@ test("the spinner is shown while the model runs", async () => {
   const running = app.run();
   await delay(0);
   assert.equal(byId.get("spinner").hidden, false, "the spinner says the model is running");
-  assert.equal(byId.get("run").attributes.disabled, "", "the run button is disabled while it runs");
   release();
   await running;
   assert.equal(byId.get("spinner").hidden, true);
-  assert.equal(byId.get("run").attributes.disabled, undefined);
   app.close();
 });
 
@@ -346,6 +397,9 @@ test("play walks the days of the course and stops at the end", async () => {
   const app = createApp(host, {data, solverFactory: fakeSolver([])});
   await app.render();
   const end = data.provenance.end_time;
+  // the run which is shown is playing already, so the button pauses it first
+  assert.equal(app.state.playing, true);
+  byId.get("play").click();
   assert.equal(app.state.playing, false);
   byId.get("play").click();
   assert.equal(app.state.playing, true);
@@ -396,7 +450,7 @@ test("a lobe is drawn in its own colour and its state is a shade of it", async (
   // the outline of the whole liver shows what a resection took away
   const frame = () => descendants(byId.get("liver")).find(node => (node.className ?? "").includes("liver-frame"));
   assert.equal(frame().hidden || frame().getAttribute("opacity") === "0", true, "the intact liver needs no outline");
-  byId.get("presets").children.find(button => button.textContent === "hepatectomy70").click();
+  preset(byId, "hepatectomy70").click();
   await delay(0);
   assert.notEqual(frame().getAttribute("opacity"), "0", "the lost mass is outlined");
   app.close();
@@ -411,8 +465,8 @@ test("every committed case is recognised, whatever order its changes were writte
   await app.render();
   for (const species of ["rat", "mouse", "human"]) {
     await app.setSpecies(species);
-    for (const [name, entry] of Object.entries(data.species[species].cases)) {
-      byId.get("presets").children.find(button => button.textContent === entry.label).click();
+    for (const name of Object.keys(data.species[species].cases)) {
+      preset(byId, name).click();
       await delay(0);
       assert.equal(app.state.source, "precomputed", `${species} ${name} is a committed run`);
     }
@@ -425,7 +479,7 @@ test("a resected lobe keeps a box of its own colour, shaded as resected", async 
   const {byId, root: host} = stub();
   const app = createApp(host, {data, solverFactory: fakeSolver([])});
   await app.render();
-  byId.get("presets").children.find(button => button.textContent === "hepatectomy70").click();
+  preset(byId, "hepatectomy70").click();
   await delay(0);
   const chips = byId.get("removed").children;
   assert.deepEqual(chips.map(chip => chip.getAttribute("data-lobe")), ["lll", "lml", "rml"]);
@@ -540,14 +594,69 @@ test("the dashboard switches between the volumes and the pressures of a run", as
   const value = token => descendants(byId.get("liver"))
     .find(node => node.getAttribute("data-lobe") === token).children
     .find(child => (child.className ?? "").includes("liver-value"))?.textContent ?? "";
-  assert.match(value("cl"), /mmHg$/);
+  assert.match(value("lll"), /mmHg$/);
+  // a block too narrow for a value of nine characters carries none: it would
+  // be drawn over its own edge, and the colour and the legend still name it
+  assert.equal(value("cl"), "", "the caudate lobe holds 6 % of the mass");
 
   // no run is needed: it is the same result, read differently
   views.find(button => button.getAttribute("data-view") === "volume").click();
   await delay(0);
   assert.equal(app.state.view, "volume");
-  assert.match(value("cl"), /ml$/);
+  assert.match(value("lll"), /ml$/);
   assert.equal(app.state.source, "precomputed");
+  app.close();
+});
+
+test("a species is picked by its animal, and the sex is a choice under it", async () => {
+  const anatomy = JSON.parse(await readFile(new URL("lobes-anatomy.json", root), "utf8"));
+  const {byId, root: host} = stub();
+  const app = createApp(host, {data, anatomy, solverFactory: fakeSolver([])});
+  await app.render();
+
+  // the three species, each with the animal of the physiology figures on it
+  const species = byId.get("species").children;
+  assert.deepEqual(species.map(button => button.getAttribute("data-species")), ["rat", "mouse", "human"]);
+  assert.equal(species[0].getAttribute("aria-pressed"), "true", "the rat is the species of the page");
+  for (const button of species) {
+    const icon = button.children.find(child => (child.className ?? "").includes("species-icon"));
+    assert.ok(icon, `${button.getAttribute("data-species")} carries its animal`);
+    assert.equal(icon.tagName, "svg");
+  }
+
+  // the sex is a choice under the species, and offers what that species has
+  const sexes = () => byId.get("sex").children;
+  assert.deepEqual(sexes().map(button => button.textContent), ["male", "female"]);
+  assert.equal(sexes()[1].attributes.disabled, "", "the database has no female rat");
+  await app.setSpecies("human");
+  assert.equal(sexes()[1].attributes.disabled, undefined, "the database has the female human");
+  app.close();
+});
+
+test("the named plans are grouped by the operation they are", async () => {
+  const {byId, root: host} = stub();
+  const app = createApp(host, {data, solverFactory: fakeSolver([])});
+  await app.render();
+
+  // one group per operation the cases of the species cover, in the order of
+  // the operations of the planner
+  const groups = byId.get("presets").children;
+  assert.deepEqual(groups.map(group => group.getAttribute("data-state")), ["intact", "portal", "resected"]);
+  assert.deepEqual(groups.map(group => group.children[0].textContent), ["intact", "PVL", "resection"]);
+
+  // a button of a group says what is left of the name of its case: the group
+  // above it already says the operation
+  const labels = group => group.children.filter(node => node.getAttribute("data-case")).map(node => node.textContent);
+  assert.deepEqual(labels(groups[0]), ["whole liver"], "the intact liver is the plan which puts everything back");
+  assert.deepEqual(labels(groups[1]), ["70 %", "90 %", "lll"]);
+  assert.deepEqual(labels(groups[2]), ["70 %", "90 %", "lll"]);
+  for (const button of groups[1].children.filter(node => node.getAttribute("data-case"))) {
+    assert.equal(button.getAttribute("data-state"), "portal", "a plan carries the shade of its operation");
+  }
+
+  // and the operations of the planner carry the same shade
+  const kinds = byId.get("plan-kind").children;
+  assert.deepEqual(kinds.map(button => button.getAttribute("data-state")), ["intact", "portal", "arterial", "resected"]);
   app.close();
 });
 

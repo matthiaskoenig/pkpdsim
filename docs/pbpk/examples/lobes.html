@@ -28,17 +28,8 @@
 <body>
   <main id="app" aria-busy="true">
     <header class="app-header">
-      <div class="title-row">
-        <div>
-          <span class="eyebrow">pkpdsim / liver lobe examples</span>
-          <h1>Plan a portal vein ligation or a hepatectomy</h1>
-        </div>
-        <div class="switches">
-          <div id="species" class="mode-switch" role="group" aria-label="Species"></div>
-          <div id="sex" class="mode-switch" role="group" aria-label="Sex of the individual"></div>
-        </div>
-      </div>
-      <p>Pick the procedure and the lobes it acts on, then run the five days which follow: the flows redistribute at once, the deportalised lobes atrophy and their neighbours grow.</p>
+      <span class="eyebrow">pkpdsim / liver lobe examples</span>
+      <h1>Build a liver, then watch what an intervention does to it</h1>
     </header>
 
     <p id="loading" role="status">Loading the reference livers...</p>
@@ -51,44 +42,52 @@
     <div id="workspace" hidden>
       <section class="panel planner" aria-labelledby="plan-heading">
         <div class="section-heading">
-          <h2 id="plan-heading">1 &middot; The plan</h2>
-          <div id="presets" class="presets" role="group" aria-label="Named procedures"></div>
+          <h2 id="plan-heading">1 &middot; The virtual model</h2>
+          <p class="section-note">the individual and the operation it is planned for; every change runs the model at once</p>
         </div>
         <div class="plan-grid">
+          <div class="plan-field species-field">
+            <span class="field-label" id="species-label">species</span>
+            <div id="species" class="species-switch" role="group" aria-labelledby="species-label"></div>
+            <div id="sex" class="mode-switch sex-switch" role="group" aria-label="Sex of the individual"></div>
+          </div>
           <div class="plan-field">
-            <span class="field-label" id="kind-label">procedure</span>
-            <div id="plan-kind" class="mode-switch" role="group" aria-labelledby="kind-label"></div>
+            <span class="field-label" id="kind-label">operation</span>
+            <div id="plan-kind" class="mode-switch operations" role="group" aria-labelledby="kind-label"></div>
           </div>
           <div class="plan-field">
             <span class="field-label" id="lobes-label">lobes it acts on</span>
             <div id="plan-lobes" class="plan-lobes" role="group" aria-labelledby="lobes-label"></div>
           </div>
+          <div class="plan-field grow">
+            <span class="field-label" id="presets-label">named plans</span>
+            <div id="presets" class="presets" role="group" aria-labelledby="presets-label"></div>
+          </div>
         </div>
         <p id="plan-summary" class="plan-summary"></p>
         <details class="controls">
-          <summary>Model controls and the time of the surgery</summary>
+          <summary>Physiology of the run and the time of the surgery</summary>
           <div id="sliders" class="sliders"></div>
-          <p class="explanation">The gain of the buffer response is the fraction of a lost portal inflow the hepatic artery of that lobe compensates, the growth constant sets how fast the anatomy follows, and the time of the surgery decides whether the intervention is applied before the simulation or to the running model. A named procedure at the default controls is a precomputed reference run; anything else runs the compiled model here.</p>
+          <p class="explanation">The gain of the buffer response is the fraction of a lost portal inflow the hepatic artery of that lobe compensates, the growth constant sets how fast the anatomy follows, and the time of the surgery decides whether the intervention is applied before the simulation or to the running model. A named plan at the default controls is a precomputed reference run; anything else runs the compiled model here.</p>
         </details>
-        <div class="run-row">
-          <button type="button" id="run" class="primary">Run simulation</button>
-          <span id="spinner" class="spinner" role="status" aria-label="the model is running" hidden></span>
-          <span id="runtime" class="runtime"></span>
-          <span class="run-gap"></span>
-          <button type="button" id="reset">Reset</button>
-          <button type="button" id="download">Download CSV</button>
-        </div>
-        <p id="status" role="status" class="explanation run-status"></p>
       </section>
 
       <section class="panel" aria-labelledby="dash-heading">
         <div class="section-heading">
-          <h2 id="dash-heading">2 &middot; The five days which follow</h2>
-          <div id="views" class="mode-switch" role="group" aria-label="What the dashboard reads out"></div>
-          <div class="player">
-            <button type="button" id="play" aria-pressed="false" title="play the days after the intervention">Play</button>
-            <input type="range" id="scrub" value="0" aria-label="the day which is shown">
-            <output id="clock" class="slider-value">day 0</output>
+          <h2 id="dash-heading">2 &middot; The days which follow</h2>
+          <div class="section-controls">
+            <div id="sim" class="sim" role="group" aria-label="Settings of the simulation"></div>
+            <div class="player">
+              <button type="button" id="play" aria-pressed="false" title="play the days after the intervention">Pause</button>
+              <input type="range" id="scrub" value="0" aria-label="the day which is shown">
+              <output id="clock" class="slider-value">day 0</output>
+            </div>
+            <div id="views" class="mode-switch" role="group" aria-label="What the dashboard reads out"></div>
+            <span id="spinner" class="spinner" role="status" aria-label="the model is running" hidden></span>
+            <span id="runtime" class="runtime"></span>
+            <span class="run-gap"></span>
+            <button type="button" id="reset">Reset</button>
+            <button type="button" id="download">Download CSV</button>
           </div>
         </div>
         <div class="dashboard">
@@ -108,6 +107,7 @@
             <div id="plot-exposure" class="plot-host"></div>
           </div>
         </div>
+        <p id="status" role="status" class="explanation run-status"></p>
       </section>
 
       <footer class="app-footer">
