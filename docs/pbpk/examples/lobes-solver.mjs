@@ -23,9 +23,9 @@ export const CONTROLS = {
  * run here.
  */
 export const SIMULATION = {
-  days: {label: "days simulated", choices: [1, 2, 3, 5, 7, 10, 14], value: 5},
-  points: {label: "time points", choices: [31, 61, 121, 241, 481], value: 121},
-  dose: {label: "dose of the marker [mg]", choices: [0, 1, 5, 10, 25, 50], value: 10},
+  days: {label: "days simulated", short: "days", choices: [1, 2, 3, 5, 7, 10, 14], value: 5},
+  points: {label: "time points of the output", short: "points", choices: [31, 61, 121, 241, 481], value: 121},
+  dose: {label: "dose of the marker [mg]", short: "dose [mg]", choices: [0, 1, 5, 10, 25, 50], value: 10},
 };
 
 /** The settings of the page with every value checked, the defaults filled in. */

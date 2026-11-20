@@ -677,7 +677,7 @@ export function createApp(root, {data, anatomy = null, loadData = defaultLoadDat
     // the settings of one simulation: how long it runs, how finely it is read
     // out and the dose of the marker drug the exposure is read from
     parts.sim.replaceChildren(...Object.entries(SIMULATION).map(([key, setting]) => {
-      const row = element("label", {class: "sim-setting"});
+      const row = element("label", {class: "sim-setting", title: setting.label});
       const select = element("select", {class: "sim-select", "data-setting": key, "aria-label": setting.label});
       for (const choice of setting.choices) {
         const option = element("option", {value: String(choice)}, String(choice));
@@ -689,7 +689,7 @@ export function createApp(root, {data, anatomy = null, loadData = defaultLoadDat
         state.simulation = normalizeSimulation({...state.simulation, [key]: Number(select.value)});
         void render();
       });
-      row.append(element("span", {class: "sim-label"}, setting.label), select);
+      row.append(element("span", {class: "sim-label"}, setting.short ?? setting.label), select);
       return row;
     }));
     parts.sliders.replaceChildren(...Object.entries(CONTROLS).map(([key, control]) => {
