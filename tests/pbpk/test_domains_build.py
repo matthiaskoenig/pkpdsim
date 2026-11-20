@@ -24,20 +24,44 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from sbmlutils.factory import Parameter
+from sbmlutils.factory import Species as SpeciesSBML
 
 from pkpdsim.pbpk import (
+    REST,
     Adipose,
+    Binding,
+    Circadian,
+    CustomReaction,
+    Direction,
+    Excretion,
     FirstOrder,
+    Formula,
+    Hill,
+    Kp,
     LumenConversion,
+    Membrane,
     Metabolism,
+    Mode,
+    ModelParameter,
+    Observer,
     Organ,
+    Part,
     PBPKDefinition,
     Pregnancy,
+    PrescribedVolume,
+    RateOf,
     RegionalAbsorption,
     Route,
+    Saturable,
     SegmentedIntestine,
     Sex,
     Species,
+    Substance,
+    ThresholdReabsorption,
+    Transport,
+    U,
+    Value,
     Variants,
     ZonatedLiver,
     ids,
@@ -45,8 +69,7 @@ from pkpdsim.pbpk import (
 from pkpdsim.pbpk.builder import build
 from pkpdsim.pbpk.interventions import scenarios
 from pkpdsim.pbpk.pregnancy import TERM
-from pkpdsim.pbpk.units import U
-from pkpdsim.pbpk.values import Formula
+from pkpdsim.pbpk.remodelling import FlowDriven
 from pkpdsim.pbpk.variants.liver_lobes import LobedLiver
 from pkpdsim.sbml.domains import (
     BOOLEAN,
@@ -58,6 +81,7 @@ from pkpdsim.sbml.domains import (
     domains,
     integers,
 )
+from pkpdsim.zonation.settings import Geometry
 
 from .conftest import (
     chemistry_reference_definition,
@@ -95,9 +119,9 @@ DAY = 24 * 60.0
 SAMPLE = 30.0
 """The interval between the points of a time course (min)."""
 
-MIN_IDS = 400
+MIN_IDS = 350
 """The floor of the ids a shape checks: a sweep which checks nothing looks like a
-green run. The shapes check 459 (the impaired default) to 995 (endogenous)."""
+green run. The shapes check 385 (the steady state, no gut) to 995 (endogenous)."""
 
 Individual = tuple[dict[str, float], float]
 """The changes of an individual before the initialization and the span (min)
@@ -247,15 +271,272 @@ def _shapes() -> dict[str, Callable[[], Shape]]:
                 )
             ],
             routes=[Route.iv("drg")],
-            variants=Variants(organs={Organ.LIVER: LobedLiver()}),
+            variants=Variants(
+                organs={Organ.LIVER: LobedLiver(remodelling=FlowDriven())}
+            ),
         )
         changes = scenarios(Species.RAT)["hepatectomy90"].changes(RAT_TOKENS)
-        return d, [(changes | _iv("drg"), DAY), (_iv("drg"), DAY)]
+        # the remodelling of the remnant takes days
+        return d, [(changes | _iv("drg"), 7 * DAY), (_iv("drg"), DAY)]
 
     def impaired() -> Shape:
         d = definition(sid="impaired")
         worst = {ids.CP_SEVERITY: 3.0, ids.HF_SEVERITY: 4.0, ids.F_RENAL_FUNCTION: 0.05}
         return d, [(worst | _both("drg"), DAY)]
+
+    def readouts() -> Shape:
+        # the readouts of the intestine and an observer of a species of an organ,
+        # on an intestine whose fabs is a fraction of the dose (pkpdsim#207)
+        flat = ids.flat(Organ.MUSCLE, ids.species(Part.TISSUE, "drg"))
+        d = definition(
+            sid="readouts",
+            variants=Variants(
+                organs={Organ.SMALL_INTESTINE: SegmentedIntestine(fabs=0.94)}
+            ),
+            chemistry=[
+                Transport(
+                    "DRGEFF",
+                    Organ.SMALL_INTESTINE,
+                    "drg",
+                    Direction.EFFLUX,
+                    Membrane.APICAL,
+                    FirstOrder(k=0.1, per_volume=False),
+                )
+            ],
+            readouts=tuple(
+                f"{r}_drg" for r in ("Alumen", "Rabs", "Reff", "Rfeces", "Aabs", "Fa")
+            ),
+            observers=[Observer("Cmu_twice", f"2 dimensionless * {flat}", U.mM, "x2")],
+        )
+        return d, [({ids.po_dose("drg"): DOSE}, 2 * DAY)]
+
+    def depots() -> Shape:
+        d = definition(
+            sid="depots",
+            routes=[
+                Route.iv("drg"),
+                Route.oral("drg"),
+                Route.oral_solution("drg"),
+                Route.im("drg"),
+                Route.sc("drg"),
+                Route.rectal("drg"),
+                Route.inhaled("drg"),
+            ],
+        )
+        return d, [({_dose(r): DOSE for r in d.routes}, DAY)]
+
+    def circadian() -> Shape:
+        d = definition(sid="circadian", circadian=Circadian())
+        return d, [({ids.CLOCK: c} | _both("drg"), DAY) for c in (0.0, 8.0, 20.0)]
+
+    def steady() -> Shape:
+        # the generated steady state of an endogenous substance: a source, a
+        # linear clearance and a saturable secretion
+        chemistry = [
+            CustomReaction(
+                "PROD",
+                Organ.MUSCLE,
+                Part.TISSUE,
+                "-> Cti_end",
+                "k_prod",
+                stationary=Formula("k_prod", U.mmole_per_min),
+            ),
+            CustomReaction(
+                "LICL",
+                Organ.LIVER,
+                Part.TISSUE,
+                "Cti_end ->",
+                "k_cl * Vti * Cti_end",
+                stationary="linear",
+            ),
+            CustomReaction(
+                "SEC",
+                Organ.KIDNEY,
+                Part.PLASMA,
+                "Cpl_end -> Aurine_end",
+                "Vm * Cpl_end / (Km + Cpl_end)",
+                stationary=Saturable("Vm", "Km"),
+            ),
+        ]
+        d = PBPKDefinition(
+            sid="steady",
+            substances=[
+                Substance(
+                    "end",
+                    name="endogenous substance",
+                    mr=113.1,
+                    binding=Binding(fu=0.5, protein="albumin"),
+                    distribution=Kp(0.6, ftissue=6.0),
+                    excretion=Excretion(urine=True),
+                )
+            ],
+            chemistry=chemistry,
+            parameters=[
+                ModelParameter("k_prod", 0.0074, U.mmole_per_min, domain=NONNEGATIVE),
+                ModelParameter("k_cl", 0.01, U.per_min, domain=NONNEGATIVE),
+                ModelParameter("Vm", 0.01, U.mmole_per_min, domain=NONNEGATIVE),
+                ModelParameter("Km", 0.05, U.mM, domain=NONNEGATIVE),
+            ],
+        )
+        return d, [({}, DAY)]
+
+    def processes() -> Shape:
+        # the options of a process which create parameters: a clearance of the
+        # whole organ and one per litre, a Hill law, a ratio of two capacities, a
+        # product fraction by a value and by the remainder, and an interstitial
+        # scale of the distribution
+        d = definition(
+            sid="processes",
+            substances=[
+                Substance(
+                    "drg",
+                    name="drug",
+                    mr=300.0,
+                    binding=Binding(fu=0.1, protein="albumin"),
+                    distribution=Kp(
+                        interstitial=1.0, overrides={Organ.LIVER: 2.0}, ftissue=1.0
+                    ),
+                    excretion=Excretion(urine=True),
+                ),
+                Substance(
+                    "drg_m1",
+                    name="metabolite 1",
+                    mr=316.0,
+                    excretion=Excretion(
+                        urine=True, reabsorption=ThresholdReabsorption(0.1, 2.0)
+                    ),
+                ),
+                Substance("drg_m2", name="metabolite 2", mr=332.0),
+            ],
+            chemistry=[
+                Metabolism(
+                    "DRG2M",
+                    Organ.LIVER,
+                    "drg",
+                    products={
+                        "drg_m1": Value(0.25, U.dimensionless),
+                        "drg_m2": REST,
+                    },
+                    kinetics=FirstOrder(k=0.05, per_volume=False),
+                    protein="CYP3A4",
+                ),
+                Metabolism(
+                    "DRG2MB",
+                    Organ.LIVER,
+                    "drg",
+                    products={"drg_m1": 1.0},
+                    kinetics=FirstOrder(RateOf("DRG2M", 0.5), per_volume=False),
+                    protein="CYP3A4",
+                ),
+                Transport(
+                    "DRGIM",
+                    Organ.LIVER,
+                    "drg",
+                    Direction.INFLUX,
+                    Membrane.BASOLATERAL,
+                    FirstOrder(k=0.1, per_volume=False),
+                ),
+                Transport(
+                    "DRGIM2",
+                    Organ.LIVER,
+                    "drg",
+                    Direction.INFLUX,
+                    Membrane.BASOLATERAL,
+                    FirstOrder(k=0.1),
+                ),
+                Transport(
+                    "DRGSEC",
+                    Organ.LIVER,
+                    "drg",
+                    Direction.EFFLUX,
+                    Membrane.APICAL,
+                    Hill(vmax=1e-3, km=0.01, n=2.0),
+                ),
+            ],
+            routes=[Route.iv("drg"), Route.oral("drg")],
+        )
+        return d, [(_both("drg"), DAY)]
+
+    def sinusoid() -> Shape:
+        # the lobes of the rat with the remodelling of their volumes and the
+        # zones of a sinusoid (the resistance network has algebraic rules which
+        # roadrunner cannot simulate, so its kinds stay unreached)
+        liver = LobedLiver(
+            zonation=ZonatedLiver(n_zones=3, geometry=Geometry.SINUSOID),
+            remodelling=FlowDriven(),
+        )
+        d = definition(
+            sid="sinusoid",
+            species=Species.RAT,
+            substances=[
+                Substance(
+                    "drg",
+                    name="drug",
+                    mr=300.0,
+                    binding=Binding(fu=0.1, protein="albumin"),
+                    distribution=Kp(2.0, mode=Mode.PERMEABILITY, ftissue=1.0),
+                    excretion=Excretion(urine=True),
+                ),
+                *definition().substances[1:],
+            ],
+            routes=[Route.iv("drg")],
+            variants=Variants(organs={Organ.LIVER: liver}),
+        )
+        changes = scenarios(Species.RAT)["hepatectomy90"].changes(RAT_TOKENS)
+        return d, [(changes | _iv("drg"), DAY), (_iv("drg"), DAY)]
+
+    def aged() -> Shape:
+        # the covariates over the age
+        d = definition(sid="aged", adipose=Adipose(), age=True)
+        return d, [({ids.AGE: age} | _both("drg"), DAY) for age in (20.0, 60.0)]
+
+    def amounts() -> Shape:
+        # an amount of a custom reaction and an observer which reads it
+        reaction = CustomReaction(
+            "DRGDEEP",
+            Organ.MUSCLE,
+            Part.TISSUE,
+            "Cti_drg -> Adeep_drg",
+            "k_deep * Vti * Cti_drg",
+            parameters=[Parameter("k_deep", 1e-3, U.per_min)],
+            species=[
+                SpeciesSBML(
+                    "Adeep_drg",
+                    "Vti",
+                    initialAmount=0.0,
+                    substanceUnit=U.mmole,
+                    hasOnlySubstanceUnits=True,
+                )
+            ],
+        )
+        deep = ids.flat(Organ.MUSCLE, "Adeep_drg")
+        d = definition(
+            sid="amounts",
+            chemistry=[reaction],
+            observers=[Observer("Adeep_total", deep, U.mmole, "deep amount")],
+        )
+        return d, [(_iv("drg"), DAY)]
+
+    def prescribed() -> Shape:
+        # the volume of a lobe which follows a prescribed course
+        curve = Formula(
+            f"{ids.VLI_REF} * 0.3 dimensionless * "
+            "(1 dimensionless + 1 dimensionless * time / 7200 min)",
+            "l",
+        )
+        d = definition(
+            sid="prescribed",
+            species=Species.RAT,
+            routes=[Route.iv("drg")],
+            variants=Variants(
+                organs={
+                    Organ.LIVER: LobedLiver(
+                        remodelling=PrescribedVolume({"lll": curve})
+                    )
+                }
+            ),
+        )
+        return d, [(_iv("drg"), DAY)]
 
     return {
         "reference": lambda: _reference(reference_definition),
@@ -269,6 +550,15 @@ def _shapes() -> dict[str, Callable[[], Shape]]:
         "pregnancy": pregnancy,
         "hepatectomy": hepatectomy,
         "impaired": impaired,
+        "readouts": readouts,
+        "depots": depots,
+        "circadian": circadian,
+        "steady": steady,
+        "processes": processes,
+        "sinusoid": sinusoid,
+        "prescribed": prescribed,
+        "aged": aged,
+        "amounts": amounts,
     }
 
 
