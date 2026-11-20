@@ -14,6 +14,9 @@ wrong, which is a bug of the library.
 The limit of the check: the sweep shows that no domain is too narrow for the
 values the models actually reach, and it cannot show that an upper bound is too
 wide when no value ever approaches it. A green file is no proof of more.
+The check reads sample points (every 30 min of the course), not an envelope, so
+a brief excursion between two points is not seen; a monotone quantity like the
+fraction absorbed of pkpdsim#207 is caught either way.
 """
 
 import math
@@ -76,9 +79,9 @@ after the dose has passed, `IVDOSE_drg`) dips to -3e-17 at this tolerance and to
 -3e-12 at the default one of roadrunner. The integrator runs at abs 1e-12 and
 rel 1e-10; with it the worst excursion beyond any bound across every shape,
 measured with tolerance 0, is 2.6e-17, all of it states decaying to 0, so the
-tolerance is noise and no slack for a real violation. It is absolute only: no quantity of
-the sweep left its upper bound at all, so a relative slack would only widen the
-domains (the bug of pkpdsim#207 is a bound off by 13 percent)."""
+tolerance is noise and no slack for a real violation. It is absolute only: no
+quantity of the sweep left its upper bound at all, so a relative slack would
+only widen the domains (the bug of pkpdsim#207 is a bound off by 13 percent)."""
 
 RAT_TOKENS = ("cl", "lll", "lml", "rl", "rml")
 """The lobes of the liver of the rat."""
@@ -89,8 +92,12 @@ DOSE = 10.0
 DAY = 24 * 60.0
 """A day (min)."""
 
-POINTS = 49
-"""The points of a time course (every 30 min of a day)."""
+SAMPLE = 30.0
+"""The interval between the points of a time course (min)."""
+
+MIN_IDS = 400
+"""The floor of the ids a shape checks: a sweep which checks nothing looks like a
+green run. The shapes check 459 (the impaired default) to 995 (endogenous)."""
 
 Individual = tuple[dict[str, float], float]
 """The changes of an individual before the initialization and the span (min)
@@ -116,11 +123,10 @@ def _outside(
     outside = []
     for uid, d in bounds.items():
         x = values[uid]
-        inside = d.lower - ABS_TOL <= x <= d.upper + ABS_TOL
-        if inside and d.values is not Values.CONTINUOUS:
-            inside = abs(x - round(x)) <= ABS_TOL
-        if not inside:
-            outside.append((uid, when, x, str(d)))
+        if d.values is not Values.CONTINUOUS and abs(x - round(x)) <= ABS_TOL:
+            x = float(round(x))
+        if not Domain(d.lower - ABS_TOL, d.upper + ABS_TOL, d.values).contains(x):
+            outside.append((uid, when, values[uid], str(d)))
     return sorted(outside)
 
 
@@ -134,16 +140,20 @@ def _check(path: Path, changes: dict[str, float], span: float) -> int:
 
     Returns:
         The number of quantities checked.
+
+    Raises:
+        AssertionError: if fewer than `MIN_IDS` quantities have a domain.
     """
     bounds = domains(path)
     r = individual(path, **changes)
     r.integrator.absolute_tolerance = 1e-12
     r.integrator.relative_tolerance = 1e-10
     names = sorted(bounds)
+    assert len(names) >= MIN_IDS, f"only {len(names)} quantities have a domain"
     start = {uid: float(r.getValue(uid)) for uid in names}
     outside = _outside(start, bounds, "t=0")
     r.timeCourseSelections = ["time", *names]
-    result = r.simulate(0.0, span, POINTS)
+    result = r.simulate(0.0, span, round(span / SAMPLE) + 1)
     for row in result:
         values = dict(zip(names, map(float, row[1:]), strict=True))
         outside += _outside(values, bounds, f"t={row[0]:g}")
@@ -151,7 +161,7 @@ def _check(path: Path, changes: dict[str, float], span: float) -> int:
     first = {}
     for entry in outside:
         first.setdefault(entry[0], entry)
-    assert sorted(first.values()) == []
+    assert sorted(first.values()) == [], f"individual {changes}"
     return len(names)
 
 
@@ -270,8 +280,8 @@ def test_every_value_of_a_build_is_inside_its_domain(name: str, tmp_path: Path) 
     """Every quantity with a domain stays in it, at the start and along the time course."""
     d, individuals = SHAPES[name]()
     path = build(d, tmp_path).flat_path
-    checked = {_check(path, changes, span) for changes, span in individuals}
-    assert checked == {len(domains(path))}
+    for changes, span in individuals:
+        _check(path, changes, span)
 
 
 def test_the_check_names_a_value_outside_and_absorbs_noise() -> None:

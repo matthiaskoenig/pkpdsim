@@ -60,6 +60,14 @@ def test_clip_keeps_a_bound_which_is_the_bound() -> None:
     assert FRACTION.clip(1.0, 1.0) == (1.0, 1.0)
 
 
+def test_contains_rejects_what_is_not_finite() -> None:
+    """An infinite bound is open and a state which blows up is no value."""
+    for d in (NONNEGATIVE, REAL):
+        for x in (math.inf, -math.inf, math.nan):
+            assert not d.contains(x)
+    assert REAL.contains(-1e300)
+
+
 def test_contains_accepts_the_bounds() -> None:
     assert FRACTION.contains(0.0) and FRACTION.contains(1.0)
     assert not FRACTION.contains(1.0000001)

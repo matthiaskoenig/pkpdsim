@@ -153,13 +153,13 @@ class Domain:
     def contains(self, value: float) -> bool:
         """Whether a value is one the domain accepts, the bounds included.
 
-        An integer or boolean domain accepts only an integral value.
+        An integer or boolean domain accepts only an integral value. No domain
+        accepts a value which is not finite: an infinite bound is open
+        (`[0, inf)`), so `inf` is no value of it, and `nan` is no number at all.
         """
-        if not self.lower <= value <= self.upper:
+        if not math.isfinite(value) or not self.lower <= value <= self.upper:
             return False
-        if self.values is Values.CONTINUOUS:
-            return True
-        return math.isfinite(value) and value == int(value)
+        return self.values is Values.CONTINUOUS or value == int(value)
 
     def __str__(self) -> str:
         """Interval notation: a finite bound is inclusive, an infinite one open.
