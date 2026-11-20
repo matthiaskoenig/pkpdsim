@@ -676,8 +676,11 @@ def assert_reference_sbml(result: BuildResult) -> None:
     boolean or integer domain as its `externalParameter`; additions only, the
     namespace of `distrib` in the root element where it was missing, and no
     value, note or annotation changed; a parameter with the uncertainty of its
-    source carries the domain last). The `ckd` text of the requested term
-    (`annotation.py`) is in none of them, they have no renal impairment.
+    source carries the domain last). The requested term of the `ckd` kind
+    changed in the same branch and is in none of these files, because a
+    requested term reaches the table of `docs/pbpk/annotation.md` and not the
+    SBML; the switch `CKD_hepatic` itself is in every reference, off, and
+    carries the boolean domain.
     """
     for path in (result.comp_path, result.flat_path):
         reference = gzip.decompress((REFERENCE / f"{path.name}.gz").read_bytes())
