@@ -66,6 +66,13 @@ from pkpdsim.pbpk.organs import Organ, Pool
 from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.substance import Mode, Substance
 from pkpdsim.sbml.annotation import TAXA, initial_assignment
+from pkpdsim.sbml.domains import (
+    DOMAIN,
+    FRACTION,
+    NONNEGATIVE,
+    Domain,
+    domain_uncertainty,
+)
 from pkpdsim.species import Species as BuildSpecies
 
 __all__ = [
@@ -301,6 +308,11 @@ class Kind:
             (the kinetics of the processes, `MICHAELIS_CONSTANT__LIVER`).
         is_place: the element is the place itself (the whole organ of a
             flow-limited organ), so the terms of the place are `BQB.IS`.
+        domain: the interval of values the model accepts for an element of
+            the kind, written as its `domain` uncertainty. `None` for a kind
+            whose element holds no number (a reaction) and for the two kinds
+            of a constant the model states itself (`definition_parameter`,
+            `custom_parameter`), whose `ModelParameter` states its own.
     """
 
     sbo: str | None
@@ -311,6 +323,7 @@ class Kind:
     requested: str | None = None
     per_organ: bool = True
     is_place: bool = False
+    domain: Domain | None = None
 
 
 _PHYS = "PHYSIOLOGICAL_PARAMETER"
@@ -533,7 +546,9 @@ KINDS: dict[str, Kind] = {
     "organ_mass": Kind(
         _P, _PHYS, organ="{}_MASS", requested="mass of organ", per_organ=False
     ),
-    "organ_volume": Kind(_P, "VOLUME_OF_COMPARTMENT", organ="VOLUME_OF_{}"),
+    "organ_volume": Kind(
+        _P, "VOLUME_OF_COMPARTMENT", organ="VOLUME_OF_{}", domain=NONNEGATIVE
+    ),
     "blood_volume": Kind(_P, "VOLUME_OF_BLOOD"),
     "pool_volume": Kind(
         _P,
@@ -896,7 +911,7 @@ KINDS: dict[str, Kind] = {
         _PHYS,
         requested="tubular flow fraction of the glomerular filtration rate",
     ),
-    "fraction_absorbed": Kind(_P, "UPTAKE_FRACTION_TO_BLOOD"),
+    "fraction_absorbed": Kind(_P, "UPTAKE_FRACTION_TO_BLOOD", domain=FRACTION),
     "colon_absorption": Kind(
         _P, _PHYS, requested="absorption factor of the large intestine"
     ),
@@ -1199,6 +1214,9 @@ def annotate[S: Sbase](
         SBO term of the element gives a generic one to an element without)
         and its terms added to its annotations; a term of the place whose
         resource the element has already (as what it is) is not repeated.
+        The domain of the kind is appended to its uncertainties, unless the
+        element states a domain already (a `ModelParameter` does), so an
+        element never carries two.
 
     Raises:
         KeyError: if the kind, the segment or the site is unknown.
@@ -1234,6 +1252,13 @@ def annotate[S: Sbase](
         element.sboTerm = k.sbo
     elif element.sboTerm is None:
         element.sboTerm = _DEFAULT_SBO[type(element).__name__]
+    if k.domain is not None and not any(
+        u.name == DOMAIN for u in element.uncertainties or []
+    ):
+        element.uncertainties = [
+            *(element.uncertainties or []),
+            domain_uncertainty(k.domain),
+        ]
     existing = list(element.annotations or [])
     element.annotations = existing + [
         t for t in dict.fromkeys(terms) if t not in existing

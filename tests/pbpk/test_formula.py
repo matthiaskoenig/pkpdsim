@@ -37,7 +37,7 @@ from pkpdsim.pbpk import (
 )
 from pkpdsim.pbpk.placement import formula_ids
 from pkpdsim.pbpk.values import as_value
-from pkpdsim.sbml.domains import FRACTION, NONNEGATIVE
+from pkpdsim.sbml.domains import DOMAIN, FRACTION, NONNEGATIVE
 
 from .conftest import (
     compiled,
@@ -167,7 +167,10 @@ def test_a_fitted_value_tied_by_a_formula_appears_once(tmp_path: Path) -> None:
         p.getId()
         for p in model.getListOfParameters()
         if p.getPlugin("distrib") is not None
-        and p.getPlugin("distrib").getNumUncertainties()
+        and any(
+            p.getPlugin("distrib").getUncertainty(i).getName() != DOMAIN
+            for i in range(p.getPlugin("distrib").getNumUncertainties())
+        )
     ]
     assert uncertain == [ids.kp("p")]
     r = compiled(flat)

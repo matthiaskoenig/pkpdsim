@@ -20,7 +20,8 @@ import libsbml
 import pytest
 from pymetadata.core.annotation import ProviderType, RDFAnnotation
 from pymetadata.ontologies.pbpko import PBPKO
-from sbmlutils.factory import Parameter, Species
+from sbmlutils.factory import Parameter, Reaction, Species, UncertParameter, UncertSpan
+from sbmlutils.factory import Uncertainty as SbmlUncertainty
 from sbmlutils.metadata import BQB
 
 from pkpdsim.annotations import compartments
@@ -58,11 +59,15 @@ from pkpdsim.pbpk.annotation import (
     POOLS,
     SEGMENTS,
     SITES,
+    annotate,
     model_annotations,
     pbpko,
     requested_terms,
 )
 from pkpdsim.pbpk.builder import BuildResult, build
+from pkpdsim.pbpk.values import Value
+from pkpdsim.sbml.domains import DOMAIN, FRACTION, domain_uncertainty
+from pkpdsim.sbml.parameters import value_parameter
 
 from .conftest import cardiac_pd
 
@@ -498,3 +503,59 @@ def test_outputs_of_the_model_are_output_parameters(built: BuildResult) -> None:
 def _url_of(name: str) -> str:
     """The resource of a PBPKO term by its name."""
     return pbpko(name)
+
+
+def _uncertainty_names(element: Parameter | Reaction) -> list[str | None]:
+    """The names of the uncertainties of an element."""
+    return [u.name for u in element.uncertainties or []]
+
+
+def test_annotate_writes_the_domain_of_the_kind() -> None:
+    p = annotate(Parameter("fabs_drg", 0.94, U.dimensionless), "fraction_absorbed")
+    assert _uncertainty_names(p) == [DOMAIN]
+
+
+def test_annotate_writes_no_domain_for_a_kind_without_one() -> None:
+    r = annotate(Reaction(sid="R", equation="A -> B"), "transport", organ=Organ.LIVER)
+    assert not _uncertainty_names(r)
+
+
+def test_annotate_keeps_the_domain_the_element_already_carries() -> None:
+    # the precedence of a ModelParameter over the kind
+    p = Parameter(
+        "fm_x", 0.3, U.dimensionless, uncertainties=[domain_uncertainty(FRACTION)]
+    )
+    annotate(p, "organ_volume", organ=Organ.LIVER)  # the domain is NONNEGATIVE
+    (span,) = (p.uncertainties or [])[0].uncertParameters or []
+    assert isinstance(span, UncertSpan)
+    assert _uncertainty_names(p) == [DOMAIN]
+    assert (span.valueLower, span.valueUpper) == (0.0, 1.0)
+
+
+def test_annotate_appends_the_domain_after_the_uncertainty_of_a_source() -> None:
+    p = value_parameter(
+        "Vli",
+        Value(
+            1.5,
+            U.litre,
+            "fit",
+            uncertainties=[
+                SbmlUncertainty(
+                    uncertParameters=[
+                        UncertParameter(
+                            type=libsbml.DISTRIB_UNCERTTYPE_STANDARDDEVIATION,
+                            value=0.1,
+                            unit=U.litre,
+                        )
+                    ],
+                    name="source fit",
+                )
+            ],
+        ),
+        U.litre,
+        "liver volume",
+        "SBO:0000002",
+        "",
+    )
+    annotate(p, "organ_volume", organ=Organ.LIVER)
+    assert _uncertainty_names(p) == ["source fit", DOMAIN]
