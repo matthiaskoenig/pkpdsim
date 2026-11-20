@@ -4,7 +4,7 @@ A model of the library states what every one of its quantities is (an SBO term, 
 
 ## What a domain is not
 
-A domain is the set of values the model accepts. It is not the uncertainty of a value, which is what is known about the value, and it is not the posterior of a fit, which is what the data say about it. The three are different statements and each has its own element in the SBML: a `distrib` uncertainty named `source ...` for the source of a value, the uncertainty of a fit with its distribution, and the uncertainty named `domain`. A value of 0.94 for a fraction absorbed may be known to within 0.02, and the data of a fit may support values from 0.85 to 0.99, and the domain of the quantity is still [0, 1], because a fraction absorbed is a fraction.
+A domain is the set of values the model accepts. It is not the uncertainty of a value, which is what is known about the value, and it is not the posterior of a fit, which is what the data say about it. The three are different statements and each has its own element in the SBML: a `distrib` uncertainty named `source ...` for the source of a value, the uncertainty of a fit with its distribution, and the uncertainty named `domain`. A value of 0.94 for a fraction absorbed may be known to within, say, 0.02, and the data of a fit may support values from 0.85 to 0.99, and the domain of the quantity is still [0, 1], because a fraction absorbed is a fraction.
 
 Conflating them is the root of [pkpdsim#207](https://github.com/matthiaskoenig/pkpdsim/issues/207). `library_parameters` varied every parameter of a sensitivity analysis by the same relative span, which knows nothing of what a value means: with the default span of 0.15 a fraction absorbed of 0.94 received the bounds 0.799 and 1.081 (0.94 times 0.85 and 0.94 times 1.15), and the scan asked for more than the whole dose absorbed. The clip belongs where the span is built, and the knowledge it needs belongs in the model.
 
@@ -12,12 +12,12 @@ A second example is `fraction_range` of the chemistry, which reads the support o
 
 ## The shape in the SBML
 
-The domain is a `distrib` uncertainty named `domain` on the parameter, the compartment or the species, holding one span of type `range`. It sits next to the uncertainty of the source of the value, which it does not replace:
+The domain is a `distrib` uncertainty named `domain` on the parameter, the compartment or the species, holding one span of type `range`. It sits next to the uncertainty of the source of the value, which it does not replace. The element below is a sketch of the shape, written by hand rather than taken from a model, and `Example2020` stands for the citation of whichever source a real value carries:
 
 ```xml
 <parameter id="fabs_lvn" value="0.94" units="dimensionless" constant="true">
   <distrib:listOfUncertainties>
-    <distrib:uncertainty distrib:name="source Dubbelman2015">
+    <distrib:uncertainty distrib:name="source Example2020">
       <distrib:uncertParameter distrib:value="0.02" distrib:type="standardDeviation"/>
     </distrib:uncertainty>
     <distrib:uncertainty distrib:name="domain">
@@ -72,6 +72,8 @@ A positive and a non-negative quantity have the same domain, because `distrib` c
 | none | 36 |
 | all kinds | 243 |
 <!-- end generated -->
+
+The full list follows, one row per kind. Most kinds are `[0, inf)`, because most quantities of a physiological model are a volume, a flow, a rate or a concentration; the rows worth looking at are the fractions, the few which may be negative and the switches.
 
 <!-- generated: domains-kinds (scripts/pbpk_tables.py), do not edit -->
 *Generated from `KINDS` of `pkpdsim.pbpk.annotation` by `scripts/pbpk_tables.py`; the notes of every number are in the database.*
