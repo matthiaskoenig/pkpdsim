@@ -51,6 +51,7 @@ nav = [
     { "Intestine and routes" = "pbpk/intestine.md" },
     { "Observers" = "pbpk/observers.md" },
     { "Annotation" = "pbpk/annotation.md" },
+    { "Domains" = "pbpk/domains.md" },
     { "Figures" = "pbpk/figures.md" },
     { "Migration" = "pbpk/migration.md" },
   ] },

@@ -98,6 +98,9 @@ _NAMES = {
     K_VAS: "exchange plasma and interstitium per organ volume [1/min]",
 }
 
+_KINDS = {"r_protein_int_pls": "concentration_ratio", K_VAS: "endothelial_exchange"}
+"""The kind of the constants which are no part of a whole (the others are shares)."""
+
 
 @cache
 def constants() -> dict[str, Value]:
@@ -121,7 +124,7 @@ def constant(key: str) -> Parameter:
             _NAMES[key],
             SBO.QUANTITATIVE_SYSTEMS_DESCRIPTION_PARAMETER,
         ),
-        "endothelial_exchange" if key == K_VAS else "tissue_composition",
+        _KINDS.get(key, "tissue_composition"),
     )
 
 

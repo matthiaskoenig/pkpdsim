@@ -5,9 +5,9 @@ and the machine perfusion library (`pkpdsim.perfusion`) write SBML with the
 same pieces: the units of a model (`pkpdsim.sbml.units`), the numbers with
 their provenance (`pkpdsim.sbml.values`), the parameters and the observers
 these numbers become (`pkpdsim.sbml.parameters`), the initial assignment of a
-constant and the taxon of a build (`pkpdsim.sbml.annotation`) and the
-container which collects the objects of a part of a model
-(`pkpdsim.sbml.objects`).
+constant and the taxon of a build (`pkpdsim.sbml.annotation`), the domain of
+a quantity (`pkpdsim.sbml.domains`) and the container which collects the
+objects of a part of a model (`pkpdsim.sbml.objects`).
 
 The kit is the lower layer: it imports `pkpdsim.database` (the parameter
 database, for the citation of a source) and no library of pkpdsim, so the

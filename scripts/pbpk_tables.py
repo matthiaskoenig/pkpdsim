@@ -65,6 +65,8 @@ from pkpdsim.pbpk.age import (
     protein_factors,
     reference_curves,
 )
+from pkpdsim.pbpk.annotation import KINDS as ANNOTATION_KINDS
+from pkpdsim.pbpk.annotation import Kind
 from pkpdsim.pbpk.circadian import circadian_factor, protein_rhythms, rhythms
 from pkpdsim.pbpk.data import load, sources
 from pkpdsim.pbpk.experiment import PBPKSimulationExperiment
@@ -165,7 +167,15 @@ def _table(header: list[str], rows: Iterable[list[str]]) -> list[str]:
     return [_row(header), _row(align), *(_row(r) for r in body)]
 
 
-def _generated(files: str, lines: list[str], cited: Iterable[str]) -> str:
+_DATABASE_NOTICE = "the notes of every number are in the database"
+
+
+def _generated(
+    files: str,
+    lines: list[str],
+    cited: Iterable[str],
+    provenance: str = _DATABASE_NOTICE,
+) -> str:
     """Format the content of a region: the notice, the table and its sources."""
     keys = sorted(set(cited))
     known = sources()
@@ -174,10 +184,7 @@ def _generated(files: str, lines: list[str], cited: Iterable[str]) -> str:
         source = known[key]
         doi = f" [doi:{source.doi}](https://doi.org/{source.doi})" if source.doi else ""
         references.append(f"- `{key}`: {source.citation}{doi}")
-    notice = (
-        f"*Generated from {files} by `scripts/pbpk_tables.py`; "
-        "the notes of every number are in the database.*"
-    )
+    notice = f"*Generated from {files} by `scripts/pbpk_tables.py`; {provenance}.*"
     parts = [notice, "", *lines]
     if references:
         parts += ["", '??? note "Sources"', ""]
@@ -2262,6 +2269,43 @@ def _hf_factor(key: str) -> Callable[[float], float]:
     return lambda hf: _piecewise(points, hf)
 
 
+# --- the domains of the kinds -----------------------------------------------
+
+
+_DOMAIN_NOTICE = "a domain is classified by hand, no database entry stands behind it"
+
+
+def _kind_domain(kind: Kind) -> str:
+    """Format the domain of a kind, `none` for a kind which states none."""
+    return f"`{kind.domain}`" if kind.domain is not None else "none"
+
+
+def domains_summary() -> str:
+    """The number of kinds by domain."""
+    counts: dict[str, int] = {}
+    for kind in ANNOTATION_KINDS.values():
+        key = _kind_domain(kind)
+        counts[key] = counts.get(key, 0) + 1
+    rows = [[domain, str(n)] for domain, n in sorted(counts.items())]
+    rows.append(["all kinds", str(len(ANNOTATION_KINDS))])
+    lines = _table(["domain", "kinds"], rows)
+    return _generated("`KINDS` of `pkpdsim.pbpk.annotation`", lines, [], _DOMAIN_NOTICE)
+
+
+def domains_kinds() -> str:
+    """The domain of every kind of an element of the PBPK library."""
+    rows = [
+        [
+            f"`{name}`",
+            _kind_domain(kind),
+            f"`{kind.pbpko or kind.organ}`" if (kind.pbpko or kind.organ) else "",
+        ]
+        for name, kind in ANNOTATION_KINDS.items()
+    ]
+    lines = _table(["kind", "domain", "PBPKO term"], rows)
+    return _generated("`KINDS` of `pkpdsim.pbpk.annotation`", lines, [], _DOMAIN_NOTICE)
+
+
 TABLES: dict[str, Callable[[], str]] = {
     "physiology-general": physiology_general,
     "physiology-organs-male": physiology_organs_male,
@@ -2312,6 +2356,8 @@ TABLES: dict[str, Callable[[], str]] = {
     "factors-ckd": factors_ckd,
     "factors-heart-failure": factors_heart_failure,
     "combinations-figure": combinations_figure,
+    "domains-summary": domains_summary,
+    "domains-kinds": domains_kinds,
 }
 """The tables by the name of their region."""
 

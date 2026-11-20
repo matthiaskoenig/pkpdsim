@@ -34,6 +34,7 @@ from pkpdsim.pbpk import (
     ids,
 )
 from pkpdsim.pbpk import steady_state as ss
+from pkpdsim.sbml.domains import NONNEGATIVE
 
 from .conftest import individual
 
@@ -47,11 +48,11 @@ DAY = 24 * 60.0
 #: a source of the kidney plasma (mmole/min), the secretion clearance of the
 #: kidney plasma (l/min)
 PARAMETERS = [
-    ModelParameter("k_prod", 0.0074, U.mmole_per_min),
-    ModelParameter("k_syn", 0.002, U.mmole_per_min),
-    ModelParameter("k_li", 0.001, U.mmole_per_min),
-    ModelParameter("k_ki", 0.0005, U.mmole_per_min),
-    ModelParameter("CL_sec", 0.05, U.l_per_min),
+    ModelParameter("k_prod", 0.0074, U.mmole_per_min, domain=NONNEGATIVE),
+    ModelParameter("k_syn", 0.002, U.mmole_per_min, domain=NONNEGATIVE),
+    ModelParameter("k_li", 0.001, U.mmole_per_min, domain=NONNEGATIVE),
+    ModelParameter("k_ki", 0.0005, U.mmole_per_min, domain=NONNEGATIVE),
+    ModelParameter("CL_sec", 0.05, U.l_per_min, domain=NONNEGATIVE),
 ]
 #: the variants of the standard organs
 STANDARD = Variants()
@@ -124,6 +125,7 @@ def _definition(
                     U.l_per_min,
                 ),
                 U.l_per_min,
+                domain=NONNEGATIVE,
             ),
         ],
         starts=starts,
@@ -281,6 +283,7 @@ def test_the_zonated_liver_has_the_inflow_in_every_zone(tmp_path: Path) -> None:
                     U.l_per_min,
                 ),
                 U.l_per_min,
+                domain=NONNEGATIVE,
             ),
         ],
         starts={

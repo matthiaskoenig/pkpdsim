@@ -16,6 +16,7 @@ process holds the member, anything else raises a `ValueError` which names the
 field and the allowed values.
 """
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
@@ -33,10 +34,12 @@ from pkpdsim.pbpk.values import (
     ModelParameter,
     Q,
     Value,
+    check_domain,
     check_positive,
     check_unit,
     number,
 )
+from pkpdsim.sbml.domains import FRACTION
 
 __all__ = [
     "LINEAR",
@@ -419,7 +422,10 @@ def check_products(p: Metabolism) -> list[str]:
     sum at 1 for every value; the remainder is never negative: the sum of
     the upper ends of the ranges of the other fractions (`fraction_range`)
     is at most 1, and not always 1 (a remainder of 0). Every fraction is
-    positive and its range not negative; a `Formula` cannot be bounded.
+    positive and its range is cut to the unit interval (`fraction_range`),
+    where an unbounded distribution is cut silently and a finite end of the
+    support outside the unit interval is reported; a `Formula` cannot be
+    bounded.
 
     Args:
         p: the metabolism.
@@ -436,8 +442,8 @@ def check_products(p: Metabolism) -> list[str]:
     elif rest and len(p.products) == 1:
         problems.append(f"{p.sid}: the remainder REST needs another product")
     low_sum = high_sum = total = 0.0
-    values: list[str] = []
     ranges: list[str] = []
+    values: list[str] = []
     for product, f in p.products.items():
         if isinstance(f, Rest):
             continue
@@ -451,13 +457,16 @@ def check_products(p: Metabolism) -> list[str]:
         problems += check_unit(p.sid, where, f, U.dimensionless)
         x = number(f)
         low, high = fraction_range(f)
+        supports = draw_supports(f) if isinstance(f, Value) else []
+        for end in dict.fromkeys(end for support in supports for end in support):
+            if math.isfinite(end) and not FRACTION.contains(end):
+                ranges.append(
+                    f"{p.sid}: {where} can be {end:g} (the support of the "
+                    "distribution of its draws), a fraction is never below 0 "
+                    "or above 1"
+                )
         if x is None or not x > 0:
             problems.append(f"{p.sid}: {where} must be positive, got {x}")
-        elif low < 0:
-            ranges.append(
-                f"{p.sid}: {where} can be {low:g} (the support of the "
-                "distribution of its draws), a fraction is never negative"
-            )
         total += x or 0.0
         low_sum += low
         high_sum += high
@@ -490,22 +499,59 @@ def check_products(p: Metabolism) -> list[str]:
     return problems
 
 
-def fraction_range(f: float | Value) -> tuple[float, float]:
-    """Get the range of a fraction: its value and the support of the draws of a fit.
+def draw_supports(f: Value) -> list[tuple[float, float]]:
+    """Get the support of each distribution of the draws of a fitted value.
 
-    The distribution of the draws of a fitted value (the uncertainty of
-    `fitted`, truncated to the bounds of the fit) is the range a fit or an
-    uncertainty run gives the fraction (`sbmlsim.distrib.support`).
+    The distributions of the draws (the uncertainty of `fitted`, truncated to
+    the bounds of the fit) are what a fit or an uncertainty run can give the
+    value (`sbmlsim.distrib.support`). Each support is returned as the fit
+    states it, an unbounded distribution has an infinite end. This is the
+    only place which reads them.
+
+    Args:
+        f: the value.
+
+    Returns:
+        The lower and the upper end of the support of every distribution, an
+        empty list without draws.
     """
-    if not isinstance(f, Value):
-        return float(f), float(f)
-    low = high = f.value
+    supports: list[tuple[float, float]] = []
     for u in f.uncertainties or []:
         for child in u.uncertParameters or []:
             if child.type != libsbml.DISTRIB_UNCERTTYPE_DISTRIBUTION or not child.math:
                 continue
-            lo, hi = distrib.support(child.math)
-            low, high = min(low, lo), max(high, hi)
+            supports.append(distrib.support(child.math))
+    return supports
+
+
+def fraction_range(f: float | Value) -> tuple[float, float]:
+    """Get the range of a fraction: its value and the support of the draws of a fit.
+
+    The union of the supports of the draws (`draw_supports`) is the range a fit or an
+    uncertainty run gives the fraction. It is intersected with the domain of
+    a fraction (`FRACTION`, the unit interval), which an untruncated
+    distribution leaves: the range is always a usable interval of fractions.
+    A support inside the unit interval is kept as it is. The value itself is
+    never moved, so a value outside the unit interval stays visible to the
+    checks of the caller. A finite end of the support of a distribution outside the
+    unit interval is a statement of the author which `check_products` reports
+    per distribution, as the union would hide it behind an unbounded one.
+
+    Args:
+        f: a fixed fraction or a `Value`, fixed or fitted.
+
+    Returns:
+        The lower and the upper end of the range.
+    """
+    if not isinstance(f, Value):
+        return float(f), float(f)
+    low = high = f.value
+    supports = draw_supports(f)
+    if supports:
+        lo, hi = FRACTION.clip(
+            min(lo for lo, _ in supports), max(hi for _, hi in supports)
+        )
+        low, high = min(low, lo), max(high, hi)
     return low, high
 
 
@@ -544,9 +590,9 @@ def check_custom_parameters(p: CustomReaction, defined: set[str]) -> list[str]:
 
     An SId without `__` (the separator of the flat ids), defined once in the
     organ (`defined`, the ids of the other custom reactions of the organ: they
-    read it), a `ModelParameter` with a value in its unit. That an id is no
-    other element of the organ is checked by the build
-    (`OrganBuilder.model_definition`).
+    read it), a `ModelParameter` with a value in its unit and a domain which
+    holds it. That an id is no other element of the organ is checked by the
+    build (`OrganBuilder.model_definition`).
 
     Args:
         p: the custom reaction.
@@ -576,5 +622,8 @@ def check_custom_parameters(p: CustomReaction, defined: set[str]) -> list[str]:
         if isinstance(par, ModelParameter):
             problems += check_unit(
                 f"{p.sid}: parameter '{sid}'", "value", par.value, par.unit
+            )
+            problems += check_domain(
+                f"{p.sid}: parameter '{sid}'", "value", par.value, par.domain
             )
     return problems

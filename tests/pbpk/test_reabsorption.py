@@ -41,6 +41,7 @@ from pkpdsim.pbpk import (
     ids,
 )
 from pkpdsim.pbpk import steady_state as ss
+from pkpdsim.sbml.domains import NONNEGATIVE
 
 from .conftest import (
     assert_reference_sbml,
@@ -349,6 +350,7 @@ def _endogenous(variants: Variants = STANDARD) -> PBPKDefinition:
                 "k_prod",
                 Formula(f"({clearance}) * {ids.baseline(S)}", U.mmole_per_min),
                 U.mmole_per_min,
+                domain=NONNEGATIVE,
             ),
         ],
         starts={

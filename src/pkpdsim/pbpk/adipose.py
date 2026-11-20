@@ -734,7 +734,7 @@ def _weight_change(adipose: Adipose) -> list[Sbase]:
             "effect of the model (negative for a loss).\n\n"
             f"`{ids.BW_EFFECT} = {effect.expression}`"
             + (f"\n\n{effect.notes}" if effect.notes else ""),
-            "body_composition",
+            "body_composition_change",
             constant=False,
         ),
         AssignmentRule(
@@ -782,7 +782,7 @@ def _weight_change(adipose: Adipose) -> list[Sbase]:
             U.kg,
             "body weight change [kg]",
             "The change of the body weight over the weight at the start.",
-            "body_weight",
+            "body_weight_change",
         ),
         *_constant(
             "BW_ratio",
@@ -826,7 +826,7 @@ def _weight_change(adipose: Adipose) -> list[Sbase]:
             "about a tenth: the weight these drugs remove is more central "
             "than the weight by which the individuals of a cross section "
             "differ.",
-            "body_composition",
+            "body_composition_change",
         ),
     ]
 

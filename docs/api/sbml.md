@@ -27,3 +27,7 @@ Two names of the kit are the names a library has always called the object by and
 ## annotation
 
 ::: pkpdsim.sbml.annotation
+
+## domains
+
+::: pkpdsim.sbml.domains

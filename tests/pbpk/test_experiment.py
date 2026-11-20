@@ -25,6 +25,7 @@ from pkpdsim.pbpk.experiment import (
     ScaledRenalMap,
     healthy_gfr,
 )
+from pkpdsim.sbml.domains import NONNEGATIVE
 
 from .conftest import definition, individual, individuals
 
@@ -384,7 +385,9 @@ def test_the_molecular_weights_of_a_definition() -> None:
     from pkpdsim.pbpk import U, Value, molecular_weights
     from pkpdsim.pbpk.values import Formula, ModelParameter
 
-    renin = ModelParameter("Mr_ren", Value(45057.0, U.g_per_mole), U.g_per_mole)
+    renin = ModelParameter(
+        "Mr_ren", Value(45057.0, U.g_per_mole), U.g_per_mole, domain=NONNEGATIVE
+    )
     weights = molecular_weights(definition(parameters=[renin]))
     assert dict(weights) == {
         "drg": Q(300.0, "g/mole"),
@@ -393,10 +396,12 @@ def test_the_molecular_weights_of_a_definition() -> None:
     }
     with pytest.raises(TypeError):
         weights["x"] = Q(1.0, "g/mole")  # ty: ignore[invalid-assignment]
-    other = ModelParameter("Mr_x", 1.0, U.dimensionless)
+    other = ModelParameter("Mr_x", 1.0, U.dimensionless, domain=NONNEGATIVE)
     with pytest.raises(ValueError, match=r"'Mr_x'.*g/mole"):
         molecular_weights(definition(parameters=[other]))
-    tied = ModelParameter("Mr_y", Formula("2 * Mr_drg", U.g_per_mole), U.g_per_mole)
+    tied = ModelParameter(
+        "Mr_y", Formula("2 * Mr_drg", U.g_per_mole), U.g_per_mole, domain=NONNEGATIVE
+    )
     with pytest.raises(ValueError, match=r"'Mr_y'.*formula"):
         molecular_weights(definition(parameters=[tied]))
 

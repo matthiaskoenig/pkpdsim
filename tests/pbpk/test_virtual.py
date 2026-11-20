@@ -15,6 +15,8 @@ from pkpdsim.pbpk import (
     virtual_population,
 )
 from pkpdsim.pbpk.populations import population
+from pkpdsim.pbpk.virtual import SEVERITIES
+from pkpdsim.sbml.domains import domains
 
 from .conftest import definition, individuals
 
@@ -117,3 +119,25 @@ def test_the_dimension_of_a_sex(tmp_path: Path) -> None:
         r = at(**i.changes())
         assert r[ids.organ_mass(Organ.ADIPOSE)] > 0
         assert r[ids.AGE] == i.age
+
+
+def test_every_sampling_range_lies_inside_the_domain_of_its_quantity(
+    tmp_path: Path,
+) -> None:
+    """A condition is sampled inside the domain of the quantity it sets.
+
+    The ranges of `SEVERITIES` are a modelling choice and stay what they are: a
+    renal function of 0 to 1.5 samples hyperfiltration, which the domain admits
+    because the quantity is a ratio of the healthy filtration rate and not a
+    share. A range which leaves its domain is either the wrong range or the
+    wrong domain, and the message names which quantity it was.
+    """
+    d = domains(build(definition(), tmp_path).flat_path)
+    missing = sorted(uid for uid in SEVERITIES if uid not in d)
+    assert missing == [], f"a condition sets a quantity without a domain: {missing}"
+    outside = sorted(
+        (uid, low, high, str(d[uid]))
+        for uid, (low, high) in SEVERITIES.items()
+        if not (d[uid].contains(low) and d[uid].contains(high))
+    )
+    assert outside == [], f"a sampling range leaves its domain: {outside}"

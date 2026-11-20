@@ -66,6 +66,15 @@ from pkpdsim.pbpk.organs import Organ, Pool
 from pkpdsim.pbpk.proteins import PROTEINS
 from pkpdsim.pbpk.substance import Mode, Substance
 from pkpdsim.sbml.annotation import TAXA, initial_assignment
+from pkpdsim.sbml.domains import (
+    BOOLEAN,
+    DOMAIN,
+    FRACTION,
+    NONNEGATIVE,
+    REAL,
+    Domain,
+    domain_uncertainty,
+)
 from pkpdsim.species import Species as BuildSpecies
 
 __all__ = [
@@ -301,6 +310,12 @@ class Kind:
             (the kinetics of the processes, `MICHAELIS_CONSTANT__LIVER`).
         is_place: the element is the place itself (the whole organ of a
             flow-limited organ), so the terms of the place are `BQB.IS`.
+        domain: the values the model accepts for an element of the kind (an
+            interval, and whether every real number in it, the integers or
+            the two truth values), written as its `domain` uncertainty.
+            `None` for a kind whose element holds no number (a reaction) and for the two kinds
+            of a constant the model states itself (`definition_parameter`,
+            `custom_parameter`), whose `ModelParameter` states its own.
     """
 
     sbo: str | None
@@ -311,6 +326,7 @@ class Kind:
     requested: str | None = None
     per_organ: bool = True
     is_place: bool = False
+    domain: Domain | None = None
 
 
 _PHYS = "PHYSIOLOGICAL_PARAMETER"
@@ -410,26 +426,30 @@ def _depot_kinds() -> dict[str, Kind]:
                 "COMPARTMENT",
                 terms=((BQB.IS_PART_OF, r.site),),
                 requested=f"{r.label} depot compartment",
+                domain=NONNEGATIVE,
             ),
             f"depot_amount_{key}": Kind(
-                _SPECIES, "AMOUNT_OF_COMPOUND_IN_COMPARTMENT", terms=prop
-            ),
-            f"depot_loss_amount_{key}": Kind(
                 _SPECIES,
                 "AMOUNT_OF_COMPOUND_IN_COMPARTMENT",
                 terms=prop,
-                requested="cumulative amount of a depot dose which is not absorbed",
+                domain=NONNEGATIVE,
             ),
             f"depot_time_{key}": Kind(
                 _P,
                 "PARAMETER",
                 terms=prop,
                 requested="application time of a depot dose",
+                domain=NONNEGATIVE,
             ),
             f"depot_rate_{key}": Kind(
-                SBO.FORWARD_RATE_CONSTANT, "ABSORPTION_RATE_CONSTANT", terms=prop
+                SBO.FORWARD_RATE_CONSTANT,
+                "ABSORPTION_RATE_CONSTANT",
+                terms=prop,
+                domain=NONNEGATIVE,
             ),
-            f"depot_fraction_{key}": Kind(_P, "UPTAKE_FRACTION_TO_BLOOD", terms=prop),
+            f"depot_fraction_{key}": Kind(
+                _P, "UPTAKE_FRACTION_TO_BLOOD", terms=prop, domain=FRACTION
+            ),
             f"depot_application_{key}": Kind(_T, None, terms=part, requested=requested),
             f"depot_absorption_{key}": Kind(_T, "ABSORPTION", terms=part),
             f"depot_loss_{key}": (
@@ -443,6 +463,16 @@ def _depot_kinds() -> dict[str, Kind]:
                 )
             ),
         }
+        if key != "rectal":
+            # the sink of a depot dose which is not absorbed; a rectal dose
+            # which is lost leaves with the feces (`depot_loss_rectal`)
+            kinds[f"depot_loss_amount_{key}"] = Kind(
+                _SPECIES,
+                "AMOUNT_OF_COMPOUND_IN_COMPARTMENT",
+                terms=prop,
+                requested="cumulative amount of a depot dose which is not absorbed",
+                domain=NONNEGATIVE,
+            )
     return kinds
 
 
@@ -463,20 +493,25 @@ KINDS: dict[str, Kind] = {
             Pool.VENOUS: "VENOUS_PLASMA_COMPARTMENT",
         },
         terms=_PLASMA,
+        domain=NONNEGATIVE,
     ),
-    "blood_cells": Kind(_C, "RED_BLOOD_CELL_COMPARTMENT", terms=_BLOOD_CELLS),
+    "blood_cells": Kind(
+        _C, "RED_BLOOD_CELL_COMPARTMENT", terms=_BLOOD_CELLS, domain=NONNEGATIVE
+    ),
     "capacity": Kind(
         SBO.IMPLICIT_COMPARTMENT,
         "COMPARTMENT",
         terms=((BQB.IS_VERSION_OF, pbpko("BLOOD_COMPARTMENT")),),
         requested="plasma-equivalent capacity of the blood (volume times BP)",
+        domain=NONNEGATIVE,
     ),
-    "organ": Kind(_C, "COMPARTMENT", is_place=True),
+    "organ": Kind(_C, "COMPARTMENT", is_place=True, domain=NONNEGATIVE),
     "tissue": Kind(
         _C,
         "COMPARTMENT",
         terms=((BQB.IS, "uberon/UBERON:0000479"),),  # tissue
         requested="tissue compartment (interstitial and intracellular space)",
+        domain=NONNEGATIVE,
     ),
     "interstitial": Kind(
         _C,
@@ -486,6 +521,7 @@ KINDS: dict[str, Kind] = {
             (BQB.IS, "ncit/C120839"),  # interstitial fluid
         ),
         requested="interstitial compartment",
+        domain=NONNEGATIVE,
     ),
     "intracellular": Kind(
         _C,
@@ -494,16 +530,29 @@ KINDS: dict[str, Kind] = {
         terms=((BQB.IS, "go/GO:0005622"),),  # intracellular anatomical structure
         requested="intracellular space compartment",
         per_organ=False,
+        domain=NONNEGATIVE,
     ),
-    "urine": Kind(_C, "URINE_COMPARTMENT", terms=tuple(_compartments["urine"])),
-    "feces": Kind(_C, "FECES_COMPARTMENT", terms=tuple(_compartments["feces"])),
+    "urine": Kind(
+        _C, "URINE_COMPARTMENT", terms=tuple(_compartments["urine"]), domain=NONNEGATIVE
+    ),
+    "feces": Kind(
+        _C, "FECES_COMPARTMENT", terms=tuple(_compartments["feces"]), domain=NONNEGATIVE
+    ),
     "remodelled_tissue": Kind(
         SBO.IMPLICIT_COMPARTMENT,
         "COMPARTMENT",
         requested="compartment of the tissue a liver lobe has lost",
+        domain=NONNEGATIVE,
     ),
-    "bile": Kind(_C, "BILE_COMPARTMENT", terms=tuple(_compartments["bi"])),
-    "lumen": Kind(_C, "GUT_LUMEN_COMPARTMENT", terms=tuple(_compartments["gu_lumen"])),
+    "bile": Kind(
+        _C, "BILE_COMPARTMENT", terms=tuple(_compartments["bi"]), domain=NONNEGATIVE
+    ),
+    "lumen": Kind(
+        _C,
+        "GUT_LUMEN_COMPARTMENT",
+        terms=tuple(_compartments["gu_lumen"]),
+        domain=NONNEGATIVE,
+    ),
     "mucosa": Kind(
         _C,
         "COMPARTMENT",
@@ -512,29 +561,48 @@ KINDS: dict[str, Kind] = {
             (BQB.IS_PART_OF, pbpko("INTESTINAL_TISSUE_COMPARTMENT")),
         ),
         requested="intestinal mucosa compartment (enterocytes)",
+        domain=NONNEGATIVE,
     ),
     "gut_wall": Kind(
         _C,
         "COMPARTMENT",
         terms=((BQB.IS_PART_OF, pbpko("INTESTINAL_TISSUE_COMPARTMENT")),),
         requested="intestinal tissue compartment without the mucosa",
+        domain=NONNEGATIVE,
     ),
-    "tubule": Kind(_C, "FILTRATE_COMPARTMENT"),
+    "tubule": Kind(_C, "FILTRATE_COMPARTMENT", domain=NONNEGATIVE),
     # covariates and the body
-    "body_weight": Kind(_P, "BODYWEIGHT"),
-    "height": Kind(_P, "HEIGHT"),
-    "age": Kind(_P, "AGE_IN_PBPK_MODEL"),
-    "bmi": Kind(_P, "BODY_MASS_INDEX"),
-    "bsa": Kind(_P, "SURFACE_AREA", terms=((BQB.IS, "ncit/C25157"),)),
+    "body_weight": Kind(_P, "BODYWEIGHT", domain=NONNEGATIVE),
+    # REAL: the change of the body weight over its start, negative for a loss
+    "body_weight_change": Kind(_P, "BODYWEIGHT", domain=REAL),
+    "height": Kind(_P, "HEIGHT", domain=NONNEGATIVE),
+    "age": Kind(_P, "AGE_IN_PBPK_MODEL", domain=NONNEGATIVE),
+    "bmi": Kind(_P, "BODY_MASS_INDEX", domain=NONNEGATIVE),
+    "bsa": Kind(
+        _P, "SURFACE_AREA", terms=((BQB.IS, "ncit/C25157"),), domain=NONNEGATIVE
+    ),
     "lean_mass": Kind(
-        _P, _PHYS, terms=((BQB.IS, "ncit/C71258"),), requested="fat-free mass"
+        _P,
+        _PHYS,
+        terms=((BQB.IS, "ncit/C71258"),),
+        requested="fat-free mass",
+        domain=NONNEGATIVE,
     ),
-    "scaling_factor": Kind(_P, _PHYS, requested="covariate scaling factor"),
+    "scaling_factor": Kind(
+        _P, _PHYS, requested="covariate scaling factor", domain=NONNEGATIVE
+    ),
     "organ_mass": Kind(
-        _P, _PHYS, organ="{}_MASS", requested="mass of organ", per_organ=False
+        _P,
+        _PHYS,
+        organ="{}_MASS",
+        requested="mass of organ",
+        per_organ=False,
+        domain=NONNEGATIVE,
     ),
-    "organ_volume": Kind(_P, "VOLUME_OF_COMPARTMENT", organ="VOLUME_OF_{}"),
-    "blood_volume": Kind(_P, "VOLUME_OF_BLOOD"),
+    "organ_volume": Kind(
+        _P, "VOLUME_OF_COMPARTMENT", organ="VOLUME_OF_{}", domain=NONNEGATIVE
+    ),
+    "blood_volume": Kind(_P, "VOLUME_OF_BLOOD", domain=NONNEGATIVE),
     "pool_volume": Kind(
         _P,
         "VOLUME_OF_COMPARTMENT",
@@ -543,92 +611,132 @@ KINDS: dict[str, Kind] = {
             Pool.VENOUS: "VENOUS_VOLUME",
             Pool.PORTAL: "VOLUME_OF_PORTAL_VEIN",
         },
+        domain=NONNEGATIVE,
     ),
     "pool_fraction": Kind(
-        _P, _PHYS, requested="fraction of the blood volume in a blood pool"
+        _P,
+        _PHYS,
+        requested="fraction of the blood volume in a blood pool",
+        domain=FRACTION,
     ),
-    "vascular_fraction": Kind(_P, "VOLUME_FRACTION_OF_BLOOD"),
+    "vascular_fraction": Kind(_P, "VOLUME_FRACTION_OF_BLOOD", domain=FRACTION),
     "interstitial_fraction": Kind(
-        _P, _PHYS, requested="interstitial volume fraction of an organ"
+        _P, _PHYS, requested="interstitial volume fraction of an organ", domain=FRACTION
     ),
-    "tissue_volume": Kind(_P, "VOLUME_OF_COMPARTMENT"),
+    "tissue_volume": Kind(_P, "VOLUME_OF_COMPARTMENT", domain=NONNEGATIVE),
     "zone_fraction": Kind(
-        _P, _PHYS, requested="volume fraction of a zone of the liver"
+        _P, _PHYS, requested="volume fraction of a zone of the liver", domain=FRACTION
     ),
     # the lobes of the liver, perfused in parallel
     "lobe_volume": Kind(
-        _P, "VOLUME_OF_COMPARTMENT", requested="volume of a lobe of the liver"
+        _P,
+        "VOLUME_OF_COMPARTMENT",
+        requested="volume of a lobe of the liver",
+        domain=NONNEGATIVE,
     ),
     "lobe_fraction": Kind(
-        _P, _PHYS, requested="volume fraction of a lobe of the liver"
+        _P,
+        _PHYS,
+        requested="volume fraction of a lobe of the liver",
+        domain=NONNEGATIVE,
     ),
     "lobe_supply_fraction": Kind(
         _P,
         "FRACTION_OF_BLOOD_FLOW_TO_A_COMPARTMENT",
         requested="fraction of the hepatic blood flow to a lobe of the liver",
+        domain=FRACTION,
     ),
     "lobe_flow": Kind(
         _P,
         "BLOOD_FLOW_RATE_TO_COMPARTMENT",
         requested="blood flow to a lobe of the liver",
+        domain=NONNEGATIVE,
     ),
     "lobe_perfusion": Kind(
-        _P, _PHYS, requested="blood flow per volume of a lobe of the liver"
+        _P,
+        _PHYS,
+        requested="blood flow per volume of a lobe of the liver",
+        domain=NONNEGATIVE,
     ),
+    # REAL: positive is hypertrophy of the lobe, negative atrophy
     "lobe_growth": Kind(
         _P,
         _PHYS,
         requested="rate of change of the volume of a lobe of the liver "
         "(positive hypertrophy, negative atrophy)",
+        domain=REAL,
     ),
     "remodelling_time": Kind(
         _P,
         _PHYS,
         requested="time constant of the remodelling of a lobe of the liver",
+        domain=NONNEGATIVE,
     ),
     "lobe_patency": Kind(
         _P,
         _PHYS,
         requested="patency of a vascular branch of a lobe of the liver "
         "(1 open, 0 ligated)",
+        domain=FRACTION,
     ),
     "lobe_present": Kind(
-        _P, _PHYS, requested="presence of a lobe of the liver (1 in place, 0 resected)"
+        _P,
+        _PHYS,
+        requested="presence of a lobe of the liver (1 in place, 0 resected)",
+        domain=BOOLEAN,
     ),
     "remnant_fraction": Kind(
-        _P, _PHYS, requested="share of the liver which is left after a resection"
+        _P,
+        _PHYS,
+        requested="share of the liver which is left after a resection",
+        domain=NONNEGATIVE,
     ),
     "lobe_pressure": Kind(
-        _P, _PHYS, requested="blood pressure in the sinusoids of a lobe of the liver"
+        _P,
+        _PHYS,
+        requested="blood pressure in the sinusoids of a lobe of the liver",
+        domain=NONNEGATIVE,
     ),
     "lobe_resistance": Kind(
         _P,
         _PHYS,
         requested="vascular resistance of a branch of a lobe of the liver",
+        domain=NONNEGATIVE,
     ),
     "buffer_response": Kind(
-        _P, _PHYS, requested="gain of the hepatic arterial buffer response"
+        _P,
+        _PHYS,
+        requested="gain of the hepatic arterial buffer response",
+        domain=NONNEGATIVE,
     ),
     "hematocrit": Kind(
         _P,
         "VOLUME_FRACTION_OF_RED_BLOOD_CELLS",
         terms=((BQB.IS_PROPERTY_OF, "uberon/UBERON:0000178"),),  # blood
+        domain=FRACTION,
     ),
-    "cardiac_output": Kind(_P, "CARDIAC_OUTPUT_RATE"),
+    "cardiac_output": Kind(_P, "CARDIAC_OUTPUT_RATE", domain=NONNEGATIVE),
     "flow_fraction": Kind(
         _P,
         "FRACTION_OF_BLOOD_FLOW_TO_A_COMPARTMENT",
         organ="FRACTION_OF_BLOOD_FLOW_TO_{}",
+        domain=FRACTION,
     ),
     "organ_flow": Kind(
-        _P, "BLOOD_FLOW_RATE_TO_COMPARTMENT", organ="BLOOD_FLOW_RATE_TO_{}"
+        _P,
+        "BLOOD_FLOW_RATE_TO_COMPARTMENT",
+        organ="BLOOD_FLOW_RATE_TO_{}",
+        domain=NONNEGATIVE,
     ),
     "hepatic_artery_flow": Kind(
-        _P, "BLOOD_FLOW_RATE_TO_COMPARTMENT", requested="hepatic artery blood flow"
+        _P,
+        "BLOOD_FLOW_RATE_TO_COMPARTMENT",
+        requested="hepatic artery blood flow",
+        domain=NONNEGATIVE,
     ),
-    "portal_flow": Kind(_P, "BLOOD_FLOW_RATE_TO_PORTAL_VEIN"),
-    "hepatic_flow": Kind(_P, "HEPATIC_VEIN_BLOOD_FLOW"),
-    "gfr": Kind(_P, "GLOMERULAR_FILTRATION_RATE"),
+    "portal_flow": Kind(_P, "BLOOD_FLOW_RATE_TO_PORTAL_VEIN", domain=NONNEGATIVE),
+    "hepatic_flow": Kind(_P, "HEPATIC_VEIN_BLOOD_FLOW", domain=NONNEGATIVE),
+    "gfr": Kind(_P, "GLOMERULAR_FILTRATION_RATE", domain=NONNEGATIVE),
     # the GFR at renal function 1 is not the GFR of the individual (a CKD
     # model has another): the broader term with a version of the GFR
     "gfr_base": Kind(
@@ -636,124 +744,218 @@ KINDS: dict[str, Kind] = {
         _PHYS,
         terms=((BQB.IS_VERSION_OF, pbpko("GLOMERULAR_FILTRATION_RATE")),),
         requested="glomerular filtration rate at normal renal function",
+        domain=NONNEGATIVE,
     ),
-    "egfr": Kind(_P, "GLOMERULAR_FILTRATION_RATE", terms=((BQB.IS, "ncit/C110935"),)),
-    "organ_function": Kind(_P, _PHYS, requested="relative organ function"),
+    "egfr": Kind(
+        _P,
+        "GLOMERULAR_FILTRATION_RATE",
+        terms=((BQB.IS, "ncit/C110935"),),
+        domain=NONNEGATIVE,
+    ),
+    "organ_function": Kind(
+        _P, _PHYS, requested="relative organ function", domain=NONNEGATIVE
+    ),
     "tubular_share": Kind(
         _P,
         _PHYS,
         requested="share of the tubular capacity which follows the renal function",
+        domain=FRACTION,
     ),
-    "shunt": Kind(_P, _PHYS, requested="portosystemic shunt fraction"),
+    "shunt": Kind(_P, _PHYS, requested="portosystemic shunt fraction", domain=FRACTION),
     # impairment
     "child_pugh": Kind(
         _P,
         _PHYS,
         terms=(_DISEASES["child_pugh"],),
         requested="severity of hepatic impairment",
+        domain=Domain(0.0, 3.0),
     ),
     "heart_failure": Kind(
         _P,
         _PHYS,
         terms=(_DISEASES["heart_failure"],),
         requested="severity of heart failure",
+        domain=Domain(0.0, 4.0),
     ),
     "ckd": Kind(
         _P,
         _PHYS,
         terms=(_DISEASES["ckd"],),
-        requested="stage of chronic kidney disease",
+        requested="switch of the hepatic changes of chronic kidney disease",
+        domain=BOOLEAN,
     ),
     "cirrhosis_factor": Kind(
-        _P, _PHYS, terms=(_DISEASES["cirrhosis"],), requested="impairment factor"
+        _P,
+        _PHYS,
+        terms=(_DISEASES["cirrhosis"],),
+        requested="impairment factor",
+        domain=NONNEGATIVE,
     ),
     "ckd_factor": Kind(
-        _P, _PHYS, terms=(_DISEASES["ckd"],), requested="impairment factor"
+        _P,
+        _PHYS,
+        terms=(_DISEASES["ckd"],),
+        requested="impairment factor",
+        domain=NONNEGATIVE,
     ),
     "heart_failure_factor": Kind(
-        _P, _PHYS, terms=(_DISEASES["heart_failure"],), requested="impairment factor"
+        _P,
+        _PHYS,
+        terms=(_DISEASES["heart_failure"],),
+        requested="impairment factor",
+        domain=NONNEGATIVE,
     ),
-    "impairment_factor": Kind(_P, _PHYS, requested="impairment factor"),
+    "impairment_factor": Kind(
+        _P, _PHYS, requested="impairment factor", domain=NONNEGATIVE
+    ),
     # age and sex
     "age_factor": Kind(
-        _P, _PHYS, requested="factor of the age on a physiological quantity"
+        _P,
+        _PHYS,
+        requested="factor of the age on a physiological quantity",
+        domain=NONNEGATIVE,
     ),
     "sex_factor": Kind(
-        _P, _PHYS, requested="factor of the sex on a physiological quantity"
+        _P,
+        _PHYS,
+        requested="factor of the sex on a physiological quantity",
+        domain=NONNEGATIVE,
     ),
     # the body composition and the adipose tissue
-    "body_composition": Kind(_P, _PHYS, requested="body composition of an individual"),
-    "fat_mass": Kind(_P, _PHYS, requested="body fat mass"),
-    "adipose_depot": Kind(_P, _PHYS, requested="mass of an adipose tissue depot"),
+    "body_composition": Kind(
+        _P, _PHYS, requested="body composition of an individual", domain=NONNEGATIVE
+    ),
+    # REAL: the effect on the body weight and the change of the waist are negative
+    # for a loss
+    "body_composition_change": Kind(
+        _P, _PHYS, requested="body composition of an individual", domain=REAL
+    ),
+    "fat_mass": Kind(_P, _PHYS, requested="body fat mass", domain=NONNEGATIVE),
+    "adipose_depot": Kind(
+        _P, _PHYS, requested="mass of an adipose tissue depot", domain=NONNEGATIVE
+    ),
     "obesity_factor": Kind(
-        _P, _PHYS, requested="factor of obesity on a physiological quantity"
+        _P,
+        _PHYS,
+        requested="factor of obesity on a physiological quantity",
+        domain=NONNEGATIVE,
     ),
     "weight_change": Kind(
         SBO.KINETIC_CONSTANT,
         _PHYS,
         requested="rate of the change of the body weight",
+        domain=NONNEGATIVE,
     ),
     # the pregnancy
-    "gestational_age": Kind(_P, _PHYS, requested="gestational age of a pregnancy"),
-    "pregnancy": Kind(
-        _P, _PHYS, requested="factor of the pregnancy on a physiological quantity"
+    "gestational_age": Kind(
+        _P, _PHYS, requested="gestational age of a pregnancy", domain=NONNEGATIVE
     ),
-    "placenta": Kind(_C, "COMPARTMENT", requested="placenta compartment"),
-    "fetus": Kind(_C, "COMPARTMENT", requested="fetus compartment"),
+    "pregnancy": Kind(
+        _P,
+        _PHYS,
+        requested="factor of the pregnancy on a physiological quantity",
+        domain=NONNEGATIVE,
+    ),
+    "placenta": Kind(
+        _C, "COMPARTMENT", requested="placenta compartment", domain=NONNEGATIVE
+    ),
+    "fetus": Kind(_C, "COMPARTMENT", requested="fetus compartment", domain=NONNEGATIVE),
     # circadian rhythms
-    "clock_time": Kind(_P, _PHYS, requested="clock time of a simulation"),
+    # [0, 24] is the closed superset of the [0, 24) which `circadian.py` enforces,
+    # a closed interval is all a range span can state
+    "clock_time": Kind(
+        _P, _PHYS, requested="clock time of a simulation", domain=Domain(0.0, 24.0)
+    ),
     "circadian": Kind(
-        _P, _PHYS, requested="circadian rhythm of a physiological quantity"
+        _P,
+        _PHYS,
+        requested="circadian rhythm of a physiological quantity",
+        domain=NONNEGATIVE,
     ),
     # substances
-    "molecular_weight": Kind(SBO.MOLECULAR_MASS, "MOLECULAR_WEIGHT"),
-    "fu": Kind(_P, "FRACTION_UNBOUND_PLASMA"),
-    "fraction_reabsorbed": Kind(_P, "RESORPTION"),
+    "molecular_weight": Kind(
+        SBO.MOLECULAR_MASS, "MOLECULAR_WEIGHT", domain=NONNEGATIVE
+    ),
+    "fu": Kind(_P, "FRACTION_UNBOUND_PLASMA", domain=FRACTION),
+    "fraction_reabsorbed": Kind(_P, "RESORPTION", domain=FRACTION),
     "reabsorption_threshold": Kind(
-        _P, _BIOCHEM, requested="renal threshold of a saturable reabsorption"
+        _P,
+        _BIOCHEM,
+        requested="renal threshold of a saturable reabsorption",
+        domain=NONNEGATIVE,
     ),
     "reabsorption_n": Kind(
         _P,
         _BIOCHEM,
         requested="sharpness of the renal threshold of a saturable reabsorption",
+        domain=NONNEGATIVE,
     ),
     "baseline": Kind(
         _P,
         "CONCENTRATION_IN_PLASMA",
         requested="endogenous baseline plasma concentration",
+        domain=NONNEGATIVE,
     ),
-    "steady_clearance": Kind(_P, "CLEARANCE_RATE"),
+    "steady_clearance": Kind(_P, "CLEARANCE_RATE", domain=NONNEGATIVE),
+    # REAL: a declared rate which consumes the substance makes the net source negative
     "steady_rate": Kind(
-        _P, _BIOCHEM, requested="net production rate at the steady state"
+        _P, _BIOCHEM, requested="net production rate at the steady state", domain=REAL
     ),
-    "steady_vmax": Kind(SBO.MAXIMAL_VELOCITY, "MAXIMUM_RATE"),
-    "steady_km": Kind(SBO.MICHAELIS_CONSTANT, _BIOCHEM, requested="Michaelis constant"),
-    "steady_plasma": Kind(_P, "CONCENTRATION_IN_PLASMA"),
-    "kp": Kind(_P, "TISSUE_PLASMA_PARTITION_COEFFICIENT"),
+    "steady_vmax": Kind(SBO.MAXIMAL_VELOCITY, "MAXIMUM_RATE", domain=NONNEGATIVE),
+    "steady_km": Kind(
+        SBO.MICHAELIS_CONSTANT,
+        _BIOCHEM,
+        requested="Michaelis constant",
+        domain=NONNEGATIVE,
+    ),
+    "steady_plasma": Kind(_P, "CONCENTRATION_IN_PLASMA", domain=NONNEGATIVE),
+    "kp": Kind(_P, "TISSUE_PLASMA_PARTITION_COEFFICIENT", domain=NONNEGATIVE),
     "kp_organ": Kind(
         _P,
         "TISSUE_PLASMA_PARTITION_COEFFICIENT",
         organ="{}_PLASMA_PARTITION_COEFFICIENT",
+        domain=NONNEGATIVE,
     ),
-    "kp_factor": Kind(_P, _BIOCHEM, requested="factor of the partition coefficients"),
-    "partition": Kind(_P, "PARTITION_COEFFICIENT"),
+    "kp_factor": Kind(
+        _P,
+        _BIOCHEM,
+        requested="factor of the partition coefficients",
+        domain=NONNEGATIVE,
+    ),
+    "partition": Kind(_P, "PARTITION_COEFFICIENT", domain=NONNEGATIVE),
     "slow_pool_exchange": Kind(
         _P,
         _BIOCHEM,
         requested="exchange rate constant of a slow tissue pool per tissue volume",
+        domain=NONNEGATIVE,
     ),
     "tissue_composition": Kind(
-        _P, _PHYS, requested="tissue composition (water, protein, lipid fractions)"
+        _P,
+        _PHYS,
+        requested="tissue composition (water, protein, lipid fractions)",
+        domain=FRACTION,
+    ),
+    "concentration_ratio": Kind(
+        _P,
+        _PHYS,
+        # the annotation of `tissue_composition`: the constant of the interstitial
+        # protein is a ratio of two concentrations, not a share of a whole
+        requested="tissue composition (water, protein, lipid fractions)",
+        domain=NONNEGATIVE,
     ),
     "permeability": Kind(
-        _P, _BIOCHEM, requested="permeability surface area product (exchange flow)"
+        _P,
+        _BIOCHEM,
+        requested="permeability surface area product (exchange flow)",
+        domain=NONNEGATIVE,
     ),
     "pore_permeability": Kind(
         _P,
         _BIOCHEM,
         requested="permeability of a solute through a membrane or a pore (a velocity)",
+        domain=NONNEGATIVE,
     ),
-    "diffusion": Kind(None, "DIFFUSION_COEFFICIENT"),
+    "diffusion": Kind(None, "DIFFUSION_COEFFICIENT", domain=NONNEGATIVE),
     "sinusoid_geometry": Kind(
         _P,
         _PHYS,
@@ -762,37 +964,60 @@ KINDS: dict[str, Kind] = {
             "lumen, the lateral area of an interface, the fenestral porosity of "
             "the endothelium)"
         ),
+        domain=NONNEGATIVE,
     ),
-    "bp": Kind(_P, "BLOOD_PLASMA_RATIO"),
-    "kbc": Kind(_P, "RED_BLOOD_CELLS_PARTITION_COEFFICIENT"),
+    "bp": Kind(_P, "BLOOD_PLASMA_RATIO", domain=NONNEGATIVE),
+    "kbc": Kind(_P, "RED_BLOOD_CELLS_PARTITION_COEFFICIENT", domain=NONNEGATIVE),
     "exchange_rate": Kind(
-        _P, _BIOCHEM, requested="exchange rate constant of plasma and blood cells"
+        _P,
+        _BIOCHEM,
+        requested="exchange rate constant of plasma and blood cells",
+        domain=NONNEGATIVE,
     ),
     "endothelial_exchange": Kind(
-        _P, _PHYS, requested="endothelial exchange rate constant per organ volume"
+        _P,
+        _PHYS,
+        requested="endothelial exchange rate constant per organ volume",
+        domain=NONNEGATIVE,
     ),
     # proteins and interactions
     "activity": Kind(
         SBO.RELATIVE_ACTIVITY,
         _BIOCHEM,
         requested="relative activity of enzyme or transporter",
+        domain=NONNEGATIVE,
     ),
     "enzyme_amount": Kind(
         SBO.RELATIVE_ACTIVITY,
         _BIOCHEM,
         requested="relative amount of enzyme or transporter",
+        domain=NONNEGATIVE,
     ),
-    "kdeg": Kind(SBO.DECAY_CONSTANT, "DEGRADATION_RATE_CONSTANT"),
-    "ki": Kind(SBO.INHIBITORY_CONSTANT, "INHIBITION_CONSTANT"),
+    "kdeg": Kind(SBO.DECAY_CONSTANT, "DEGRADATION_RATE_CONSTANT", domain=NONNEGATIVE),
+    "ki": Kind(SBO.INHIBITORY_CONSTANT, "INHIBITION_CONSTANT", domain=NONNEGATIVE),
     "kinact": Kind(
         SBO.INACTIVATION_RATE_CONSTANT,
         _BIOCHEM,
         requested="maximal inactivation rate constant",
+        domain=NONNEGATIVE,
     ),
-    "emax": Kind(_P, _BIOCHEM, requested="maximal induction"),
-    "ec50": Kind(SBO.EC50, _BIOCHEM, requested="half-maximal effective concentration"),
+    "emax": Kind(_P, _BIOCHEM, requested="maximal induction", domain=NONNEGATIVE),
+    "ec50": Kind(
+        SBO.EC50,
+        _BIOCHEM,
+        requested="half-maximal effective concentration",
+        domain=NONNEGATIVE,
+    ),
     "placement_weight": Kind(
-        _P, _MISC, requested="abundance weight of a protein or process"
+        _P, _MISC, requested="abundance weight of a protein or process", domain=FRACTION
+    ),
+    # a relative abundance is normalised to a mean of 1, so a gradient puts values
+    # above 1; its share (`placement_weight`) is the fraction
+    "relative_abundance": Kind(
+        _P,
+        _MISC,
+        requested="abundance weight of a protein or process",
+        domain=NONNEGATIVE,
     ),
     # kinetics of the processes
     "vmax": Kind(
@@ -800,24 +1025,36 @@ KINDS: dict[str, Kind] = {
         "MAXIMUM_RATE",
         organ="MAXIMUM_RATE_IN_{}",
         per_organ=False,
+        domain=NONNEGATIVE,
     ),
     "vmax_basolateral": Kind(
-        SBO.MAXIMAL_VELOCITY, "MAXIMUM_RATE_OF_BASOLATERAL_TRANSPORTER"
+        SBO.MAXIMAL_VELOCITY,
+        "MAXIMUM_RATE_OF_BASOLATERAL_TRANSPORTER",
+        domain=NONNEGATIVE,
     ),
-    "vmax_apical": Kind(SBO.MAXIMAL_VELOCITY, "MAXIMUM_RATE_OF_APICAL_TRANSPORTER"),
+    "vmax_apical": Kind(
+        SBO.MAXIMAL_VELOCITY, "MAXIMUM_RATE_OF_APICAL_TRANSPORTER", domain=NONNEGATIVE
+    ),
     "km": Kind(
         SBO.MICHAELIS_CONSTANT,
         _BIOCHEM,
         organ="MICHAELIS_CONSTANT__{}",
         requested="Michaelis constant",
         per_organ=False,
+        domain=NONNEGATIVE,
     ),
-    "km_basolateral": Kind(SBO.MICHAELIS_CONSTANT, "MICHAELIS_CONSTANT_BASO"),
-    "km_apical": Kind(SBO.MICHAELIS_CONSTANT, "MICHAELIS_CONSTANT_APICAL"),
-    "hill": Kind(SBO.HILL_COEFFICIENT, "HILL_COEFFICIENT"),
-    "k_metabolism": Kind(SBO.KINETIC_CONSTANT, "INTRINSIC_CLEARANCE_RATE"),
-    "k_influx": Kind(SBO.KINETIC_CONSTANT, "CLEARANCE_RATE"),
-    "k_efflux": Kind(SBO.KINETIC_CONSTANT, "CLEARANCE_RATE"),
+    "km_basolateral": Kind(
+        SBO.MICHAELIS_CONSTANT, "MICHAELIS_CONSTANT_BASO", domain=NONNEGATIVE
+    ),
+    "km_apical": Kind(
+        SBO.MICHAELIS_CONSTANT, "MICHAELIS_CONSTANT_APICAL", domain=NONNEGATIVE
+    ),
+    "hill": Kind(SBO.HILL_COEFFICIENT, "HILL_COEFFICIENT", domain=NONNEGATIVE),
+    "k_metabolism": Kind(
+        SBO.KINETIC_CONSTANT, "INTRINSIC_CLEARANCE_RATE", domain=NONNEGATIVE
+    ),
+    "k_influx": Kind(SBO.KINETIC_CONSTANT, "CLEARANCE_RATE", domain=NONNEGATIVE),
+    "k_efflux": Kind(SBO.KINETIC_CONSTANT, "CLEARANCE_RATE", domain=NONNEGATIVE),
     # a clearance per litre of organ (1/min) is no clearance (a volume per
     # time) nor a rate constant of an amount: the broader term
     "k_metabolism_volume": Kind(
@@ -825,107 +1062,161 @@ KINDS: dict[str, Kind] = {
         _BIOCHEM,
         terms=((BQB.IS_VERSION_OF, pbpko("INTRINSIC_CLEARANCE_RATE")),),
         requested="intrinsic clearance per organ volume",
+        domain=NONNEGATIVE,
     ),
     "k_transport_volume": Kind(
         SBO.KINETIC_CONSTANT,
         _BIOCHEM,
         terms=((BQB.IS_VERSION_OF, pbpko("CLEARANCE_RATE")),),
         requested="transport clearance per organ volume",
+        domain=NONNEGATIVE,
     ),
     "rate_ratio": Kind(
         _P,
         _BIOCHEM,
         requested="ratio of the capacity of a process to another process",
+        domain=NONNEGATIVE,
     ),
     "product_fraction": Kind(
-        _P, _BIOCHEM, requested="fraction of a metabolism which forms a product"
+        _P,
+        _BIOCHEM,
+        requested="fraction of a metabolism which forms a product",
+        domain=FRACTION,
     ),
     "custom_parameter": Kind(None, _MISC),
     "definition_parameter": Kind(None, _MISC),
-    "custom_species": Kind(None, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
-    "custom_amount": Kind(None, "AMOUNT_OF_COMPOUND_IN_COMPARTMENT"),
+    "custom_species": Kind(
+        None, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT", domain=NONNEGATIVE
+    ),
+    "custom_amount": Kind(
+        None, "AMOUNT_OF_COMPOUND_IN_COMPARTMENT", domain=NONNEGATIVE
+    ),
     # routes, intestine, sinks
-    "dose": Kind(_P, "PARAMETER", terms=((BQB.IS, "ncit/C25488"),), requested="dose"),
+    "dose": Kind(
+        _P,
+        "PARAMETER",
+        terms=((BQB.IS, "ncit/C25488"),),
+        requested="dose",
+        domain=NONNEGATIVE,
+    ),
     "iv_time": Kind(
         _P,
         "PARAMETER",
         terms=_IV_BOLUS,
         requested="injection time of an intravenous dose",
+        domain=NONNEGATIVE,
     ),
     "iv_rate": Kind(
         SBO.FORWARD_RATE_CONSTANT,
         "PARAMETER",
         terms=_IV_BOLUS,
         requested="injection rate constant of an intravenous dose",
+        domain=NONNEGATIVE,
     ),
     "infusion_rate": Kind(
         _P,
         "PARAMETER",
         terms=_IV_INFUSION,
         requested="infusion rate of an intravenous infusion",
+        domain=NONNEGATIVE,
     ),
-    "dissolution": Kind(_P, _MISC, requested="dissolution of a formulation"),
-    "application_rate": Kind(SBO.FORWARD_RATE_CONSTANT, "ABSORPTION_RATE_CONSTANT"),
+    "dissolution": Kind(
+        _P, _MISC, requested="dissolution of a formulation", domain=NONNEGATIVE
+    ),
+    "application_rate": Kind(
+        SBO.FORWARD_RATE_CONSTANT, "ABSORPTION_RATE_CONSTANT", domain=NONNEGATIVE
+    ),
     "absorption_rate": Kind(
-        SBO.FORWARD_RATE_CONSTANT, "ABSORPTION_RATE_CONSTANT_INTESTINE"
+        SBO.FORWARD_RATE_CONSTANT,
+        "ABSORPTION_RATE_CONSTANT_INTESTINE",
+        domain=NONNEGATIVE,
     ),
-    "transit_time": Kind(_P, "INTESTINAL_TRANSIT_TIME"),
-    "gastric_transit_time": Kind(_P, _PHYS, requested="gastric emptying time"),
+    "transit_time": Kind(_P, "INTESTINAL_TRANSIT_TIME", domain=NONNEGATIVE),
+    "gastric_transit_time": Kind(
+        _P, _PHYS, requested="gastric emptying time", domain=NONNEGATIVE
+    ),
     "fed": Kind(
         _P,
         _MISC,
         terms=((BQB.IS_VERSION_OF, "ncit/C65056"),),  # postprandial
         requested="prandial state (fed or fasted)",
+        domain=FRACTION,
     ),
     "intestine_geometry": Kind(
-        _P, _PHYS, requested="intestinal mucosa and absorption geometry"
+        _P,
+        _PHYS,
+        requested="intestinal mucosa and absorption geometry",
+        domain=NONNEGATIVE,
     ),
-    "gut_flow": Kind(_P, "BLOOD_FLOW_RATE_TO_GUT"),
-    "gut_volume": Kind(_P, "VOLUME_OF_GUT"),
+    "gut_flow": Kind(_P, "BLOOD_FLOW_RATE_TO_GUT", domain=NONNEGATIVE),
+    "gut_volume": Kind(_P, "VOLUME_OF_GUT", domain=NONNEGATIVE),
     "mucosa_flow": Kind(
         _P,
         "BLOOD_FLOW_RATE_TO_COMPARTMENT",
         requested="blood flow rate to intestinal mucosa",
+        domain=NONNEGATIVE,
     ),
-    "mucosa_volume": Kind(_P, "ENTEROCYTE_VOLUME"),
+    "mucosa_volume": Kind(_P, "ENTEROCYTE_VOLUME", domain=NONNEGATIVE),
     "bile_transit": Kind(
-        SBO.FORWARD_RATE_CONSTANT, _PHYS, requested="bile transit rate constant"
+        SBO.FORWARD_RATE_CONSTANT,
+        _PHYS,
+        requested="bile transit rate constant",
+        domain=NONNEGATIVE,
     ),
     "tubule_fraction": Kind(
         _P,
         _PHYS,
         requested="tubular flow fraction of the glomerular filtration rate",
+        domain=FRACTION,
     ),
-    "fraction_absorbed": Kind(_P, "UPTAKE_FRACTION_TO_BLOOD"),
+    "fraction_absorbed": Kind(_P, "UPTAKE_FRACTION_TO_BLOOD", domain=FRACTION),
     "colon_absorption": Kind(
-        _P, _PHYS, requested="absorption factor of the large intestine"
+        _P,
+        _PHYS,
+        requested="absorption factor of the large intestine",
+        domain=NONNEGATIVE,
     ),
     "regional_absorption": Kind(
         _P,
         _BIOCHEM,
         requested="relative absorption of a substance in an intestinal segment",
+        domain=NONNEGATIVE,
     ),
     "lumen_conversion_rate": Kind(
         SBO.FORWARD_RATE_CONSTANT,
         _BIOCHEM,
         requested="rate constant of a conversion in the intestinal lumen",
+        domain=NONNEGATIVE,
     ),
     "arm_weight": Kind(
-        _P, _PHYS, requested="weight of a tissue in the arm vein sampling site"
+        _P,
+        _PHYS,
+        requested="weight of a tissue in the arm vein sampling site",
+        domain=FRACTION,
     ),
     # observers and the outflow of the organs
-    "outflow": Kind(_P, "TOTAL_VENOUS_CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
-    "outflow_blood_cells": Kind(_P, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
-    "outflow_lobe": Kind(_P, "TOTAL_VENOUS_CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
+    "outflow": Kind(
+        _P, "TOTAL_VENOUS_CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT", domain=NONNEGATIVE
+    ),
+    "outflow_blood_cells": Kind(
+        _P, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT", domain=NONNEGATIVE
+    ),
+    "outflow_lobe": Kind(
+        _P, "TOTAL_VENOUS_CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT", domain=NONNEGATIVE
+    ),
     # a species of an organ which a PD component or an observer reads, exposed
     # by the organ
-    "organ_concentration": Kind(_P, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
-    "organ_amount": Kind(_P, "AMOUNT_OF_COMPOUND_IN_COMPARTMENT"),
-    "plasma_concentration": Kind(_P, "CONCENTRATION_IN_PLASMA"),
-    "free_concentration": Kind(_P, "UNBOUND_CONCENTRATION_IN_PLASMA"),
-    "blood_concentration": Kind(_P, "CONCENTRATION_IN_BLOOD"),
+    "organ_concentration": Kind(
+        _P, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT", domain=NONNEGATIVE
+    ),
+    "organ_amount": Kind(_P, "AMOUNT_OF_COMPOUND_IN_COMPARTMENT", domain=NONNEGATIVE),
+    "plasma_concentration": Kind(_P, "CONCENTRATION_IN_PLASMA", domain=NONNEGATIVE),
+    "free_concentration": Kind(
+        _P, "UNBOUND_CONCENTRATION_IN_PLASMA", domain=NONNEGATIVE
+    ),
+    "blood_concentration": Kind(_P, "CONCENTRATION_IN_BLOOD", domain=NONNEGATIVE),
     "unbound_concentration": Kind(
-        _P, "UNBOUND_CONCENTRATION_OF_COMPUND_IN_COMPARTMENT"
+        _P, "UNBOUND_CONCENTRATION_OF_COMPUND_IN_COMPARTMENT", domain=NONNEGATIVE
     ),
     # the amount per time into the urine is a result of the model; PBPKO's
     # urinary rate is a biochemical parameter (an input), so a version of it
@@ -934,70 +1225,93 @@ KINDS: dict[str, Kind] = {
         "OUTPUT_PARAMETER",
         terms=((BQB.IS_VERSION_OF, pbpko("URINARY_RATE")),),
         requested="urinary excretion rate (amount of compound per time)",
+        domain=NONNEGATIVE,
     ),
     # the readouts of the intestine (`PBPKDefinition.readouts`): the dissolved
     # amount in the lumen and the summed fluxes, results of the model (the
     # rates are versions of their processes, as the urinary rate)
-    "lumen_amount": Kind(_P, "AMOUNT_IN_LUMEN"),
+    "lumen_amount": Kind(_P, "AMOUNT_IN_LUMEN", domain=NONNEGATIVE),
     "intestine_absorption": Kind(
         _P,
         "OUTPUT_PARAMETER",
         terms=((BQB.IS_VERSION_OF, pbpko("ABSORPTION")),),
         requested="intestinal absorption rate (amount of compound per time)",
+        domain=NONNEGATIVE,
     ),
     "intestine_efflux": Kind(
         _P,
         "OUTPUT_PARAMETER",
         terms=((BQB.IS_VERSION_OF, pbpko("DISTRIBUTION_PROCESS")),),
         requested="intestinal efflux rate into the lumen (amount of compound per time)",
+        domain=NONNEGATIVE,
     ),
     "feces_rate": Kind(
         _P,
         "OUTPUT_PARAMETER",
         terms=((BQB.IS_VERSION_OF, pbpko("FECAL_EXCRETION")),),
         requested="fecal excretion rate (amount of compound per time)",
+        domain=NONNEGATIVE,
     ),
     "absorbed_amount": Kind(
         _P,
         "OUTPUT_PARAMETER",
         terms=((BQB.IS_VERSION_OF, pbpko("ABSORPTION")),),
         requested="amount of compound absorbed from the intestinal lumen",
+        domain=NONNEGATIVE,
     ),
     "absorbed_fraction": Kind(
         _P,
         "OUTPUT_PARAMETER",
         terms=((BQB.IS_VERSION_OF, pbpko("ABSORPTION")),),
         requested="fraction of the oral dose absorbed from the intestinal lumen",
+        # NONNEGATIVE: gross, the absorption flux is integrated and nothing drains
+        # it, so drug which returns to the lumen and is absorbed again counts twice
+        domain=NONNEGATIVE,
     ),
     "oral_dose_applied": Kind(
         _P,
         "OUTPUT_PARAMETER",
         requested="amount of the oral dose applied to the intestinal lumen",
+        domain=NONNEGATIVE,
     ),
     # an observer of a definition: what it computes is the definition's, the
     # library knows only that it is a result of the model
-    "observer": Kind(_P, "OUTPUT_PARAMETER"),
+    # REAL: a change over the start (`PBPKDefinition.deltas`) is negative for a loss
+    "observer": Kind(_P, "OUTPUT_PARAMETER", domain=REAL),
     # species
-    "concentration": Kind(_SPECIES, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT"),
-    "concentration_plasma": Kind(_SPECIES, "CONCENTRATION_IN_PLASMA"),
+    "concentration": Kind(
+        _SPECIES, "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT", domain=NONNEGATIVE
+    ),
+    "concentration_plasma": Kind(
+        _SPECIES, "CONCENTRATION_IN_PLASMA", domain=NONNEGATIVE
+    ),
     "concentration_tissue": Kind(
         _SPECIES,
         "CONCENTRATION_OF_COMPOUND_IN_COMPARTMENT",
         organ="CONCENTRATION_IN_{}",
+        domain=NONNEGATIVE,
     ),
-    "concentration_lumen": Kind(_SPECIES, "CONCENTRATION_IN_LUMEN"),
-    "concentration_mucosa": Kind(_SPECIES, "CONCENTRATION_IN_INTESTINAL_TISSUE"),
-    "concentration_bile": Kind(_SPECIES, "CONCENTRATION_IN_BILE"),
-    "concentration_tubule": Kind(_SPECIES, "CONCENTRATION_IN_FILTRATE"),
-    "amount_urine": Kind(_SPECIES, "CUMULATIVE_AMOUNT_IN_URINE"),
-    "amount_feces": Kind(_SPECIES, "CUMULATIVE_AMOUNT_IN_FECES"),
+    "concentration_lumen": Kind(_SPECIES, "CONCENTRATION_IN_LUMEN", domain=NONNEGATIVE),
+    "concentration_mucosa": Kind(
+        _SPECIES, "CONCENTRATION_IN_INTESTINAL_TISSUE", domain=NONNEGATIVE
+    ),
+    "concentration_bile": Kind(_SPECIES, "CONCENTRATION_IN_BILE", domain=NONNEGATIVE),
+    "concentration_tubule": Kind(
+        _SPECIES, "CONCENTRATION_IN_FILTRATE", domain=NONNEGATIVE
+    ),
+    "amount_urine": Kind(_SPECIES, "CUMULATIVE_AMOUNT_IN_URINE", domain=NONNEGATIVE),
+    "amount_feces": Kind(_SPECIES, "CUMULATIVE_AMOUNT_IN_FECES", domain=NONNEGATIVE),
     "amount_undissolved": Kind(
-        _SPECIES, "AMOUNT_IN_LUMEN", requested="amount of undissolved drug"
+        _SPECIES,
+        "AMOUNT_IN_LUMEN",
+        requested="amount of undissolved drug",
+        domain=NONNEGATIVE,
     ),
     "amount_remodelled": Kind(
         _SPECIES,
         "AMOUNT_OF_COMPOUND_IN_COMPARTMENT",
         requested="cumulative amount carried away by atrophied tissue",
+        domain=NONNEGATIVE,
     ),
     # reactions
     "blood_flow": Kind(
@@ -1098,6 +1412,7 @@ KINDS: dict[str, Kind] = {
             (BQB.IS_PROPERTY_OF, _DEPOT_ROUTES["rectal"].route),
         ),
         requested="fraction of the absorbed rectal dose into the portal vein",
+        domain=FRACTION,
     ),
     # the inhaled dose splits at the application: the deposited fraction is
     # the one which reaches the blood (`depot_fraction_inhaled`), the rest is
@@ -1110,6 +1425,7 @@ KINDS: dict[str, Kind] = {
             (BQB.IS_PROPERTY_OF, _DEPOT_ROUTES["inhaled"].route),
         ),
         requested="fraction of an inhaled dose which is swallowed",
+        domain=FRACTION,
     ),
     "inhaled_swallow_rate": Kind(
         _P,
@@ -1119,6 +1435,7 @@ KINDS: dict[str, Kind] = {
             (BQB.IS_PART_OF, _DEPOT_ROUTES["inhaled"].route),
         ),
         requested="swallowed part of an inhaled dose (mass per time)",
+        domain=NONNEGATIVE,
     ),
     "depot_loss_inhaled": Kind(
         _T,
@@ -1199,6 +1516,9 @@ def annotate[S: Sbase](
         SBO term of the element gives a generic one to an element without)
         and its terms added to its annotations; a term of the place whose
         resource the element has already (as what it is) is not repeated.
+        The domain of the kind is appended to its uncertainties, unless the
+        element states a domain already (a `ModelParameter` does), so an
+        element never carries two.
 
     Raises:
         KeyError: if the kind, the segment or the site is unknown.
@@ -1234,6 +1554,13 @@ def annotate[S: Sbase](
         element.sboTerm = k.sbo
     elif element.sboTerm is None:
         element.sboTerm = _DEFAULT_SBO[type(element).__name__]
+    if k.domain is not None and not any(
+        u.name == DOMAIN for u in element.uncertainties or []
+    ):
+        element.uncertainties = [
+            *(element.uncertainties or []),
+            domain_uncertainty(k.domain),
+        ]
     existing = list(element.annotations or [])
     element.annotations = existing + [
         t for t in dict.fromkeys(terms) if t not in existing

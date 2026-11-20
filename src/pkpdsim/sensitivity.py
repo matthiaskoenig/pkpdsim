@@ -38,6 +38,8 @@ if __name__ == "__main__":
 
 from __future__ import annotations
 
+import logging
+import math
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,6 +59,10 @@ from sbmlsim.sensitivity.parameters import (
 )
 from sbmlsim.sensitivity.runner import LocalAnalysis
 from sbmlsim.simulation import PK, Formula, Observable
+
+from pkpdsim.sbml.domains import Domain, domains
+
+logger = logging.getLogger(__name__)
 
 
 def pk_observables(
@@ -181,11 +187,10 @@ def max_after_dose(time: np.ndarray, values: Mapping[str, np.ndarray]) -> float:
     return float(np.max(x[time >= 0]))
 
 
-#: the severities of the impairments of a library model, 0 in the healthy
-#: individual, by their largest value (Child-Pugh C, NYHA IV)
-SEVERITIES: Mapping[str, float] = MappingProxyType(
-    {"CP_severity": 3.0, "HF_severity": 4.0}
-)
+#: the ids of the severities of the impairments of a library model, 0 in the
+#: healthy individual; their largest value (Child-Pugh C 3, NYHA IV 4) is the
+#: upper bound of their domain in the model
+SEVERITIES: frozenset[str] = frozenset({"CP_severity", "HF_severity"})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -242,6 +247,8 @@ def library_parameters(
     scaling_ids: Collection[str],
     references: Mapping[str, str] = MappingProxyType({}),
     relative: float = 0.15,
+    clip: bool = True,
+    unclipped: Collection[str] = (),
 ) -> list[SensitivityParameter]:
     """Get the parameters of the analyses of a model of the PBPK library.
 
@@ -253,9 +260,23 @@ def library_parameters(
     - fitted parameters (`fit_ids`, type fitted): `value * (1 +- relative)`;
     - scaling factors (`scaling_ids`, type scaling, 1 in the healthy
       individual): `1 +- relative`;
-    - severities (`SEVERITIES`, type scaling): 0 to `relative * top`, since
+    - severities (`SEVERITIES`, type scaling): 0 to `relative * top`, the top
+      being the upper bound of the domain of the severity in the model, since
       relative bounds around 0 would be 0;
     - any other parameter: `value * (1 +- relative)`.
+
+    A relative span does not know what a value means: 0.94 of a fraction
+    absorbed `+- 0.15` reaches 1.081, more than a dose. With `clip` the bounds
+    of every parameter are intersected with the domain the model states for it
+    (`pkpdsim.sbml.domains.domains`), and every bound which moves is logged as
+    a warning. A parameter which states no domain keeps its bounds, which one
+    summary warning counts. A model which states no domain for any quantity
+    was built before the domain contract: it gets the plain relative span for
+    every parameter, severities included, and one warning, and raises nothing.
+    A pair of bounds whose lower bound is above its
+    upper bound (the relative bounds of a negative value) is left as it is. The
+    two ways out of the clip are `clip=False` for the whole analysis and
+    `unclipped` for single parameters, which keep the span they were given.
 
     The reference of a parameter is the sources of its notes (`;` separated),
     replaced by the text in `references` (e.g. the guideline of the classes of
@@ -269,14 +290,18 @@ def library_parameters(
         scaling_ids: the scaling factors among the `ids`.
         references: references by id, which replace those of the notes.
         relative: the relative half width of the bounds.
+        clip: intersect the bounds with the domains of the model.
+        unclipped: the ids whose bounds are not intersected with their domain.
 
     Returns:
         The parameters of the `ids` with bounds, types and references.
 
     Raises:
         ValueError: naming every id which is no parameter of the model, and
-            every id of `fit_ids`, `scaling_ids` or `references` which is not
-            in `ids`.
+            every id of `fit_ids`, `scaling_ids`, `references` or `unclipped`
+            which is not in `ids`, a severity without a finite upper bound of
+            its domain in a model which states domains, and a clipped
+            parameter whose value is outside its domain.
     """
     by_uid = {
         p.uid: p
@@ -289,7 +314,7 @@ def library_parameters(
             f"parameters of the model {model_path.name}."
         )
     outside = sorted(
-        {*fit_ids, *scaling_ids, *references}.difference(ids),
+        {*fit_ids, *scaling_ids, *references, *unclipped}.difference(ids),
     )
     if outside:
         raise ValueError(
@@ -309,12 +334,35 @@ def library_parameters(
             for uid in scaling_ids
         ],
     )
-    # the severities, whose relative bounds around 0 would be 0
+    # the severities, whose relative bounds around 0 would be 0, up to the top
+    # of their domain
+    domain_of = domains(model_path)
+    # a model which states no domain at all predates the contract: the plain
+    # relative span for every parameter, no clip
+    predates = not domain_of
+    if predates:
+        logger.warning(
+            "The model %s states no domain for any quantity, so it was built "
+            "before the domain contract: the bounds are the plain relative span, "
+            "no severity is varied over its domain and nothing is clipped. "
+            "Rebuilding the model gives the clip.",
+            model_path.name,
+        )
+    severities = [] if predates else [uid for uid in ids if uid in SEVERITIES]
+    for uid in severities:
+        if uid not in domain_of or not math.isfinite(domain_of[uid].upper):
+            raise ValueError(
+                f"The severity {uid} of the sensitivity analysis has no finite "
+                f"upper bound of its domain in the model {model_path.name}: the "
+                "model states domains but none for this quantity, or one without "
+                "an upper bound. A model built before the domain contract has to "
+                "be rebuilt."
+            )
     set_bounds(
         parameters,
         [
-            (uid, 0.0, relative * top, ParameterType.SCALING)
-            for uid, top in SEVERITIES.items()
+            (uid, 0.0, relative * domain_of[uid].upper, ParameterType.SCALING)
+            for uid in severities
         ],
     )
 
@@ -334,4 +382,76 @@ def library_parameters(
 
     # every parameter without bounds varies around its value
     set_relative_bounds(parameters, relative)
+    if clip and not predates:
+        _clip_to_domains(parameters, domain_of, set(unclipped), model_path.name)
     return parameters
+
+
+def _clip_to_domains(
+    parameters: Sequence[SensitivityParameter],
+    domain_of: Mapping[str, Domain],
+    unclipped: Collection[str],
+    name: str,
+) -> None:
+    """Intersect the bounds of the parameters with their domains, in place.
+
+    Args:
+        parameters: the parameters with bounds.
+        domain_of: the domains of the model by id.
+        unclipped: the ids which keep their bounds.
+        name: the name of the model for the messages.
+
+    Raises:
+        ValueError: for a parameter whose value is outside its domain.
+    """
+    without = []
+    not_a_number: list[str] = []
+    for p in parameters:
+        if p.uid in unclipped:
+            continue
+        domain = domain_of.get(p.uid)
+        if domain is None:
+            without.append(p.uid)
+            continue
+        if math.isnan(p.value):
+            not_a_number.append(p.uid)
+            continue
+        if not domain.contains(p.value):
+            raise ValueError(
+                f"The value {p.value:g} of the parameter {p.uid} is outside its "
+                f"domain {domain} in the model {name}."
+            )
+        lower, upper = p.lower_bound, p.upper_bound
+        if math.isnan(lower) or math.isnan(upper):
+            not_a_number.append(p.uid)
+            continue
+        clipped = domain.clip(lower, upper)
+        if clipped != (lower, upper):
+            logger.warning(
+                "The bounds [%g, %g] of the sensitivity parameter %s leave its "
+                "domain %s and are clipped to [%g, %g].",
+                lower,
+                upper,
+                p.uid,
+                domain,
+                *clipped,
+            )
+            p.lower_bound, p.upper_bound = clipped
+    if without:
+        logger.warning(
+            "%d of the %d parameters of the sensitivity analysis state no domain "
+            "in the model %s, their bounds are not clipped: %s.",
+            len(without),
+            len(parameters),
+            name,
+            ", ".join(without),
+        )
+    if not_a_number:
+        logger.warning(
+            "%d of the %d parameters of the sensitivity analysis have a value or a "
+            "bound which is not a number in the model %s, they are not clipped: %s.",
+            len(set(not_a_number)),
+            len(parameters),
+            name,
+            ", ".join(dict.fromkeys(not_a_number)),
+        )

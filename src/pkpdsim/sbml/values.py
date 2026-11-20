@@ -20,6 +20,8 @@ from typing import Any, Literal
 from sbmlutils.factory import Uncertainty
 from sbmlutils.factory.units import UnitDefinition, UnitType
 
+from pkpdsim.sbml.domains import Domain
+
 __all__ = [
     "CHOICE",
     "DIFFUSION_UNITS",
@@ -130,6 +132,10 @@ class ModelParameter:
         unit: the unit of the parameter.
         name: the name of the parameter, the id by default.
         notes: the notes of the parameter, e.g. its meaning and source.
+        domain: the interval of values the model accepts for the parameter,
+            which the kind of a model-stated constant cannot know; written as
+            the `domain` uncertainty of the element and required by the
+            check of the definition.
     """
 
     sid: str
@@ -137,6 +143,7 @@ class ModelParameter:
     unit: UnitDefinition
     name: str | None = None
     notes: str | None = None
+    domain: Domain | None = None
 
 
 CHOICE = "ModelChoice"
@@ -313,6 +320,32 @@ def check_unit(where: str, name: str, q: Q | None, unit: UnitType) -> list[str]:
     given, expected = unit_text(q.unit), unit_text(unit)
     if given != expected:
         return [f"{where}: {name} must be in {expected}, got {given}"]
+    return []
+
+
+def check_domain(
+    where: str, name: str, q: Q | None, domain: Domain | None
+) -> list[str]:
+    """Check that a number lies in the domain its parameter states.
+
+    Args:
+        where: what the number belongs to, e.g. `parameter 'k'`.
+        name: the name of the number, e.g. `value`.
+        q: the number, a `Value` or a `Formula`; a `Formula` has no number to
+            check.
+        domain: the domain the parameter states, `None` when it states none.
+
+    Returns:
+        The problems: no domain, or a number it does not admit.
+    """
+    if domain is None:
+        return [
+            f"{where}: states no domain, set `ModelParameter(domain=...)`, "
+            "`NONNEGATIVE` of `pkpdsim.sbml.domains` is the ordinary choice"
+        ]
+    x = number(q)
+    if x is not None and not domain.contains(x):
+        return [f"{where}: {name} {x} is not admitted by its domain {domain}"]
     return []
 
 

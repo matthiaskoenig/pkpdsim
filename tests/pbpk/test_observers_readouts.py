@@ -52,6 +52,7 @@ from pkpdsim.pbpk.units import (
     unit_label,
 )
 from pkpdsim.pbpk.variants.segments import segments
+from pkpdsim.sbml.domains import NONNEGATIVE
 
 from .conftest import (
     assert_reference_sbml,
@@ -308,7 +309,13 @@ def test_the_unit_per_body_surface_area_is_defined_wherever_it_is_used(
     d = definition(
         routes=[Route.iv(S)],
         parameters=[
-            ModelParameter("eGFR_ref", 90.0, ML_PER_MIN_1P73M2, "reference eGFR")
+            ModelParameter(
+                "eGFR_ref",
+                90.0,
+                ML_PER_MIN_1P73M2,
+                "reference eGFR",
+                domain=NONNEGATIVE,
+            )
         ],
         observers=[
             Observer(

@@ -137,6 +137,7 @@ from pkpdsim.pbpk.placement import (
     species_start,
     start_formula,
     value_parameter,
+    with_domain,
 )
 from pkpdsim.pbpk.pregnancy import pregnancy_objects, pregnancy_physiology_factors
 from pkpdsim.pbpk.remodelling import lobes_dynamic
@@ -1610,13 +1611,16 @@ class _Top:
         """
         self.add(
             annotate(
-                value_parameter(
-                    p.sid,
-                    p.value,
-                    p.unit,
-                    p.name or p.sid,
-                    _SBO_PARAMETER,
-                    p.notes or "",
+                with_domain(
+                    value_parameter(
+                        p.sid,
+                        p.value,
+                        p.unit,
+                        p.name or p.sid,
+                        _SBO_PARAMETER,
+                        p.notes or "",
+                    ),
+                    p.domain,
                 ),
                 "definition_parameter",
             )
