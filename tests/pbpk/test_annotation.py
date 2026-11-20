@@ -65,6 +65,7 @@ from pkpdsim.pbpk.annotation import (
     requested_terms,
 )
 from pkpdsim.pbpk.builder import BuildResult, build
+from pkpdsim.pbpk.distribution import constant
 from pkpdsim.pbpk.values import Value
 from pkpdsim.sbml.domains import (
     DOMAIN,
@@ -611,7 +612,6 @@ _WITHOUT_DOMAIN = [
 
 #: the kinds whose element is a share, a probability or a switch of 0 and 1
 _FRACTIONS = [
-    "absorbed_fraction",
     "arm_weight",
     "ckd",
     "depot_fraction_im",
@@ -642,7 +642,13 @@ _FRACTIONS = [
 ]
 
 #: the kinds which take both signs
-_REAL = ["body_weight_change", "lobe_growth", "observer", "steady_rate"]
+_REAL = [
+    "body_composition_change",
+    "body_weight_change",
+    "lobe_growth",
+    "observer",
+    "steady_rate",
+]
 
 _REACTION_SBO = frozenset(
     {
@@ -689,11 +695,17 @@ def test_a_factor_is_not_bounded_by_one() -> None:
 
 
 def test_a_ratio_of_concentrations_is_not_a_share() -> None:
-    from pkpdsim.pbpk.distribution import constant
-
     assert KINDS["concentration_ratio"].domain == NONNEGATIVE
     assert _uncertainty_names(constant("r_protein_int_pls")) == [DOMAIN]
     (span,) = (constant("r_protein_int_pls").uncertainties or [])[0].uncertParameters
     assert isinstance(span, UncertSpan)
     assert span.valueUpper == float("inf")
     assert KINDS["tissue_composition"].domain == FRACTION
+
+
+def test_a_gross_fraction_and_an_abundance_are_not_shares() -> None:
+    # `Fa` is gross (an absorbed drug which returns to the lumen counts twice) and
+    # a relative abundance has a mean of 1 over the zones
+    assert KINDS["absorbed_fraction"].domain == NONNEGATIVE
+    assert KINDS["relative_abundance"].domain == NONNEGATIVE
+    assert KINDS["placement_weight"].domain == FRACTION

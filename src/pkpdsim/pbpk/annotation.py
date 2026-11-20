@@ -820,6 +820,11 @@ KINDS: dict[str, Kind] = {
     "body_composition": Kind(
         _P, _PHYS, requested="body composition of an individual", domain=NONNEGATIVE
     ),
+    # REAL: the effect on the body weight and the change of the waist are negative
+    # for a loss
+    "body_composition_change": Kind(
+        _P, _PHYS, requested="body composition of an individual", domain=REAL
+    ),
     "fat_mass": Kind(_P, _PHYS, requested="body fat mass", domain=NONNEGATIVE),
     "adipose_depot": Kind(
         _P, _PHYS, requested="mass of an adipose tissue depot", domain=NONNEGATIVE
@@ -851,6 +856,8 @@ KINDS: dict[str, Kind] = {
     ),
     "fetus": Kind(_C, "COMPARTMENT", requested="fetus compartment", domain=NONNEGATIVE),
     # circadian rhythms
+    # [0, 24] is the closed superset of the [0, 24) which `circadian.py` enforces,
+    # a closed interval is all a range span can state
     "clock_time": Kind(
         _P, _PHYS, requested="clock time of a simulation", domain=Domain(0.0, 24.0)
     ),
@@ -926,7 +933,8 @@ KINDS: dict[str, Kind] = {
     "concentration_ratio": Kind(
         _P,
         _PHYS,
-        # the annotation of `tissue_composition`, of which it is the one constant
+        # the annotation of `tissue_composition`: the constant of the interstitial
+        # protein is a ratio of two concentrations, not a share of a whole
         requested="tissue composition (water, protein, lipid fractions)",
         domain=NONNEGATIVE,
     ),
@@ -997,6 +1005,14 @@ KINDS: dict[str, Kind] = {
     ),
     "placement_weight": Kind(
         _P, _MISC, requested="abundance weight of a protein or process", domain=FRACTION
+    ),
+    # a relative abundance is normalised to a mean of 1, so a gradient puts values
+    # above 1; its share (`placement_weight`) is the fraction
+    "relative_abundance": Kind(
+        _P,
+        _MISC,
+        requested="abundance weight of a protein or process",
+        domain=NONNEGATIVE,
     ),
     # kinetics of the processes
     "vmax": Kind(
@@ -1243,7 +1259,9 @@ KINDS: dict[str, Kind] = {
         "OUTPUT_PARAMETER",
         terms=((BQB.IS_VERSION_OF, pbpko("ABSORPTION")),),
         requested="fraction of the oral dose absorbed from the intestinal lumen",
-        domain=FRACTION,
+        # NONNEGATIVE: gross, the absorption flux is integrated and nothing drains
+        # it, so drug which returns to the lumen and is absorbed again counts twice
+        domain=NONNEGATIVE,
     ),
     "oral_dose_applied": Kind(
         _P,

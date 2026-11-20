@@ -42,7 +42,7 @@ from pkpdsim.pbpk.chemistry import Direction, Membrane, Transport
 from pkpdsim.pbpk.data import value
 from pkpdsim.pbpk.impairment import GASTRIC_EMPTYING
 from pkpdsim.pbpk.variants.segments import DATA, SEGMENTS
-from pkpdsim.sbml.domains import FRACTION
+from pkpdsim.sbml.domains import DOMAIN, FRACTION
 
 from .conftest import (
     assert_reference_sbml,
@@ -548,7 +548,7 @@ def test_fitted_factors_keep_their_uncertainty(tmp_path: Path) -> None:
         assert [
             plugin.getUncertainty(i).getName()
             for i in range(plugin.getNumUncertainties())
-        ] == ["fit F1", "domain"]
+        ] == ["fit F1", DOMAIN]
         assert "Fitted value." in p.getNotesString()
 
 
