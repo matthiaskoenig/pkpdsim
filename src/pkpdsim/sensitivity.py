@@ -387,6 +387,7 @@ def _clip_to_domains(
         ValueError: for a parameter whose value is outside its domain.
     """
     without = []
+    not_a_number: list[str] = []
     for p in parameters:
         if p.uid in unclipped:
             continue
@@ -394,13 +395,22 @@ def _clip_to_domains(
         if domain is None:
             without.append(p.uid)
             continue
-        if not math.isnan(p.value) and not domain.contains(p.value):
+        if math.isnan(p.value):
+            not_a_number.append(p.uid)
+        elif not domain.contains(p.value):
             raise ValueError(
                 f"The value {p.value:g} of the parameter {p.uid} is outside its "
                 f"domain {domain} in the model {name}."
             )
         lower, upper = p.lower_bound, p.upper_bound
-        if math.isnan(lower) or math.isnan(upper) or lower > upper:
+        if math.isnan(lower) or math.isnan(upper):
+            not_a_number.append(p.uid)
+            continue
+        if lower > upper:
+            # set_relative_bounds reverses the bounds of a negative value on
+            # purpose and `distributions` of sbmlsim refuses such a parameter by
+            # name, so that a model sets explicit bounds with `set_bounds`;
+            # clipping the pair would hide that
             continue
         clipped = domain.clip(lower, upper)
         if clipped != (lower, upper):
@@ -422,4 +432,13 @@ def _clip_to_domains(
             len(parameters),
             name,
             ", ".join(without),
+        )
+    if not_a_number:
+        logger.warning(
+            "%d of the %d parameters of the sensitivity analysis have a value or a "
+            "bound which is not a number in the model %s, they are not clipped: %s.",
+            len(set(not_a_number)),
+            len(parameters),
+            name,
+            ", ".join(dict.fromkeys(not_a_number)),
         )

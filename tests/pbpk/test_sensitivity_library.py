@@ -7,15 +7,16 @@ model is the definition of `tests/pbpk/conftest.py`.
 
 import logging
 import math
+from collections.abc import Collection
 from pathlib import Path
 
 import libsbml
 import pytest
-from sbmlsim.sensitivity.parameters import ParameterType
+from sbmlsim.sensitivity.parameters import ParameterType, SensitivityParameter
 from sbmlsim.sensitivity.runner import SensitivityGroup
 from sbmlsim.simulation import Simulation
 
-from pkpdsim.pbpk import Organ, Variants
+from pkpdsim.pbpk import ModelParameter, Organ, U, Variants
 from pkpdsim.pbpk.builder import build
 from pkpdsim.pbpk.variants.intestine import SegmentedIntestine
 from pkpdsim.sbml.domains import Domain
@@ -123,7 +124,9 @@ def fraction_model(tmp_path: Path, value: float = FABS) -> Path:
     return build(definition_, tmp_path).flat_path
 
 
-def fraction(path: Path, **kwargs: object):  # noqa: ANN201
+def fraction(
+    path: Path, *, clip: bool = True, unclipped: Collection[str] = ()
+) -> SensitivityParameter:
     """Get the parameter `fabs_drg` of the analysis of the model."""
     parameters = library_parameters(
         path,
@@ -131,7 +134,8 @@ def fraction(path: Path, **kwargs: object):  # noqa: ANN201
         fit_ids=[],
         scaling_ids=[],
         relative=RELATIVE,
-        **kwargs,  # ty: ignore[invalid-argument-type]
+        clip=clip,
+        unclipped=unclipped,
     )
     return parameters[0]
 
@@ -226,15 +230,38 @@ def test_a_value_outside_its_domain_raises(tmp_path: Path) -> None:
         fraction(broken)
 
 
-def test_an_inverted_pair_of_a_negative_value_is_left_alone(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # set_relative_bounds reverses the bounds of a negative value, upstream by
-    # design; no parameter of the library is negative, so the domain is stated
-    path = fraction_model(tmp_path, value=-0.5)
-    monkeypatch.setattr(
-        "pkpdsim.sensitivity.domains",
-        lambda path: {"fabs_drg": Domain(-math.inf, math.inf)},
+def test_an_inverted_pair_of_a_negative_value_is_left_alone(tmp_path: Path) -> None:
+    """The reversed bounds of a negative value survive the clipping.
+
+    `set_relative_bounds` of sbmlsim reverses the bounds of a negative value on
+    purpose and `distributions` refuses such a parameter by name, so that a
+    model sets explicit bounds, so the pair must stay inverted. The value -0.9
+    in the domain [-1, 1] gives the pair (-0.765, -1.035). This pins the
+    outcome on a real model; `Domain.clip` limits each bound on its own side
+    only, so for a value inside its domain it leaves any such pair unchanged
+    even without the guard of `_clip_to_domains`.
+    """
+    definition_ = definition(
+        parameters=[ModelParameter("neg", -0.9, U.dimensionless, domain=Domain(-1, 1))]
     )
-    p = fraction(path)
-    assert p.lower_bound > p.upper_bound
+    path = build(definition_, tmp_path).flat_path
+    p = library_parameters(
+        path, ["neg"], fit_ids=[], scaling_ids=[], relative=RELATIVE
+    )[0]
+    assert p.value == pytest.approx(-0.9)
+    assert (p.lower_bound, p.upper_bound) == pytest.approx((-0.765, -1.035))
+
+
+def test_values_which_are_not_a_number_are_counted(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    document = libsbml.readSBMLFromFile(str(fraction_model(tmp_path)))
+    document.getModel().getParameter("fabs_drg").setValue(math.nan)
+    broken = tmp_path / "nan.xml"
+    libsbml.writeSBMLToFile(document, str(broken))
+    with caplog.at_level(logging.INFO, logger="pkpdsim.sensitivity"):
+        p = fraction(broken)
+    assert "1 of the 1 parameters" in caplog.text
+    assert "not a number" in caplog.text
+    assert "fabs_drg" in caplog.text
+    assert math.isnan(p.lower_bound)
