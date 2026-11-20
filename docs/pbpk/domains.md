@@ -398,7 +398,7 @@ The model has 403 parameters, compartments and species, and all of them state a 
 
 ## Clip a span
 
-`library_parameters` of `pkpdsim.sensitivity` intersects the bounds of every parameter of a sensitivity analysis with its domain (`clip=True`, the default). Every bound it moves is logged as a warning, and the parameters which state no domain are counted in one further warning. The severities (`SEVERITIES`, `CP_severity` and `HF_severity`) are varied over their domain, from 0 to `relative` times its upper bound, and not around their value, which is 0 for a healthy individual. A parameter whose value is outside its own domain is an error, the clip does not hide it. `clip=False` keeps the span for the whole analysis and `unclipped` for the named parameters.
+`library_parameters` of `pkpdsim.sensitivity` intersects the bounds of every parameter of a sensitivity analysis with its domain (`clip=True`, the default). Every bound it moves is logged as a warning, and the parameters which state no domain are counted in one further warning. The severities (`SEVERITY_IDS`, `CP_severity` and `HF_severity`) are varied over their domain, from 0 to `relative` times its upper bound, and not around their value, which is 0 for a healthy individual. A parameter whose value is outside its own domain is an error, the clip does not hide it. `clip=False` keeps the span for the whole analysis and `unclipped` for the named parameters.
 
 The span of 0.15 around 0.94 gives 0.799 to 1.081 and the upper bound is moved to 1. The unbound fraction `fu_api` of 0.13 gives 0.1105 to 0.1495 and stays inside its domain, and the severity of the Child-Pugh class gets 0 to 0.15 times 3, which is 0.45:
 

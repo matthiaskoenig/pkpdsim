@@ -26,6 +26,7 @@ imports no simulator and no library of pkpdsim, it belongs to the layer below
 them (see `pkpdsim.sbml`).
 """
 
+import logging
 import math
 from dataclasses import dataclass
 from enum import StrEnum
@@ -48,6 +49,8 @@ __all__ = [
     "domains",
     "integers",
 ]
+
+logger = logging.getLogger(__name__)
 
 DOMAIN = "domain"
 """Name of the uncertainty which carries a domain."""
@@ -121,9 +124,13 @@ class Domain:
 
         An interval has each bound limited to the interval of the domain, each
         on its own side, so an interval whose bounds are reversed is returned
-        as it is; a caller may rely on that. A single value is limited to it
-        and, for an integer or boolean domain, rounded to the nearest integer
-        the domain contains.
+        as it is; a caller may rely on that. An interval of an integer or
+        boolean domain which is not reversed has each finite bound widened
+        onto a value the domain contains, the lower one down and the upper one
+        up, which is logged: a fractional span of a switch or of a count is a
+        modelling error, not a rounding one. A single value is limited to the
+        domain and, for an integer or boolean domain, rounded to the nearest
+        integer it contains.
 
         Args:
             lower: The value, or the lower bound of an interval.
@@ -139,7 +146,10 @@ class Domain:
             ValueError: If a single value is not a number.
         """
         if upper is not None:
-            return max(lower, self.lower), min(upper, self.upper)
+            low, high = max(lower, self.lower), min(upper, self.upper)
+            if self.values is Values.CONTINUOUS or low > high:
+                return low, high
+            return self._onto_values(low, high)
         if math.isnan(lower):
             raise ValueError("a value which is not a number cannot be clipped")
         x = min(max(lower, self.lower), self.upper)
@@ -151,6 +161,38 @@ class Domain:
         if x > self.upper:
             x = float(math.floor(self.upper))
         return x
+
+    def _onto_values(self, low: float, high: float) -> tuple[float, float]:
+        """Widen the bounds of an interval onto the values this domain holds.
+
+        The lower bound moves down and the upper bound moves up, so the
+        interval asked for stays inside the one returned and the result is
+        never empty, and neither bound leaves the interval of the domain. A
+        bound which is not finite stays as it is, since no integral value lies
+        nearer to it than it does itself.
+        """
+        wide_low, wide_high = low, high
+        if math.isfinite(low):
+            wide_low = float(math.floor(low))
+            if wide_low < self.lower:
+                wide_low = float(math.ceil(self.lower))
+        if math.isfinite(high):
+            wide_high = float(math.ceil(high))
+            if wide_high > self.upper:
+                wide_high = float(math.floor(self.upper))
+        if (wide_low, wide_high) != (low, high):
+            logger.warning(
+                "The domain %s holds integral values only, so the interval "
+                "(%s, %s) is widened to (%s, %s). A fractional span of a "
+                "switch or of a count is a modelling error, not a rounding "
+                "one.",
+                self,
+                low,
+                high,
+                wide_low,
+                wide_high,
+            )
+        return wide_low, wide_high
 
     def contains(self, value: float) -> bool:
         """Whether a value is one the domain accepts, the bounds included.

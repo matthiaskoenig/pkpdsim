@@ -21,7 +21,7 @@ from pkpdsim.pbpk.builder import build
 from pkpdsim.pbpk.variants.intestine import SegmentedIntestine
 from pkpdsim.sbml.domains import Domain, domains
 from pkpdsim.sensitivity import (
-    SEVERITIES,
+    SEVERITY_IDS,
     NonzeroLocalAnalysis,
     library_parameters,
     notes_sources,
@@ -140,8 +140,8 @@ def fraction(
     return parameters[0]
 
 
-def test_severities_are_ids() -> None:
-    assert frozenset({"CP_severity", "HF_severity"}) == SEVERITIES
+def test_severities_are_ids_in_a_fixed_order() -> None:
+    assert SEVERITY_IDS == ("CP_severity", "HF_severity")
 
 
 def test_a_severity_is_varied_to_the_top_of_its_domain(tmp_path: Path) -> None:

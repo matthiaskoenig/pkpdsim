@@ -12,7 +12,7 @@ This module holds what is pharmacokinetic or of the PBPK library: the
 observables of the non-compartmental analysis of a substance
 (`pk_observables`, the `observables` of a runner, `max_after_dose`), the
 parameters of an analysis of a library model (`library_parameters`,
-`notes_sources`, `SEVERITIES`) and the local analysis of its nonzero
+`notes_sources`, `SEVERITY_IDS`) and the local analysis of its nonzero
 parameters (`NonzeroLocalAnalysis`):
 
 ```python
@@ -190,7 +190,7 @@ def max_after_dose(time: np.ndarray, values: Mapping[str, np.ndarray]) -> float:
 #: the ids of the severities of the impairments of a library model, 0 in the
 #: healthy individual; their largest value (Child-Pugh C 3, NYHA IV 4) is the
 #: upper bound of their domain in the model
-SEVERITIES: frozenset[str] = frozenset({"CP_severity", "HF_severity"})
+SEVERITY_IDS: tuple[str, ...] = ("CP_severity", "HF_severity")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -260,7 +260,7 @@ def library_parameters(
     - fitted parameters (`fit_ids`, type fitted): `value * (1 +- relative)`;
     - scaling factors (`scaling_ids`, type scaling, 1 in the healthy
       individual): `1 +- relative`;
-    - severities (`SEVERITIES`, type scaling): 0 to `relative * top`, the top
+    - severities (`SEVERITY_IDS`, type scaling): 0 to `relative * top`, the top
       being the upper bound of the domain of the severity in the model, since
       relative bounds around 0 would be 0;
     - any other parameter: `value * (1 +- relative)`.
@@ -348,7 +348,7 @@ def library_parameters(
             "Rebuilding the model gives the clip.",
             model_path.name,
         )
-    severities = [] if predates else [uid for uid in ids if uid in SEVERITIES]
+    severities = [] if predates else [uid for uid in ids if uid in SEVERITY_IDS]
     for uid in severities:
         if uid not in domain_of or not math.isfinite(domain_of[uid].upper):
             raise ValueError(

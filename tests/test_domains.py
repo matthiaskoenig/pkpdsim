@@ -391,3 +391,67 @@ def test_the_value_one_of_the_value_set_child_is_needed_by_antimony(
     # externalParameter without a value
     path = _one_parameter(tmp_path, d)
     assert sbml_to_antimony(path)
+
+
+def test_an_interval_of_a_boolean_domain_is_widened_onto_its_values() -> None:
+    """A fractional span of a switch is widened onto the values of the switch.
+
+    `BOOLEAN.clip(0.85, 1.15)` returned `(0.85, 1)` before, a pair whose lower
+    bound the domain itself rejects (#230).
+    """
+    low, high = BOOLEAN.clip(0.85, 1.15)
+    assert (low, high) == (0.0, 1.0)
+    assert BOOLEAN.contains(low)
+    assert BOOLEAN.contains(high)
+
+
+def test_an_interval_of_an_integer_domain_is_widened_onto_its_values() -> None:
+    domain = integers(0, 4)
+    low, high = domain.clip(0.3, 3.7)
+    assert (low, high) == (0.0, 4.0)
+    assert domain.contains(low)
+    assert domain.contains(high)
+
+
+def test_widening_an_interval_keeps_both_bounds_inside_the_domain() -> None:
+    """A domain whose own bounds are not integral is not left by the widening."""
+    domain = integers(0.5, 3.5)
+    low, high = domain.clip(0.6, 3.4)
+    assert (low, high) == (1.0, 3.0)
+    assert domain.contains(low)
+    assert domain.contains(high)
+
+
+def test_widening_an_interval_onto_the_values_is_logged(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING, logger="pkpdsim.sbml.domains"):
+        BOOLEAN.clip(0.85, 1.15)
+    assert "widened to (0.0, 1.0)" in caplog.text
+
+
+def test_an_integral_interval_of_an_integer_domain_is_not_logged(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING, logger="pkpdsim.sbml.domains"):
+        assert integers(0, 4).clip(1.0, 3.0) == (1.0, 3.0)
+    assert [r.getMessage() for r in caplog.records] == []
+
+
+def test_an_interval_of_a_continuous_domain_is_not_widened() -> None:
+    assert FRACTION.clip(0.2, 0.7) == (0.2, 0.7)
+
+
+def test_a_reversed_interval_of_an_integer_domain_stays_reversed() -> None:
+    """The contract of a reversed interval holds for an integer domain too.
+
+    sbmlsim builds an inverted pair for a negative value on purpose and
+    refuses it by name later, so the widening must not repair such a pair into
+    an interval which a sampler would accept.
+    """
+    assert integers(0, 4).clip(1.5, 0.5) == (1.5, 0.5)
+
+
+def test_an_infinite_bound_of_an_integer_domain_is_not_widened() -> None:
+    domain = integers(0, math.inf)
+    assert domain.clip(0.3, math.inf) == (0.0, math.inf)
