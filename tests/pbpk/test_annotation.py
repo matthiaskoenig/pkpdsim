@@ -619,6 +619,7 @@ _FRACTIONS = [
     "depot_fraction_inhaled",
     "depot_fraction_rectal",
     "depot_fraction_sc",
+    "fed",
     "flow_fraction",
     "fraction_absorbed",
     "fraction_reabsorbed",
@@ -717,7 +718,6 @@ def test_the_switch_of_renal_impairment_is_a_boolean() -> None:
 def test_the_flags_of_the_library_are_booleans() -> None:
     assert sorted(k for k, v in KINDS.items() if v.domain == BOOLEAN) == [
         "ckd",
-        "fed",
         "lobe_present",
     ]
 
@@ -737,3 +737,9 @@ def test_the_bounds_of_every_integer_kind_are_integral() -> None:
         d = kind.domain
         if d is not None and d.values is not Values.CONTINUOUS:
             assert d.lower == int(d.lower) and d.upper == int(d.upper)
+
+
+def test_the_prandial_state_and_the_patency_stay_continuous() -> None:
+    # both interpolate between their two states (a light meal, a partial stenosis)
+    assert KINDS["fed"].domain == FRACTION
+    assert KINDS["lobe_patency"].domain == FRACTION

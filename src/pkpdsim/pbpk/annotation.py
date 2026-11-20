@@ -1137,7 +1137,7 @@ KINDS: dict[str, Kind] = {
         _MISC,
         terms=((BQB.IS_VERSION_OF, "ncit/C65056"),),  # postprandial
         requested="prandial state (fed or fasted)",
-        domain=BOOLEAN,
+        domain=FRACTION,
     ),
     "intestine_geometry": Kind(
         _P,

@@ -343,7 +343,7 @@ def test_a_document_with_an_integer_domain_validates(tmp_path: Path, d: Domain) 
 
 
 @pytest.mark.parametrize("d", [integers(0, 3), BOOLEAN])
-def test_antimony_loads_a_document_with_an_integer_domain(
+def test_the_value_one_of_the_value_set_child_is_needed_by_antimony(
     tmp_path: Path, d: Domain
 ) -> None:
     # the archive of a model is written through antimony, which refuses an
