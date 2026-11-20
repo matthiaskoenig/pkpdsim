@@ -29,6 +29,7 @@ from xml.sax.saxutils import escape
 
 from pkpdsim import __version__
 from pkpdsim.pbpk import ids
+from pkpdsim.pbpk.annotation import SEGMENTS
 from pkpdsim.pbpk.definition import PBPKDefinition
 from pkpdsim.pbpk.figure import schematic_svg
 from pkpdsim.pbpk.organs import Organ, Part
@@ -289,9 +290,35 @@ def _feces(sid: str, name: str) -> tuple[Readout, ...]:
     )
 
 
-def _lumen(sid: str, name: str) -> tuple[Readout, ...]:
-    """The readout of the dissolved amount of a substance in the lumen."""
-    return (Readout(ids.lumen_amount(sid), f"{name}, lumen amount", _AMOUNT, "amount"),)
+def _lumen(sid: str, name: str, content: ModelContent) -> tuple[Readout, ...]:
+    """The readouts of the dissolved drug in the intestinal lumen.
+
+    The summed amount over the segments, `Alumen_<s>`, is a readout of the
+    library which a model has to request (`PBPKDefinition.readouts`), so a
+    model which does not is reported segment by segment instead: the species
+    of every lumen compartment, whose plain id is its amount in `mmole`
+    (`GU__Clumen_du_<s>`; see `Readout.id`), which is the transit of the drug
+    through the intestine. A single lumen is the one such compartment. The
+    key would otherwise promise an id which is in no build and report
+    nothing at all, the one key of the figure whose readouts are all
+    dropped by a consumer which checks them (pkpdsim#222).
+    """
+    total = ids.lumen_amount(sid)
+    if total in content.readouts:
+        return (Readout(total, f"{name}, lumen amount", _AMOUNT, "amount"),)
+    organ = Organ.SMALL_INTESTINE
+    if not content.lumen_segments:
+        selection = ids.flat(organ, ids.lumen(sid))
+        return (Readout(selection, f"{name}, lumen amount", _AMOUNT, "amount"),)
+    return tuple(
+        Readout(
+            ids.flat(organ, ids.lumen(sid, seg)),
+            f"{name}, {SEGMENTS[seg].label} amount",
+            _AMOUNT,
+            "amount",
+        )
+        for seg in content.lumen_segments
+    )
 
 
 def readouts(
@@ -384,7 +411,7 @@ def readouts(
     for s, items in sampled.items():
         add(substance_key(s), names[s], items)
 
-    lumen = {s: _lumen(s, names[s]) for s in content.luminal}
+    lumen = {s: _lumen(s, names[s], content) for s in content.luminal}
     chips("lumen", "intestinal lumen", content.luminal, lumen)
     for badge, text in content.lumen_lines:
         add(f"lumen/{line_key(badge, text)}", "intestinal lumen")
