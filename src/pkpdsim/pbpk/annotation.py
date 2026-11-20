@@ -434,13 +434,6 @@ def _depot_kinds() -> dict[str, Kind]:
                 terms=prop,
                 domain=NONNEGATIVE,
             ),
-            f"depot_loss_amount_{key}": Kind(
-                _SPECIES,
-                "AMOUNT_OF_COMPOUND_IN_COMPARTMENT",
-                terms=prop,
-                requested="cumulative amount of a depot dose which is not absorbed",
-                domain=NONNEGATIVE,
-            ),
             f"depot_time_{key}": Kind(
                 _P,
                 "PARAMETER",
@@ -470,6 +463,16 @@ def _depot_kinds() -> dict[str, Kind]:
                 )
             ),
         }
+        if key != "rectal":
+            # the sink of a depot dose which is not absorbed; a rectal dose
+            # which is lost leaves with the feces (`depot_loss_rectal`)
+            kinds[f"depot_loss_amount_{key}"] = Kind(
+                _SPECIES,
+                "AMOUNT_OF_COMPOUND_IN_COMPARTMENT",
+                terms=prop,
+                requested="cumulative amount of a depot dose which is not absorbed",
+                domain=NONNEGATIVE,
+            )
     return kinds
 
 

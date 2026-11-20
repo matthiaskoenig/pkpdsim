@@ -20,6 +20,7 @@ fraction absorbed of pkpdsim#207 is caught either way.
 """
 
 import math
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -64,6 +65,7 @@ from pkpdsim.pbpk import (
     Value,
     Variants,
     ZonatedLiver,
+    annotation,
     ids,
 )
 from pkpdsim.pbpk.builder import build
@@ -587,3 +589,43 @@ def test_the_check_names_a_value_outside_and_absorbs_noise() -> None:
     assert _outside(noise, bounds, "t=0") == []
     wrong = {"f": 1.127, "v": -1e-6, "n": 1.5, "b": 2.0, "x": math.nan}
     assert [uid for uid, *_ in _outside(wrong, bounds, "t=0")] == sorted(bounds)
+
+
+UNREACHED = {
+    "buffer_response": "PressureFlow network, see `lobe_pressure`",
+    "lobe_pressure": "PressureFlow network: roadrunner cannot simulate its algebraic "
+    "rules, so no shape can read its values; a path through the sbmlsim core engine "
+    "is a follow-up",
+    "lobe_resistance": "PressureFlow network, see `lobe_pressure`",
+}
+"""The kinds with a domain which no shape builds, by the reason.
+
+A kind which is added to `KINDS` and which no shape reaches fails
+`test_every_kind_with_a_domain_is_reached`: add a shape, or the kind here with the
+reason."""
+
+
+def test_every_kind_with_a_domain_is_reached(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every kind of `KINDS` which states a domain annotates an element of a shape.
+
+    The kinds are recorded while each shape is built (a build, not a simulation),
+    so a kind which no shape reaches has its domain checked by nothing.
+    """
+    original = annotation.annotate
+    reached: set[str] = set()
+
+    def record(element, kind, **kwargs):  # noqa: ANN001, ANN003, ANN202
+        reached.add(kind)
+        return original(element, kind, **kwargs)
+
+    for module in list(sys.modules.values()):
+        if getattr(module, "annotate", None) is original:
+            monkeypatch.setattr(module, "annotate", record)
+    for name, make in SHAPES.items():
+        build(make()[0], tmp_path / name)
+    stated = {kind for kind, k in annotation.KINDS.items() if k.domain is not None}
+    assert sorted(stated - reached - set(UNREACHED)) == []
+    assert sorted(set(UNREACHED) & reached) == [], "reached now: drop it from UNREACHED"
+    assert set(UNREACHED) <= stated
