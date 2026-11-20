@@ -642,7 +642,7 @@ _FRACTIONS = [
 ]
 
 #: the kinds which take both signs
-_REAL = ["lobe_growth", "observer", "steady_rate"]
+_REAL = ["body_weight_change", "lobe_growth", "observer", "steady_rate"]
 
 _REACTION_SBO = frozenset(
     {
@@ -686,3 +686,14 @@ def test_a_factor_is_not_bounded_by_one() -> None:
     # induction and hypertrophy are real states of the model
     for kind in ("scaling_factor", "age_factor", "pregnancy", "remnant_fraction"):
         assert KINDS[kind].domain == NONNEGATIVE
+
+
+def test_a_ratio_of_concentrations_is_not_a_share() -> None:
+    from pkpdsim.pbpk.distribution import constant
+
+    assert KINDS["concentration_ratio"].domain == NONNEGATIVE
+    assert _uncertainty_names(constant("r_protein_int_pls")) == [DOMAIN]
+    (span,) = (constant("r_protein_int_pls").uncertainties or [])[0].uncertParameters
+    assert isinstance(span, UncertSpan)
+    assert span.valueUpper == float("inf")
+    assert KINDS["tissue_composition"].domain == FRACTION

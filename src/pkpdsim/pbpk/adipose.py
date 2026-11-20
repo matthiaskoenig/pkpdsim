@@ -782,7 +782,7 @@ def _weight_change(adipose: Adipose) -> list[Sbase]:
             U.kg,
             "body weight change [kg]",
             "The change of the body weight over the weight at the start.",
-            "body_weight",
+            "body_weight_change",
         ),
         *_constant(
             "BW_ratio",

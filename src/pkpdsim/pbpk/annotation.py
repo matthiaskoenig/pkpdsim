@@ -568,6 +568,8 @@ KINDS: dict[str, Kind] = {
     "tubule": Kind(_C, "FILTRATE_COMPARTMENT", domain=NONNEGATIVE),
     # covariates and the body
     "body_weight": Kind(_P, "BODYWEIGHT", domain=NONNEGATIVE),
+    # REAL: the change of the body weight over its start, negative for a loss
+    "body_weight_change": Kind(_P, "BODYWEIGHT", domain=REAL),
     "height": Kind(_P, "HEIGHT", domain=NONNEGATIVE),
     "age": Kind(_P, "AGE_IN_PBPK_MODEL", domain=NONNEGATIVE),
     "bmi": Kind(_P, "BODY_MASS_INDEX", domain=NONNEGATIVE),
@@ -920,6 +922,13 @@ KINDS: dict[str, Kind] = {
         _PHYS,
         requested="tissue composition (water, protein, lipid fractions)",
         domain=FRACTION,
+    ),
+    "concentration_ratio": Kind(
+        _P,
+        _PHYS,
+        # the annotation of `tissue_composition`, of which it is the one constant
+        requested="tissue composition (water, protein, lipid fractions)",
+        domain=NONNEGATIVE,
     ),
     "permeability": Kind(
         _P,
