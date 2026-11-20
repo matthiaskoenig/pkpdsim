@@ -8,7 +8,30 @@ export const CONTROLS = {
   habrGain: {parameter: "habr_gain", label: "buffer response gain", min: 0, max: 0.6, step: 0.005, value: 0.255},
   growth: {parameter: "k_growth", label: "growth constant [1/min]", min: 0, max: 0.002, step: 0.00005, value: 0.0005},
   surgery: {parameter: null, label: "time of the surgery [days]", min: 0, max: 4, step: 0.25, value: 0},
+  arterial: {parameter: null, label: "hepatic arterial inflow [x reference]", min: 0, max: 2, step: 0.05, value: 1},
+  portal: {parameter: null, label: "portal inflow [x reference]", min: 0, max: 2, step: 0.05, value: 1},
 };
+
+/** The gates of the lobes an inflow control asks for.
+ *
+ * A branch of a lobe is opened and closed by the gate `pkpdsim.pbpk.lobes`
+ * writes (`g_ha_<lobe>`, `g_po_<lobe>`), which a ligation sets to zero; the
+ * controls scale the same gate of every branch which is still open, so the
+ * page changes the inflow of a liver without a second model of a vessel. A
+ * branch the plan ligated keeps its zero and is left to `caseChanges`, and a
+ * resected lobe has no open branch at all.
+ */
+export function inflowChanges(tokens, states = {}, controls = {}) {
+  const values = normalizeControls(controls);
+  const changes = {};
+  for (const token of tokens) {
+    const state = states[token] ?? "intact";
+    if (state === "resected") continue;
+    if (state !== "arterial" && values.arterial !== CONTROLS.arterial.value) changes[`g_ha_${token}`] = values.arterial;
+    if (state !== "portal" && values.portal !== CONTROLS.portal.value) changes[`g_po_${token}`] = values.portal;
+  }
+  return changes;
+}
 
 /** The controls of the page with every value checked, the defaults filled in. */
 export function normalizeControls(controls = {}) {
@@ -76,12 +99,14 @@ export const RUNTIME_ASSETS = ["engine.wasm", "mathlib.wasm", "sbmlsim-core.js"]
  * `solver/`, so the bytes of the engine are served once for both pages
  * (scripts/lobes_examples.py writes only the model).
  */
-export function assetPath(species, name) {
-  return RUNTIME_ASSETS.includes(name) ? `solver/${name}` : `solver_lobes/${species}/${name}`;
+export function assetPath(species, name, sex = "male") {
+  if (RUNTIME_ASSETS.includes(name)) return `solver/${name}`;
+  const folder = sex === "male" ? "" : `${sex}/`;
+  return `${folder}solver_lobes/${species}/${name}`;
 }
 
-async function defaultLoadAsset(species, name) {
-  const response = await fetch(new URL(assetPath(species, name), import.meta.url));
+async function defaultLoadAsset(species, name, sex) {
+  const response = await fetch(new URL(assetPath(species, name, sex), import.meta.url));
   if (!response.ok) throw new Error(`Could not load ${name} of the ${species}: HTTP ${response.status}.`);
   return new Uint8Array(await response.arrayBuffer());
 }
@@ -89,20 +114,21 @@ async function defaultLoadAsset(species, name) {
 /** A worker of the installed sbmlsim-core host which runs the lobed liver of a species.
  *
  * One worker holds the compiled models of every species which was asked for,
- * under the key of the species, so switching species does not recompile.
+ * under the key of the species, so switching species does not recompile. The
+ * models of a sex are its own, so a worker is a worker of one sex.
  */
-export async function createLobeSolver({host = globalThis.sbmlsimCore, loadAsset = defaultLoadAsset, createWorker, species = []} = {}) {
+export async function createLobeSolver({host = globalThis.sbmlsimCore, loadAsset = defaultLoadAsset, createWorker, species = [], sex = "male"} = {}) {
   if (species.length === 0) throw new RangeError("A solver of the lobes needs the species whose models it runs.");
   if (!host?.blobWorkers && !createWorker) throw new Error("The sbmlsim-core browser host has not loaded.");
   const decoder = new TextDecoder();
   const configs = {};
   const models = {};
   for (const name of species) {
-    const configBytes = await loadAsset(name, "config.json");
+    const configBytes = await loadAsset(name, "config.json", sex);
     configs[name] = JSON.parse(decoder.decode(configBytes));
     const [modelBytes, descriptionBytes] = await Promise.all([
-      loadAsset(name, "model.wasm"),
-      loadAsset(name, "model.json"),
+      loadAsset(name, "model.wasm", sex),
+      loadAsset(name, "model.json", sex),
     ]);
     models[name] = {module: await WebAssembly.compile(modelBytes), description: decoder.decode(descriptionBytes)};
   }

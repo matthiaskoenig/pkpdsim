@@ -74,3 +74,66 @@ export function trim(value) {
   if (magnitude >= 1e-3 && magnitude < 1e6) return String(Number(value.toPrecision(4)));
   return value.toExponential(2).replace("e", "e").replace("e+", "e");
 }
+
+export const LOBE_SLOTS = 8;
+
+/** The colour of every lobe of a set, by its place in the lobe table.
+ *
+ * One slot of the palette per lobe (`--lobe-1` to `--lobe-8` of lobes.css,
+ * stepped for the light and for the dark theme), keyed by the order of the
+ * table and never by the order of what is plotted: a lobe keeps its colour
+ * when another one is resected and leaves the diagram. A set longer than the
+ * palette gets the neutral slot for the lobes past it rather than a repeated
+ * hue, which would say two lobes are one.
+ */
+export function lobeColors(lobes) {
+  return Object.fromEntries(lobes.map((lobe, index) => [
+    lobe.token,
+    index < LOBE_SLOTS ? `var(--lobe-${index + 1})` : "var(--lobe-other)",
+  ]));
+}
+
+/** What a plan does to the liver: the mass it covers and the mass left behind.
+ *
+ * `affected` is the share of the liver mass the procedure acts on, which is
+ * what the names of the procedures of the literature count (a `pvl70`
+ * deportalises 70 % of the mass); `remnant` is the share which is still in the
+ * liver afterwards, so a ligation leaves it at 1 and a resection takes the
+ * mass out. `kind` is the single state of the plan, `"mixed"` when the lobes
+ * carry more than one and `undefined` for the intact liver.
+ */
+export function planSummary(lobes, states) {
+  const mass = Object.fromEntries(lobes.map(lobe => [lobe.token, lobe.mass_fraction]));
+  let affected = 0, remnant = 0;
+  const kinds = new Set();
+  const chosen = [];
+  for (const lobe of lobes) {
+    const state = states?.[lobe.token] ?? "intact";
+    const share = mass[lobe.token] ?? 0;
+    if (state === "intact") { remnant += share; continue; }
+    kinds.add(state);
+    chosen.push(lobe.token);
+    affected += share;
+    if (state !== "resected") remnant += share;
+  }
+  const kind = kinds.size === 0 ? undefined : kinds.size === 1 ? [...kinds][0] : "mixed";
+  return {affected, remnant, kind, lobes: chosen};
+}
+
+/** A run time for a reader: milliseconds below a second, seconds above. */
+export function duration(ms) {
+  if (!Number.isFinite(ms)) return "-";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${Number((ms / 1000).toPrecision(2))} s`;
+}
+
+/** The two readings of one run: what grows, and what drives it.
+ *
+ * A view is no second simulation: the series of a run carries the volumes and
+ * the pressures alike, so the switch only changes what the dashboard reads
+ * out of the result which is already there.
+ */
+export const VIEWS = [
+  {id: "volume", label: "volumes", description: "What the remodelling does: the volume of every lobe, the remnant and the exposure."},
+  {id: "pressure", label: "pressures and flows", description: "What drives it: the pressure of the inflow, the pressure of every lobe and its perfusion per volume."},
+];

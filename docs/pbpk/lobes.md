@@ -237,7 +237,7 @@ gain 0.255 (Lautt1985), maximum 2.0
 
 ## The app of a model with lobes
 
-The app which a model generates ([web app of a model](../webapp.md)) gets a page of the lobes when the model has them, one choice per intervention per lobe: the portal vein and the hepatic artery branch of the lobe open or ligated, and the lobe in place or resected. Intact is the default of every one, so the app opens on the healthy liver and a reader ligates or resects from there and sees the readouts of the model change. The [interactive explorer](lobes_examples.md) goes further: it has the lobes of each species as a clickable liver, the named procedures as presets and the days of the remodelling as a course.
+The app which a model generates ([web app of a model](../webapp.md)) gets a page of the lobes when the model has them, one choice per intervention per lobe: the portal vein and the hepatic artery branch of the lobe open or ligated, and the lobe in place or resected. Intact is the default of every one, so the app opens on the healthy liver and a reader ligates or resects from there and sees the readouts of the model change. The [interactive explorer](lobes_examples.md) goes further: a procedure is planned there by picking what is done and the lobes it acts on, the named procedures of the database fill the plan, and the days of the remodelling are a course which is played or scrubbed.
 
 ## Gaps
 
