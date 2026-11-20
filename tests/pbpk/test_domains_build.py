@@ -605,13 +605,18 @@ A kind which is added to `KINDS` and which no shape reaches fails
 reason."""
 
 
-def test_every_kind_with_a_domain_is_reached(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Every kind of `KINDS` which states a domain annotates an element of a shape.
+def _kinds_of_builds(
+    names: list[str], folder: Path, monkeypatch: pytest.MonkeyPatch
+) -> list[set[str]]:
+    """The kinds `annotate` is called with while each shape is built.
 
-    The kinds are recorded while each shape is built (a build, not a simulation),
-    so a kind which no shape reaches has its domain checked by nothing.
+    Args:
+        names: the shapes, by name.
+        folder: the folder of the builds.
+        monkeypatch: the patch of every module which imported `annotate`.
+
+    Returns:
+        The kinds of each build, in order.
     """
     original = annotation.annotate
     reached: set[str] = set()
@@ -623,9 +628,43 @@ def test_every_kind_with_a_domain_is_reached(
     for module in list(sys.modules.values()):
         if getattr(module, "annotate", None) is original:
             monkeypatch.setattr(module, "annotate", record)
-    for name, make in SHAPES.items():
-        build(make()[0], tmp_path / name)
+    kinds = []
+    for i, name in enumerate(names):
+        reached.clear()
+        build(SHAPES[name]()[0], folder / f"{i}_{name}")
+        kinds.append(set(reached))
+    return kinds
+
+
+def test_every_kind_with_a_domain_is_reached(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every kind of `KINDS` which states a domain annotates an element of a shape.
+
+    The kinds are recorded while each shape is built (a build, not a simulation),
+    so a kind which no shape reaches has its domain checked by nothing. The
+    lookups do not depend on the cache of the flat models (see
+    `test_the_lookups_of_a_build_do_not_depend_on_the_cache`).
+    """
+    reached = set().union(*_kinds_of_builds(list(SHAPES), tmp_path, monkeypatch))
     stated = {kind for kind, k in annotation.KINDS.items() if k.domain is not None}
     assert sorted(stated - reached - set(UNREACHED)) == []
     assert sorted(set(UNREACHED) & reached) == [], "reached now: drop it from UNREACHED"
     assert set(UNREACHED) <= stated
+
+
+def test_the_lookups_of_a_build_do_not_depend_on_the_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A build which hits the cache of the flat models looks up the same kinds.
+
+    The cache is keyed by the composed model (`builder.py`), which the build
+    annotates before the lookup, so only validation and flattening are skipped.
+    The same shape is built twice into a cache of its own: the second build is
+    a hit, and the coverage test above cannot go stale on a warm cache.
+    """
+    monkeypatch.setenv("PKPDSIM_BUILD_CACHE", str(tmp_path / "cache"))
+    cold, warm = _kinds_of_builds(["depots", "depots"], tmp_path, monkeypatch)
+    assert len(list((tmp_path / "cache").glob("*.zip"))) == 1
+    assert cold == warm
+    assert len(cold) > 10
