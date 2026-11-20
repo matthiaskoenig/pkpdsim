@@ -16,6 +16,7 @@ process holds the member, anything else raises a `ValueError` which names the
 field and the allowed values.
 """
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
@@ -421,8 +422,10 @@ def check_products(p: Metabolism) -> list[str]:
     sum at 1 for every value; the remainder is never negative: the sum of
     the upper ends of the ranges of the other fractions (`fraction_range`)
     is at most 1, and not always 1 (a remainder of 0). Every fraction is
-    positive and its range is cut to the unit interval (`fraction_range`); a
-    `Formula` cannot be bounded.
+    positive and its range is cut to the unit interval (`fraction_range`),
+    where an unbounded distribution is cut silently and a finite end of the
+    support outside the unit interval is reported; a `Formula` cannot be
+    bounded.
 
     Args:
         p: the metabolism.
@@ -439,6 +442,7 @@ def check_products(p: Metabolism) -> list[str]:
     elif rest and len(p.products) == 1:
         problems.append(f"{p.sid}: the remainder REST needs another product")
     low_sum = high_sum = total = 0.0
+    ranges: list[str] = []
     values: list[str] = []
     for product, f in p.products.items():
         if isinstance(f, Rest):
@@ -453,6 +457,14 @@ def check_products(p: Metabolism) -> list[str]:
         problems += check_unit(p.sid, where, f, U.dimensionless)
         x = number(f)
         low, high = fraction_range(f)
+        support = draw_support(f) if isinstance(f, Value) else None
+        for end in support or ():
+            if math.isfinite(end) and not FRACTION.contains(end):
+                ranges.append(
+                    f"{p.sid}: {where} can be {end:g} (the support of the "
+                    "distribution of its draws), a fraction is never below 0 "
+                    "or above 1"
+                )
         if x is None or not x > 0:
             problems.append(f"{p.sid}: {where} must be positive, got {x}")
         total += x or 0.0
@@ -462,6 +474,7 @@ def check_products(p: Metabolism) -> list[str]:
             values.append(product)
     if problems:
         return problems
+    problems += ranges
     if rest:
         if high_sum > 1.0 + 1e-9:
             problems.append(
@@ -486,17 +499,45 @@ def check_products(p: Metabolism) -> list[str]:
     return problems
 
 
+def draw_support(f: Value) -> tuple[float, float] | None:
+    """Get the support of the draws of a fitted value, as the fit states it.
+
+    The distribution of the draws (the uncertainty of `fitted`, truncated to
+    the bounds of the fit) is what a fit or an uncertainty run can give the
+    value (`sbmlsim.distrib.support`). The union over all distributions is
+    returned as it is, an unbounded one has an infinite end.
+
+    Args:
+        f: the value.
+
+    Returns:
+        The lower and the upper end of the support, `None` without draws.
+    """
+    support: tuple[float, float] | None = None
+    for u in f.uncertainties or []:
+        for child in u.uncertParameters or []:
+            if child.type != libsbml.DISTRIB_UNCERTTYPE_DISTRIBUTION or not child.math:
+                continue
+            lo, hi = distrib.support(child.math)
+            support = (
+                (lo, hi)
+                if support is None
+                else (min(support[0], lo), max(support[1], hi))
+            )
+    return support
+
+
 def fraction_range(f: float | Value) -> tuple[float, float]:
     """Get the range of a fraction: its value and the support of the draws of a fit.
 
-    The distribution of the draws of a fitted value (the uncertainty of
-    `fitted`, truncated to the bounds of the fit) is the range a fit or an
-    uncertainty run gives the fraction (`sbmlsim.distrib.support`). The
-    support is intersected with the domain of a fraction (`FRACTION`, the unit
-    interval), which an untruncated distribution leaves: a fraction a fit
-    gives is never below 0 or above 1. A support inside the unit interval is
-    kept as it is. The value itself is never moved, so a value outside the
-    unit interval stays visible to the checks of the caller.
+    The support of the draws (`draw_support`) is the range a fit or an
+    uncertainty run gives the fraction. It is intersected with the domain of
+    a fraction (`FRACTION`, the unit interval), which an untruncated
+    distribution leaves: the range is always a usable interval of fractions.
+    A support inside the unit interval is kept as it is. The value itself is
+    never moved, so a value outside the unit interval stays visible to the
+    checks of the caller. A finite end of the support outside the unit
+    interval is a statement of the author which `check_products` reports.
 
     Args:
         f: a fixed fraction or a `Value`, fixed or fitted.
@@ -507,12 +548,10 @@ def fraction_range(f: float | Value) -> tuple[float, float]:
     if not isinstance(f, Value):
         return float(f), float(f)
     low = high = f.value
-    for u in f.uncertainties or []:
-        for child in u.uncertParameters or []:
-            if child.type != libsbml.DISTRIB_UNCERTTYPE_DISTRIBUTION or not child.math:
-                continue
-            lo, hi = FRACTION.clip(*distrib.support(child.math))
-            low, high = min(low, lo), max(high, hi)
+    support = draw_support(f)
+    if support is not None:
+        lo, hi = FRACTION.clip(*support)
+        low, high = min(low, lo), max(high, hi)
     return low, high
 
 

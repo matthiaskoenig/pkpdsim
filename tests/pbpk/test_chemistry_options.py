@@ -841,27 +841,34 @@ def test_fractions_which_can_exceed_one_are_refused(
     assert match in _problems(_definition([_split(products)]))
 
 
+def test_an_unbounded_fit_with_the_remainder_is_accepted() -> None:
+    """An infinite end of the support says nothing of the author: it is cut silently."""
+    f = _fitted(0.5, "normal(0.5, 0.1)")
+    assert fraction_range(f) == (0.0, 1.0)
+    _definition([_split({"drg_m1": f, "drg_m3": REST})]).validate()
+
+
 @pytest.mark.parametrize(
-    ("distribution", "expected"),
+    ("distribution", "expected", "match"),
     [
-        ("normal(0.5, 0.1)", (0.0, 1.0)),
-        ("uniform(0.0, 1.5)", (0.0, 1.0)),
-        ("normal(0.5, 0.1, -0.1, 0.6)", (0.0, 0.6)),
+        ("uniform(0.0, 1.5)", (0.0, 1.0), "can be 1.5 (the support"),
+        ("normal(0.5, 0.1, -0.1, 0.6)", (0.0, 0.6), "can be -0.1 (the support"),
     ],
 )
-def test_a_fit_beyond_the_unit_interval_is_cut_to_the_fraction(
-    distribution: str, expected: tuple[float, float]
+def test_a_finite_bound_beyond_the_unit_interval_is_refused(
+    distribution: str, expected: tuple[float, float], match: str
 ) -> None:
-    """The support of a fit is intersected with the unit interval.
+    """A finite end of the support outside the unit interval is deliberate.
 
-    These distributions leave it (an unbounded normal, a uniform up to 1.5, a
-    truncation below 0), but a fraction is in it: the range ends at 0 and 1,
-    so the fraction alone cannot make the remainder negative and the
-    definition is valid.
+    The author states that the fraction may be 1.5 or -0.1, which contradicts
+    its domain: the definition is refused, while the range stays a usable
+    interval of fractions.
     """
     f = _fitted(0.5, distribution)
     assert fraction_range(f) == expected
-    _definition([_split({"drg_m1": f, "drg_m3": REST})]).validate()
+    problems = _problems(_definition([_split({"drg_m1": f, "drg_m3": REST})]))
+    assert f"DRG2M: product fraction of 'drg_m1' {match}" in problems
+    assert "a fraction is never below 0 or above 1" in problems
 
 
 def test_the_fractions_of_a_metabolism_are_parameters(tmp_path: Path) -> None:
