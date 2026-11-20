@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<sbml xmlns="http://www.sbml.org/sbml/level3/version2/core" level="3" version="2">
+<sbml xmlns="http://www.sbml.org/sbml/level3/version2/core" xmlns:distrib="http://www.sbml.org/sbml/level3/version1/distrib/version1" level="3" version="2" distrib:required="true">
   <notes>
     <body xmlns="http://www.w3.org/1999/xhtml">
       <p>Created with <a href="https://github.com/matthiaskoenig/sbmlutils">https://github.com/matthiaskoenig/sbmlutils</a>.
@@ -206,6 +206,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="meta_Var_bc" sboTerm="SBO:0000290" id="Var_bc" name="arterial blood cells" units="litre" constant="false">
         <notes>
@@ -235,6 +240,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="meta_Vve_pl" sboTerm="SBO:0000290" id="Vve_pl" name="venous plasma" units="litre" constant="false">
         <notes>
@@ -266,6 +276,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="meta_Vve_bc" sboTerm="SBO:0000290" id="Vve_bc" name="venous blood cells" units="litre" constant="false">
         <notes>
@@ -295,6 +310,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="meta_Vpo_pl" sboTerm="SBO:0000290" id="Vpo_pl" name="portal plasma" units="litre" constant="false">
         <notes>
@@ -325,6 +345,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="meta_Vpo_bc" sboTerm="SBO:0000290" id="Vpo_bc" name="portal blood cells" units="litre" constant="false">
         <notes>
@@ -353,6 +378,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="meta_CV_V_pa_pl" sboTerm="SBO:0000290" id="CV_V_pa_pl" name="pa pl blood" units="litre" constant="false">
         <annotation>
@@ -369,6 +399,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="meta_CV_V_pa_bc" sboTerm="SBO:0000290" id="CV_V_pa_bc" name="pa bc blood" units="litre" constant="false">
         <annotation>
@@ -383,6 +418,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="meta_CV_V_pv_pl" sboTerm="SBO:0000290" id="CV_V_pv_pl" name="pv pl blood" units="litre" constant="false">
         <annotation>
@@ -399,6 +439,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="meta_CV_V_pv_bc" sboTerm="SBO:0000290" id="CV_V_pv_bc" name="pv bc blood" units="litre" constant="false">
         <annotation>
@@ -413,6 +458,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="meta_CV_V_lv_pl" sboTerm="SBO:0000290" id="CV_V_lv_pl" name="lv pl blood" units="litre" constant="false">
         <annotation>
@@ -429,6 +479,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="meta_CV_V_lv_bc" sboTerm="SBO:0000290" id="CV_V_lv_bc" name="lv bc blood" units="litre" constant="false">
         <annotation>
@@ -443,6 +498,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="meta_CV_V_rv_pl" sboTerm="SBO:0000290" id="CV_V_rv_pl" name="rv pl blood" units="litre" constant="false">
         <annotation>
@@ -459,6 +519,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="meta_CV_V_rv_bc" sboTerm="SBO:0000290" id="CV_V_rv_bc" name="rv bc blood" units="litre" constant="false">
         <annotation>
@@ -473,6 +538,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="meta_Vurine" sboTerm="SBO:0000290" id="Vurine" name="urine" size="1" units="litre" constant="true">
         <notes>
@@ -494,6 +564,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="meta_Vfeces" sboTerm="SBO:0000290" id="Vfeces" name="feces" size="1" units="litre" constant="true">
         <notes>
@@ -515,6 +590,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="meta_Vbile" sboTerm="SBO:0000290" id="Vbile" name="bile" size="0.058" units="litre" constant="true">
         <notes>
@@ -539,6 +619,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="GU__meta_segmented_si__Vlumen_st" sboTerm="SBO:0000290" id="GU__Vlumen_st" name="lumen stomach" size="0.028" units="litre" constant="true">
         <notes>
@@ -575,6 +660,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="GU__meta_segmented_si__Vlumen_du" sboTerm="SBO:0000290" id="GU__Vlumen_du" name="lumen duodenum" size="0.007819" units="litre" constant="true">
         <notes>
@@ -609,6 +699,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="GU__meta_segmented_si__Vlumen_jej1" sboTerm="SBO:0000290" id="GU__Vlumen_jej1" name="lumen upper jejunum" size="0.01955" units="litre" constant="true">
         <notes>
@@ -643,6 +738,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="GU__meta_segmented_si__Vlumen_jej2" sboTerm="SBO:0000290" id="GU__Vlumen_jej2" name="lumen lower jejunum" size="0.01955" units="litre" constant="true">
         <notes>
@@ -677,6 +777,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="GU__meta_segmented_si__Vlumen_ile1" sboTerm="SBO:0000290" id="GU__Vlumen_ile1" name="lumen upper ileum" size="0.02904" units="litre" constant="true">
         <notes>
@@ -711,6 +816,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="GU__meta_segmented_si__Vlumen_ile2" sboTerm="SBO:0000290" id="GU__Vlumen_ile2" name="lumen lower ileum" size="0.02904" units="litre" constant="true">
         <notes>
@@ -745,6 +855,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="GU__meta_segmented_si__Vlumen_cae" sboTerm="SBO:0000290" id="GU__Vlumen_cae" name="lumen caecum" size="0.002093" units="litre" constant="true">
         <notes>
@@ -779,6 +894,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="GU__meta_segmented_si__Vlumen_asc" sboTerm="SBO:0000290" id="GU__Vlumen_asc" name="lumen colon ascendens" size="0.002093" units="litre" constant="true">
         <notes>
@@ -813,6 +933,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="GU__meta_segmented_si__Vlumen_tra" sboTerm="SBO:0000290" id="GU__Vlumen_tra" name="lumen colon transversum" size="0.002111" units="litre" constant="true">
         <notes>
@@ -847,6 +972,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="GU__meta_segmented_si__Vlumen_des" sboTerm="SBO:0000290" id="GU__Vlumen_des" name="lumen colon descendens" size="0.002111" units="litre" constant="true">
         <notes>
@@ -881,6 +1011,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="GU__meta_segmented_si__Vlumen_sig" sboTerm="SBO:0000290" id="GU__Vlumen_sig" name="lumen colon sigmoid" size="0.002296" units="litre" constant="true">
         <notes>
@@ -915,6 +1050,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
       <compartment metaid="GU__meta_segmented_si__Vlumen_rec" sboTerm="SBO:0000290" id="GU__Vlumen_rec" name="lumen rectum" size="0.002296" units="litre" constant="true">
         <notes>
@@ -949,6 +1089,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </compartment>
     </listOfCompartments>
     <listOfParameters>
@@ -973,6 +1118,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_HEIGHT" sboTerm="SBO:0000002" id="HEIGHT" name="height [cm]" value="176" units="cm" constant="true">
         <notes>
@@ -995,6 +1145,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_renal_function" sboTerm="SBO:0000002" id="f_renal_function" name="renal function" value="1" units="dimensionless" constant="true">
         <notes>
@@ -1021,6 +1176,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_cardiac_function" sboTerm="SBO:0000002" id="f_cardiac_function" name="cardiac function" value="1" units="dimensionless" constant="true">
         <notes>
@@ -1047,6 +1207,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_shunt" sboTerm="SBO:0000002" id="f_shunt" name="portosystemic shunt" value="0" units="dimensionless" constant="true">
         <notes>
@@ -1073,6 +1238,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_functional" sboTerm="SBO:0000002" id="f_functional" name="functional liver fraction" value="1" units="dimensionless" constant="true">
         <notes>
@@ -1099,6 +1269,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_BW_ref" sboTerm="SBO:0000002" id="BW_ref" name="reference body weight [kg]" value="73" units="kg" constant="true">
         <notes>
@@ -1121,6 +1296,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_HEIGHT_ref" sboTerm="SBO:0000002" id="HEIGHT_ref" name="reference height [cm]" value="176" units="cm" constant="true">
         <notes>
@@ -1143,6 +1323,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_BSA_ref" sboTerm="SBO:0000002" id="BSA_ref" name="reference body surface area [m2]" units="m2" constant="true">
         <notes>
@@ -1169,6 +1354,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fage_FFM" sboTerm="SBO:0000002" id="fage_FFM" name="age factor fat-free mass" value="1" units="dimensionless" constant="true">
         <notes>
@@ -1192,6 +1382,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_FFM_ref" sboTerm="SBO:0000002" id="FFM_ref" name="reference fat-free mass [kg]" units="kg" constant="true">
         <notes>
@@ -1219,6 +1414,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_CO_ref" sboTerm="SBO:0000002" id="CO_ref" name="reference cardiac output [l/min]" value="6.5" units="l_per_min" constant="true">
         <notes>
@@ -1242,6 +1442,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_GFR_ref" sboTerm="SBO:0000002" id="GFR_ref" name="reference glomerular filtration rate [l/min]" value="0.125" units="l_per_min" constant="true">
         <notes>
@@ -1275,6 +1480,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vblood_ref" sboTerm="SBO:0000002" id="Vblood_ref" name="reference blood volume [l]" value="5.3" units="litre" constant="true">
         <notes>
@@ -1297,6 +1507,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fage_HCT" sboTerm="SBO:0000002" id="fage_HCT" name="age factor hematocrit" value="1" units="dimensionless" constant="true">
         <notes>
@@ -1321,6 +1536,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_HCT_ref" sboTerm="SBO:0000002" id="HCT_ref" name="reference hematocrit" units="dimensionless" constant="true">
         <notes>
@@ -1354,6 +1574,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_HCT" sboTerm="SBO:0000002" id="HCT" name="hematocrit" units="dimensionless" constant="true">
         <notes>
@@ -1384,6 +1609,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mlu_ref" sboTerm="SBO:0000002" id="Mlu_ref" name="reference tissue mass lung [kg]" value="0.5" units="kg" constant="true">
         <notes>
@@ -1414,6 +1644,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mhe_ref" sboTerm="SBO:0000002" id="Mhe_ref" name="reference tissue mass heart [kg]" value="0.33" units="kg" constant="true">
         <notes>
@@ -1444,6 +1679,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mbr_ref" sboTerm="SBO:0000002" id="Mbr_ref" name="reference tissue mass brain [kg]" value="1.45" units="kg" constant="true">
         <notes>
@@ -1472,6 +1712,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mli_ref" sboTerm="SBO:0000002" id="Mli_ref" name="reference tissue mass liver [kg]" value="1.8" units="kg" constant="true">
         <notes>
@@ -1503,6 +1748,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mki_ref" sboTerm="SBO:0000002" id="Mki_ref" name="reference tissue mass kidney [kg]" value="0.31" units="kg" constant="true">
         <notes>
@@ -1534,6 +1784,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mst_ref" sboTerm="SBO:0000002" id="Mst_ref" name="reference tissue mass stomach [kg]" value="0.15" units="kg" constant="true">
         <notes>
@@ -1564,6 +1819,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Msi_ref" sboTerm="SBO:0000002" id="Msi_ref" name="reference tissue mass small intestine [kg]" value="0.65" units="kg" constant="true">
         <notes>
@@ -1592,6 +1852,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mla_ref" sboTerm="SBO:0000002" id="Mla_ref" name="reference tissue mass large intestine [kg]" value="0.37" units="kg" constant="true">
         <notes>
@@ -1620,6 +1885,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Msp_ref" sboTerm="SBO:0000002" id="Msp_ref" name="reference tissue mass spleen [kg]" value="0.15" units="kg" constant="true">
         <notes>
@@ -1650,6 +1920,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mpa_ref" sboTerm="SBO:0000002" id="Mpa_ref" name="reference tissue mass pancreas [kg]" value="0.14" units="kg" constant="true">
         <notes>
@@ -1680,6 +1955,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mmu_ref" sboTerm="SBO:0000002" id="Mmu_ref" name="reference tissue mass muscle [kg]" value="29" units="kg" constant="true">
         <notes>
@@ -1710,6 +1990,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Msk_ref" sboTerm="SBO:0000002" id="Msk_ref" name="reference tissue mass skin [kg]" value="3.3" units="kg" constant="true">
         <notes>
@@ -1738,6 +2023,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mbo_ref" sboTerm="SBO:0000002" id="Mbo_ref" name="reference tissue mass bone [kg]" value="10.5" units="kg" constant="true">
         <notes>
@@ -1766,6 +2056,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mgo_ref" sboTerm="SBO:0000002" id="Mgo_ref" name="reference tissue mass gonads [kg]" value="0.035" units="kg" constant="true">
         <notes>
@@ -1794,6 +2089,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fage_Qbr" sboTerm="SBO:0000002" id="fage_Qbr" name="age factor brain flow" value="1" units="dimensionless" constant="true">
         <notes>
@@ -1819,6 +2119,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fage_Qli" sboTerm="SBO:0000002" id="fage_Qli" name="age factor liver flow" value="1" units="dimensionless" constant="true">
         <notes>
@@ -1844,6 +2149,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fage_Qki" sboTerm="SBO:0000002" id="fage_Qki" name="age factor kidney flow" value="1" units="dimensionless" constant="true">
         <notes>
@@ -1869,6 +2179,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fage_Qrest" sboTerm="SBO:0000002" id="fage_Qrest" name="age factor of the organs besides the brain" units="dimensionless" constant="true">
         <notes>
@@ -1897,6 +2212,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fage_Qother" sboTerm="SBO:0000002" id="fage_Qother" name="age factor of the organs without a factor of their own" units="dimensionless" constant="true">
         <notes>
@@ -1925,6 +2245,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fQhe" sboTerm="SBO:0000002" id="fQhe" name="blood flow fraction heart" units="dimensionless" constant="true">
         <notes>
@@ -1961,6 +2286,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fQbr" sboTerm="SBO:0000002" id="fQbr" name="blood flow fraction brain" units="dimensionless" constant="true">
         <notes>
@@ -1995,6 +2325,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fQli" sboTerm="SBO:0000002" id="fQli" name="blood flow fraction liver" units="dimensionless" constant="true">
         <notes>
@@ -2031,6 +2366,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fQki" sboTerm="SBO:0000002" id="fQki" name="blood flow fraction kidney" units="dimensionless" constant="true">
         <notes>
@@ -2067,6 +2407,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fQst" sboTerm="SBO:0000002" id="fQst" name="blood flow fraction stomach" units="dimensionless" constant="true">
         <notes>
@@ -2103,6 +2448,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fQsi" sboTerm="SBO:0000002" id="fQsi" name="blood flow fraction small intestine" units="dimensionless" constant="true">
         <notes>
@@ -2137,6 +2487,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fQla" sboTerm="SBO:0000002" id="fQla" name="blood flow fraction large intestine" units="dimensionless" constant="true">
         <notes>
@@ -2171,6 +2526,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fQsp" sboTerm="SBO:0000002" id="fQsp" name="blood flow fraction spleen" units="dimensionless" constant="true">
         <notes>
@@ -2207,6 +2567,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fQpa" sboTerm="SBO:0000002" id="fQpa" name="blood flow fraction pancreas" units="dimensionless" constant="true">
         <notes>
@@ -2243,6 +2608,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fQmu" sboTerm="SBO:0000002" id="fQmu" name="blood flow fraction muscle" units="dimensionless" constant="true">
         <notes>
@@ -2279,6 +2649,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fQsk" sboTerm="SBO:0000002" id="fQsk" name="blood flow fraction skin" units="dimensionless" constant="true">
         <notes>
@@ -2313,6 +2688,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fQad" sboTerm="SBO:0000002" id="fQad" name="blood flow fraction adipose" units="dimensionless" constant="true">
         <notes>
@@ -2347,6 +2727,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fQbo" sboTerm="SBO:0000002" id="fQbo" name="blood flow fraction bone" units="dimensionless" constant="true">
         <notes>
@@ -2381,6 +2766,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fQgo" sboTerm="SBO:0000002" id="fQgo" name="blood flow fraction gonads" units="dimensionless" constant="true">
         <notes>
@@ -2415,6 +2805,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fVar" sboTerm="SBO:0000002" id="fVar" name="blood fraction arterial pool" value="0.105" units="dimensionless" constant="true">
         <notes>
@@ -2446,6 +2841,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fVve" sboTerm="SBO:0000002" id="fVve" name="blood fraction venous pool" value="0.246772" units="dimensionless" constant="true">
         <notes>
@@ -2477,6 +2877,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fVpo" sboTerm="SBO:0000002" id="fVpo" name="blood fraction portal pool" value="0.000828" units="dimensionless" constant="true">
         <notes>
@@ -2508,6 +2913,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_BMI" sboTerm="SBO:0000002" id="BMI" name="body mass index [kg/m2]" units="kg_per_m2" constant="true">
         <notes>
@@ -2533,6 +2943,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_BSA" sboTerm="SBO:0000002" id="BSA" name="body surface area [m2]" units="m2" constant="true">
         <notes>
@@ -2559,6 +2974,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_FFM" sboTerm="SBO:0000002" id="FFM" name="fat-free mass [kg]" units="kg" constant="true">
         <notes>
@@ -2587,6 +3007,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_SV_tis" sboTerm="SBO:0000002" id="SV_tis" name="scaling factor of the lean tissues" units="dimensionless" constant="true">
         <notes>
@@ -2612,6 +3037,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vblood" sboTerm="SBO:0000002" id="Vblood" name="blood volume [l]" units="litre" constant="true">
         <notes>
@@ -2637,6 +3067,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mlu" sboTerm="SBO:0000002" id="Mlu" name="tissue mass lung [kg]" units="kg" constant="true">
         <notes>
@@ -2670,6 +3105,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mhe" sboTerm="SBO:0000002" id="Mhe" name="tissue mass heart [kg]" units="kg" constant="true">
         <notes>
@@ -2703,6 +3143,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mbr" sboTerm="SBO:0000002" id="Mbr" name="tissue mass brain [kg]" units="kg" constant="true">
         <notes>
@@ -2734,6 +3179,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mli" sboTerm="SBO:0000002" id="Mli" name="tissue mass liver [kg]" units="kg" constant="true">
         <notes>
@@ -2767,6 +3217,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mki" sboTerm="SBO:0000002" id="Mki" name="tissue mass kidney [kg]" units="kg" constant="true">
         <notes>
@@ -2800,6 +3255,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mst" sboTerm="SBO:0000002" id="Mst" name="tissue mass stomach [kg]" units="kg" constant="true">
         <notes>
@@ -2833,6 +3293,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Msi" sboTerm="SBO:0000002" id="Msi" name="tissue mass small intestine [kg]" units="kg" constant="true">
         <notes>
@@ -2864,6 +3329,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mla" sboTerm="SBO:0000002" id="Mla" name="tissue mass large intestine [kg]" units="kg" constant="true">
         <notes>
@@ -2895,6 +3365,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Msp" sboTerm="SBO:0000002" id="Msp" name="tissue mass spleen [kg]" units="kg" constant="true">
         <notes>
@@ -2928,6 +3403,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mpa" sboTerm="SBO:0000002" id="Mpa" name="tissue mass pancreas [kg]" units="kg" constant="true">
         <notes>
@@ -2961,6 +3441,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mmu" sboTerm="SBO:0000002" id="Mmu" name="tissue mass muscle [kg]" units="kg" constant="true">
         <notes>
@@ -2994,6 +3479,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Msk" sboTerm="SBO:0000002" id="Msk" name="tissue mass skin [kg]" units="kg" constant="true">
         <notes>
@@ -3025,6 +3515,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mbo" sboTerm="SBO:0000002" id="Mbo" name="tissue mass bone [kg]" units="kg" constant="true">
         <notes>
@@ -3056,6 +3551,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mgo" sboTerm="SBO:0000002" id="Mgo" name="tissue mass gonads [kg]" units="kg" constant="true">
         <notes>
@@ -3087,6 +3587,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mlean" sboTerm="SBO:0000002" id="Mlean" name="mass of the lean organ tissues [kg]" units="kg" constant="true">
         <notes>
@@ -3113,6 +3618,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Mad" sboTerm="SBO:0000002" id="Mad" name="tissue mass adipose [kg]" units="kg" constant="true">
         <notes>
@@ -3147,6 +3657,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vlu" sboTerm="SBO:0000002" id="Vlu" name="volume lung [l]" units="litre" constant="true">
         <notes>
@@ -3184,6 +3699,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vhe" sboTerm="SBO:0000002" id="Vhe" name="volume heart [l]" units="litre" constant="true">
         <notes>
@@ -3221,6 +3741,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vbr" sboTerm="SBO:0000002" id="Vbr" name="volume brain [l]" units="litre" constant="true">
         <notes>
@@ -3256,6 +3781,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vli" sboTerm="SBO:0000002" id="Vli" name="volume liver [l]" units="litre" constant="true">
         <notes>
@@ -3293,6 +3823,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vki" sboTerm="SBO:0000002" id="Vki" name="volume kidney [l]" units="litre" constant="true">
         <notes>
@@ -3330,6 +3865,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vst" sboTerm="SBO:0000002" id="Vst" name="volume stomach [l]" units="litre" constant="true">
         <notes>
@@ -3367,6 +3907,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vsi" sboTerm="SBO:0000002" id="Vsi" name="volume small intestine [l]" units="litre" constant="true">
         <notes>
@@ -3402,6 +3947,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vla" sboTerm="SBO:0000002" id="Vla" name="volume large intestine [l]" units="litre" constant="true">
         <notes>
@@ -3437,6 +3987,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vsp" sboTerm="SBO:0000002" id="Vsp" name="volume spleen [l]" units="litre" constant="true">
         <notes>
@@ -3474,6 +4029,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vpa" sboTerm="SBO:0000002" id="Vpa" name="volume pancreas [l]" units="litre" constant="true">
         <notes>
@@ -3511,6 +4071,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vmu" sboTerm="SBO:0000002" id="Vmu" name="volume muscle [l]" units="litre" constant="true">
         <notes>
@@ -3548,6 +4113,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vsk" sboTerm="SBO:0000002" id="Vsk" name="volume skin [l]" units="litre" constant="true">
         <notes>
@@ -3583,6 +4153,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vad" sboTerm="SBO:0000002" id="Vad" name="volume adipose [l]" units="litre" constant="true">
         <notes>
@@ -3618,6 +4193,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vbo" sboTerm="SBO:0000002" id="Vbo" name="volume bone [l]" units="litre" constant="true">
         <notes>
@@ -3653,6 +4233,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vgo" sboTerm="SBO:0000002" id="Vgo" name="volume gonads [l]" units="litre" constant="true">
         <notes>
@@ -3688,6 +4273,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Var" sboTerm="SBO:0000002" id="Var" name="volume arterial blood [l]" value="0" units="litre" constant="false">
         <notes>
@@ -3719,6 +4309,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vve" sboTerm="SBO:0000002" id="Vve" name="volume venous blood [l]" value="0" units="litre" constant="false">
         <notes>
@@ -3750,6 +4345,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Vpo" sboTerm="SBO:0000002" id="Vpo" name="volume portal blood [l]" value="0" units="litre" constant="false">
         <notes>
@@ -3781,6 +4381,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_vas_lu" sboTerm="SBO:0000002" id="f_vas_lu" name="vascular fraction lung" units="dimensionless" constant="true">
         <notes>
@@ -3817,6 +4422,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_int_lu" sboTerm="SBO:0000002" id="f_int_lu" name="interstitial fraction lung" units="dimensionless" constant="true">
         <notes>
@@ -3853,6 +4463,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_vas_he" sboTerm="SBO:0000002" id="f_vas_he" name="vascular fraction heart" units="dimensionless" constant="true">
         <notes>
@@ -3889,6 +4504,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_int_he" sboTerm="SBO:0000002" id="f_int_he" name="interstitial fraction heart" units="dimensionless" constant="true">
         <notes>
@@ -3925,6 +4545,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_vas_br" sboTerm="SBO:0000002" id="f_vas_br" name="vascular fraction brain" units="dimensionless" constant="true">
         <notes>
@@ -3959,6 +4584,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_int_br" sboTerm="SBO:0000002" id="f_int_br" name="interstitial fraction brain" units="dimensionless" constant="true">
         <notes>
@@ -3993,6 +4623,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_vas_li" sboTerm="SBO:0000002" id="f_vas_li" name="vascular fraction liver" units="dimensionless" constant="true">
         <notes>
@@ -4029,6 +4664,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_int_li" sboTerm="SBO:0000002" id="f_int_li" name="interstitial fraction liver" units="dimensionless" constant="true">
         <notes>
@@ -4065,6 +4705,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_vas_ki" sboTerm="SBO:0000002" id="f_vas_ki" name="vascular fraction kidney" units="dimensionless" constant="true">
         <notes>
@@ -4101,6 +4746,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_int_ki" sboTerm="SBO:0000002" id="f_int_ki" name="interstitial fraction kidney" units="dimensionless" constant="true">
         <notes>
@@ -4137,6 +4787,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_vas_st" sboTerm="SBO:0000002" id="f_vas_st" name="vascular fraction stomach" units="dimensionless" constant="true">
         <notes>
@@ -4173,6 +4828,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_int_st" sboTerm="SBO:0000002" id="f_int_st" name="interstitial fraction stomach" units="dimensionless" constant="true">
         <notes>
@@ -4209,6 +4869,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_vas_si" sboTerm="SBO:0000002" id="f_vas_si" name="vascular fraction small intestine" units="dimensionless" constant="true">
         <notes>
@@ -4243,6 +4908,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_int_si" sboTerm="SBO:0000002" id="f_int_si" name="interstitial fraction small intestine" units="dimensionless" constant="true">
         <notes>
@@ -4277,6 +4947,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_vas_la" sboTerm="SBO:0000002" id="f_vas_la" name="vascular fraction large intestine" units="dimensionless" constant="true">
         <notes>
@@ -4311,6 +4986,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_int_la" sboTerm="SBO:0000002" id="f_int_la" name="interstitial fraction large intestine" units="dimensionless" constant="true">
         <notes>
@@ -4345,6 +5025,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_vas_sp" sboTerm="SBO:0000002" id="f_vas_sp" name="vascular fraction spleen" units="dimensionless" constant="true">
         <notes>
@@ -4381,6 +5066,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_int_sp" sboTerm="SBO:0000002" id="f_int_sp" name="interstitial fraction spleen" units="dimensionless" constant="true">
         <notes>
@@ -4417,6 +5107,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_vas_pa" sboTerm="SBO:0000002" id="f_vas_pa" name="vascular fraction pancreas" units="dimensionless" constant="true">
         <notes>
@@ -4453,6 +5148,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_int_pa" sboTerm="SBO:0000002" id="f_int_pa" name="interstitial fraction pancreas" units="dimensionless" constant="true">
         <notes>
@@ -4489,6 +5189,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_vas_mu" sboTerm="SBO:0000002" id="f_vas_mu" name="vascular fraction muscle" units="dimensionless" constant="true">
         <notes>
@@ -4525,6 +5230,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_int_mu" sboTerm="SBO:0000002" id="f_int_mu" name="interstitial fraction muscle" units="dimensionless" constant="true">
         <notes>
@@ -4561,6 +5271,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_vas_sk" sboTerm="SBO:0000002" id="f_vas_sk" name="vascular fraction skin" units="dimensionless" constant="true">
         <notes>
@@ -4595,6 +5310,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_int_sk" sboTerm="SBO:0000002" id="f_int_sk" name="interstitial fraction skin" units="dimensionless" constant="true">
         <notes>
@@ -4629,6 +5349,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_vas_ad" sboTerm="SBO:0000002" id="f_vas_ad" name="vascular fraction adipose" units="dimensionless" constant="true">
         <notes>
@@ -4663,6 +5388,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_int_ad" sboTerm="SBO:0000002" id="f_int_ad" name="interstitial fraction adipose" units="dimensionless" constant="true">
         <notes>
@@ -4697,6 +5427,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_vas_bo" sboTerm="SBO:0000002" id="f_vas_bo" name="vascular fraction bone" units="dimensionless" constant="true">
         <notes>
@@ -4731,6 +5466,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_int_bo" sboTerm="SBO:0000002" id="f_int_bo" name="interstitial fraction bone" units="dimensionless" constant="true">
         <notes>
@@ -4765,6 +5505,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_vas_go" sboTerm="SBO:0000002" id="f_vas_go" name="vascular fraction gonads" units="dimensionless" constant="true">
         <notes>
@@ -4799,6 +5544,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_f_int_go" sboTerm="SBO:0000002" id="f_int_go" name="interstitial fraction gonads" units="dimensionless" constant="true">
         <notes>
@@ -4833,6 +5583,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_CO_base" sboTerm="SBO:0000002" id="CO_base" name="cardiac output without impairment [l/min]" units="l_per_min" constant="true">
         <notes>
@@ -4858,6 +5613,11 @@
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_CO" sboTerm="SBO:0000002" id="CO" name="cardiac output [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -4876,6 +5636,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Qlu" sboTerm="SBO:0000002" id="Qlu" name="blood flow lung [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -4902,6 +5667,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Qhe" sboTerm="SBO:0000002" id="Qhe" name="blood flow heart [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -4928,6 +5698,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Qbr" sboTerm="SBO:0000002" id="Qbr" name="blood flow brain [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -4952,6 +5727,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Qli" sboTerm="SBO:0000002" id="Qli" name="blood flow liver [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -4978,6 +5758,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Qki" sboTerm="SBO:0000002" id="Qki" name="blood flow kidney [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -5004,6 +5789,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Qst" sboTerm="SBO:0000002" id="Qst" name="blood flow stomach [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -5030,6 +5820,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Qsi" sboTerm="SBO:0000002" id="Qsi" name="blood flow small intestine [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -5054,6 +5849,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Qla" sboTerm="SBO:0000002" id="Qla" name="blood flow large intestine [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -5078,6 +5878,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Qsp" sboTerm="SBO:0000002" id="Qsp" name="blood flow spleen [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -5104,6 +5909,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Qpa" sboTerm="SBO:0000002" id="Qpa" name="blood flow pancreas [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -5130,6 +5940,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Qmu" sboTerm="SBO:0000002" id="Qmu" name="blood flow muscle [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -5156,6 +5971,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Qsk" sboTerm="SBO:0000002" id="Qsk" name="blood flow skin [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -5180,6 +6000,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Qad" sboTerm="SBO:0000002" id="Qad" name="blood flow adipose [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -5204,6 +6029,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Qbo" sboTerm="SBO:0000002" id="Qbo" name="blood flow bone [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -5228,6 +6058,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Qgo" sboTerm="SBO:0000002" id="Qgo" name="blood flow gonads [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -5252,6 +6087,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Qha" sboTerm="SBO:0000002" id="Qha" name="hepatic arterial blood flow [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -5278,6 +6118,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Qpo" sboTerm="SBO:0000002" id="Qpo" name="portal venous blood flow [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -5302,6 +6147,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_Qh" sboTerm="SBO:0000002" id="Qh" name="liver blood flow [l/min]" value="0" units="l_per_min" constant="false">
         <notes>
@@ -5328,6 +6178,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fage_GFR" sboTerm="SBO:0000002" id="fage_GFR" name="age factor GFR" value="1" units="dimensionless" constant="true">
         <notes>
@@ -5359,6 +6214,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_GFR_base" sboTerm="SBO:0000002" id="GFR_base" name="glomerular filtration rate at renal function 1 [l/min]" units="l_per_min" constant="true">
         <notes>
@@ -5397,6 +6257,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_GFR" sboTerm="SBO:0000002" id="GFR" name="glomerular filtration rate [l/min]" units="l_per_min" constant="true">
         <notes>
@@ -5430,6 +6295,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_CP_severity" sboTerm="SBO:0000002" id="CP_severity" name="severity of liver cirrhosis" value="0" units="dimensionless" constant="true">
         <notes>
@@ -5449,6 +6319,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="3"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_HF_severity" sboTerm="SBO:0000002" id="HF_severity" name="severity of heart failure" value="0" units="dimensionless" constant="true">
         <notes>
@@ -5472,6 +6347,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="4"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_CKD_hepatic" sboTerm="SBO:0000002" id="CKD_hepatic" name="hepatic changes of chronic kidney disease" value="0" units="dimensionless" constant="true">
         <notes>
@@ -5495,6 +6375,12 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+            <distrib:uncertParameter distrib:value="1" distrib:type="externalParameter" distrib:definitionURL="http://www.w3.org/2001/XMLSchema#boolean"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fcp_functional_liver" sboTerm="SBO:0000002" id="fcp_functional_liver" name="cirrhosis factor functional_liver" units="dimensionless" constant="true">
         <notes>
@@ -5526,6 +6412,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fcp_hepatic_artery_flow" sboTerm="SBO:0000002" id="fcp_hepatic_artery_flow" name="cirrhosis factor hepatic_artery_flow" units="dimensionless" constant="true">
         <notes>
@@ -5556,6 +6447,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fcp_kidney_flow" sboTerm="SBO:0000002" id="fcp_kidney_flow" name="cirrhosis factor kidney_flow" units="dimensionless" constant="true">
         <notes>
@@ -5586,6 +6482,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fcp_cardiac_index" sboTerm="SBO:0000002" id="fcp_cardiac_index" name="cirrhosis factor cardiac_index" units="dimensionless" constant="true">
         <notes>
@@ -5618,6 +6519,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fcp_gfr" sboTerm="SBO:0000002" id="fcp_gfr" name="cirrhosis factor gfr" units="dimensionless" constant="true">
         <notes>
@@ -5648,6 +6554,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fcp_albumin" sboTerm="SBO:0000002" id="fcp_albumin" name="cirrhosis factor albumin" units="dimensionless" constant="true">
         <notes>
@@ -5682,6 +6593,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fcp_agp" sboTerm="SBO:0000002" id="fcp_agp" name="cirrhosis factor agp" units="dimensionless" constant="true">
         <notes>
@@ -5712,6 +6628,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fcp_hematocrit" sboTerm="SBO:0000002" id="fcp_hematocrit" name="cirrhosis factor hematocrit" units="dimensionless" constant="true">
         <notes>
@@ -5744,6 +6665,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fcp_shunt" sboTerm="SBO:0000002" id="fcp_shunt" name="cirrhosis factor shunt" units="dimensionless" constant="true">
         <notes>
@@ -5774,6 +6700,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fcp_rest_flow" sboTerm="SBO:0000002" id="fcp_rest_flow" name="cirrhosis factor flow of the other organs" units="dimensionless" constant="true">
         <notes>
@@ -5800,6 +6731,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_eGFR" sboTerm="SBO:0000002" id="eGFR" name="GFR per 1.73 m2 of the renal function [l/min]" units="l_per_min" constant="true">
         <notes>
@@ -5836,6 +6772,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fckd_plasma_protein" sboTerm="SBO:0000002" id="fckd_plasma_protein" name="CKD factor plasma_protein" units="dimensionless" constant="true">
         <notes>
@@ -5867,6 +6808,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fckd_hematocrit" sboTerm="SBO:0000002" id="fckd_hematocrit" name="CKD factor hematocrit" units="dimensionless" constant="true">
         <notes>
@@ -5899,6 +6845,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fckd_kidney_volume" sboTerm="SBO:0000002" id="fckd_kidney_volume" name="CKD factor kidney_volume" units="dimensionless" constant="true">
         <notes>
@@ -5929,6 +6880,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fckd_kidney_flow" sboTerm="SBO:0000002" id="fckd_kidney_flow" name="CKD factor kidney_flow" units="dimensionless" constant="true">
         <notes>
@@ -5961,6 +6917,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fckd_gastric_emptying_time" sboTerm="SBO:0000002" id="fckd_gastric_emptying_time" name="CKD factor gastric_emptying_time" units="dimensionless" constant="true">
         <notes>
@@ -5991,6 +6952,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fckd_si_transit_time" sboTerm="SBO:0000002" id="fckd_si_transit_time" name="CKD factor si_transit_time" units="dimensionless" constant="true">
         <notes>
@@ -6021,6 +6987,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fhf_liver_flow" sboTerm="SBO:0000002" id="fhf_liver_flow" name="heart failure factor liver flow" units="dimensionless" constant="true">
         <notes>
@@ -6052,6 +7023,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fhf_kidney_flow" sboTerm="SBO:0000002" id="fhf_kidney_flow" name="heart failure factor kidney flow" units="dimensionless" constant="true">
         <notes>
@@ -6083,6 +7059,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fhf_peripheral_flow" sboTerm="SBO:0000002" id="fhf_peripheral_flow" name="heart failure factor peripheral flow" units="dimensionless" constant="true">
         <notes>
@@ -6114,6 +7095,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_Qhe" sboTerm="SBO:0000002" id="fimp_Qhe" name="impairment factor Qhe" units="dimensionless" constant="true">
         <notes>
@@ -6143,6 +7129,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_Qbr" sboTerm="SBO:0000002" id="fimp_Qbr" name="impairment factor Qbr" units="dimensionless" constant="true">
         <notes>
@@ -6170,6 +7161,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_Qli" sboTerm="SBO:0000002" id="fimp_Qli" name="impairment factor Qli" units="dimensionless" constant="true">
         <notes>
@@ -6199,6 +7195,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_Qki" sboTerm="SBO:0000002" id="fimp_Qki" name="impairment factor Qki" units="dimensionless" constant="true">
         <notes>
@@ -6228,6 +7229,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_Qst" sboTerm="SBO:0000002" id="fimp_Qst" name="impairment factor Qst" units="dimensionless" constant="true">
         <notes>
@@ -6257,6 +7263,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_Qsi" sboTerm="SBO:0000002" id="fimp_Qsi" name="impairment factor Qsi" units="dimensionless" constant="true">
         <notes>
@@ -6284,6 +7295,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_Qla" sboTerm="SBO:0000002" id="fimp_Qla" name="impairment factor Qla" units="dimensionless" constant="true">
         <notes>
@@ -6311,6 +7327,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_Qsp" sboTerm="SBO:0000002" id="fimp_Qsp" name="impairment factor Qsp" units="dimensionless" constant="true">
         <notes>
@@ -6340,6 +7361,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_Qpa" sboTerm="SBO:0000002" id="fimp_Qpa" name="impairment factor Qpa" units="dimensionless" constant="true">
         <notes>
@@ -6369,6 +7395,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_Qmu" sboTerm="SBO:0000002" id="fimp_Qmu" name="impairment factor Qmu" units="dimensionless" constant="true">
         <notes>
@@ -6398,6 +7429,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_Qsk" sboTerm="SBO:0000002" id="fimp_Qsk" name="impairment factor Qsk" units="dimensionless" constant="true">
         <notes>
@@ -6425,6 +7461,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_Qad" sboTerm="SBO:0000002" id="fimp_Qad" name="impairment factor Qad" units="dimensionless" constant="true">
         <notes>
@@ -6452,6 +7493,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_Qbo" sboTerm="SBO:0000002" id="fimp_Qbo" name="impairment factor Qbo" units="dimensionless" constant="true">
         <notes>
@@ -6479,6 +7525,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_Qgo" sboTerm="SBO:0000002" id="fimp_Qgo" name="impairment factor Qgo" units="dimensionless" constant="true">
         <notes>
@@ -6506,6 +7557,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_CO" sboTerm="SBO:0000002" id="fimp_CO" name="impairment factor cardiac output" units="dimensionless" constant="true">
         <notes>
@@ -6531,6 +7587,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_GFR" sboTerm="SBO:0000002" id="fimp_GFR" name="impairment factor GFR" units="dimensionless" constant="true">
         <notes>
@@ -6552,6 +7613,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_HCT" sboTerm="SBO:0000002" id="fimp_HCT" name="impairment factor HCT" units="dimensionless" constant="true">
         <notes>
@@ -6573,6 +7639,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_Mki" sboTerm="SBO:0000002" id="fimp_Mki" name="impairment factor Mki" units="dimensionless" constant="true">
         <notes>
@@ -6594,6 +7665,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_albumin" sboTerm="SBO:0000002" id="fimp_albumin" name="impairment factor albumin" units="dimensionless" constant="true">
         <notes>
@@ -6615,6 +7691,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_agp" sboTerm="SBO:0000002" id="fimp_agp" name="impairment factor agp" units="dimensionless" constant="true">
         <notes>
@@ -6636,6 +7717,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_plasma_protein" sboTerm="SBO:0000002" id="fimp_plasma_protein" name="impairment factor plasma_protein" units="dimensionless" constant="true">
         <notes>
@@ -6657,6 +7743,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_t_stomach" sboTerm="SBO:0000002" id="fimp_t_stomach" name="impairment factor t_stomach" units="dimensionless" constant="true">
         <notes>
@@ -6678,6 +7769,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_fimp_t_si" sboTerm="SBO:0000002" id="fimp_t_si" name="impairment factor t_si" units="dimensionless" constant="true">
         <notes>
@@ -6699,6 +7795,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_CV_P_ar_ref" sboTerm="SBO:0000002" id="CV_P_ar_ref" name="cardiovascular P_ar_ref" value="95" units="mmHg" constant="true">
         <notes>
@@ -8469,6 +9570,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_FED" sboTerm="SBO:0000002" id="FED" name="fed state (0 fasted, 1 fed)" value="0" units="dimensionless" constant="true">
         <notes>
@@ -8492,6 +9598,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_w_arm_sk" sboTerm="SBO:0000002" id="w_arm_sk" name="weight of venous outflow of the skin in the arm vein" value="0.7" units="dimensionless" constant="true">
         <notes>
@@ -8521,6 +9632,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_w_arm_mu" sboTerm="SBO:0000002" id="w_arm_mu" name="weight of venous outflow of the muscle in the arm vein" value="0.3" units="dimensionless" constant="true">
         <notes>
@@ -8552,6 +9668,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__Vgu" sboTerm="SBO:0000002" id="GU__Vgu" name="volume intestine [l]" units="litre" constant="true">
         <notes>
@@ -8579,6 +9700,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__f_vas_gu" sboTerm="SBO:0000002" id="GU__f_vas_gu" name="vascular fraction intestine" units="dimensionless" constant="true">
         <notes>
@@ -8606,6 +9732,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="1"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__T_st" sboTerm="SBO:0000002" id="GU__T_st" name="transit time stomach [min]" value="22.79" units="min" constant="true">
         <notes>
@@ -8639,6 +9770,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__T_du" sboTerm="SBO:0000002" id="GU__T_du" name="transit time duodenum [min]" value="14.3" units="min" constant="true">
         <notes>
@@ -8670,6 +9806,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__f_area_du" sboTerm="SBO:0000002" id="GU__f_area_du" name="absorption area factor duodenum" value="1" units="dimensionless" constant="true">
         <notes>
@@ -8701,6 +9842,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__T_jej1" sboTerm="SBO:0000002" id="GU__T_jej1" name="transit time upper jejunum [min]" value="35.74" units="min" constant="true">
         <notes>
@@ -8732,6 +9878,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__f_area_jej1" sboTerm="SBO:0000002" id="GU__f_area_jej1" name="absorption area factor upper jejunum" value="1" units="dimensionless" constant="true">
         <notes>
@@ -8763,6 +9914,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__T_jej2" sboTerm="SBO:0000002" id="GU__T_jej2" name="transit time lower jejunum [min]" value="35.74" units="min" constant="true">
         <notes>
@@ -8794,6 +9950,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__f_area_jej2" sboTerm="SBO:0000002" id="GU__f_area_jej2" name="absorption area factor lower jejunum" value="1" units="dimensionless" constant="true">
         <notes>
@@ -8825,6 +9986,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__T_ile1" sboTerm="SBO:0000002" id="GU__T_ile1" name="transit time upper ileum [min]" value="53.11" units="min" constant="true">
         <notes>
@@ -8856,6 +10022,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__f_area_ile1" sboTerm="SBO:0000002" id="GU__f_area_ile1" name="absorption area factor upper ileum" value="1" units="dimensionless" constant="true">
         <notes>
@@ -8887,6 +10058,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__T_ile2" sboTerm="SBO:0000002" id="GU__T_ile2" name="transit time lower ileum [min]" value="53.11" units="min" constant="true">
         <notes>
@@ -8918,6 +10094,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__f_area_ile2" sboTerm="SBO:0000002" id="GU__f_area_ile2" name="absorption area factor lower ileum" value="1" units="dimensionless" constant="true">
         <notes>
@@ -8949,6 +10130,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__T_cae" sboTerm="SBO:0000002" id="GU__T_cae" name="transit time caecum [min]" value="339" units="min" constant="true">
         <notes>
@@ -8980,6 +10166,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__f_area_cae" sboTerm="SBO:0000002" id="GU__f_area_cae" name="absorption area factor caecum" value="0.0362" units="dimensionless" constant="true">
         <notes>
@@ -9011,6 +10202,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__T_asc" sboTerm="SBO:0000002" id="GU__T_asc" name="transit time colon ascendens [min]" value="339" units="min" constant="true">
         <notes>
@@ -9042,6 +10238,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__f_area_asc" sboTerm="SBO:0000002" id="GU__f_area_asc" name="absorption area factor colon ascendens" value="0.0362" units="dimensionless" constant="true">
         <notes>
@@ -9073,6 +10274,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__T_tra" sboTerm="SBO:0000002" id="GU__T_tra" name="transit time colon transversum [min]" value="342" units="min" constant="true">
         <notes>
@@ -9104,6 +10310,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__f_area_tra" sboTerm="SBO:0000002" id="GU__f_area_tra" name="absorption area factor colon transversum" value="0.0362" units="dimensionless" constant="true">
         <notes>
@@ -9135,6 +10346,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__T_des" sboTerm="SBO:0000002" id="GU__T_des" name="transit time colon descendens [min]" value="342" units="min" constant="true">
         <notes>
@@ -9166,6 +10382,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__f_area_des" sboTerm="SBO:0000002" id="GU__f_area_des" name="absorption area factor colon descendens" value="0.0362" units="dimensionless" constant="true">
         <notes>
@@ -9197,6 +10418,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__T_sig" sboTerm="SBO:0000002" id="GU__T_sig" name="transit time colon sigmoid [min]" value="372" units="min" constant="true">
         <notes>
@@ -9228,6 +10454,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__f_area_sig" sboTerm="SBO:0000002" id="GU__f_area_sig" name="absorption area factor colon sigmoid" value="0.0362" units="dimensionless" constant="true">
         <notes>
@@ -9259,6 +10490,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__T_rec" sboTerm="SBO:0000002" id="GU__T_rec" name="transit time rectum [min]" value="372" units="min" constant="true">
         <notes>
@@ -9290,6 +10526,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__f_area_rec" sboTerm="SBO:0000002" id="GU__f_area_rec" name="absorption area factor rectum" value="0.0362" units="dimensionless" constant="true">
         <notes>
@@ -9321,6 +10562,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="GU__meta_segmented_si__T_st_fed" sboTerm="SBO:0000002" id="GU__T_st_fed" name="transit time stomach fed [min]" value="63.48" units="min" constant="true">
         <notes>
@@ -9354,6 +10600,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
       <parameter metaid="meta_T_st_eff" sboTerm="SBO:0000002" id="T_st_eff" name="transit time stomach [min]" units="min" constant="true">
         <notes>
@@ -9385,6 +10636,11 @@ Pressure-driven flow of the optional cardiovascular network.
             </rdf:Description>
           </rdf:RDF>
         </annotation>
+        <distrib:listOfUncertainties>
+          <distrib:uncertainty distrib:name="domain">
+            <distrib:uncertSpan distrib:type="range" distrib:valueLower="0" distrib:valueUpper="INF"/>
+          </distrib:uncertainty>
+        </distrib:listOfUncertainties>
       </parameter>
     </listOfParameters>
     <listOfInitialAssignments>
