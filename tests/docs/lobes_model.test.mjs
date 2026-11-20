@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import {LOBE_SLOTS, STATES, caseChanges, csv, duration, exposure, lobeColors, planSummary, sampleAt, stateOfCase, trim} from "../../docs/pbpk/examples/lobes-model.mjs";
 import {blockLayout, cutMark, flowWidth} from "../../docs/pbpk/examples/lobes-schematic.mjs";
+import {assetPath} from "../../docs/pbpk/examples/lobes-solver.mjs";
 
 const data = JSON.parse(await readFile(new URL("../../docs/pbpk/examples/lobes-data.json", import.meta.url), "utf8"));
 const rat = data.species.rat;
@@ -276,4 +277,12 @@ test("a ligated vessel is cut across its middle", () => {
   for (const [a, b] of across) close(a[0], b[0], 1e-9);
   // a vessel of no length gets no cut rather than a NaN
   assert.deepEqual(cutMark([5, 5], [5, 5], [5, 5], [5, 5]), []);
+});
+
+test("the model of a sex lives beside the dataset of that sex", () => {
+  // the runtime is shared by both pages and both sexes, the model is not
+  assert.equal(assetPath("human", "model.wasm"), "solver_lobes/human/model.wasm");
+  assert.equal(assetPath("human", "model.wasm", "male"), "solver_lobes/human/model.wasm");
+  assert.equal(assetPath("human", "model.wasm", "female"), "female/solver_lobes/human/model.wasm");
+  assert.equal(assetPath("human", "engine.wasm", "female"), "solver/engine.wasm");
 });

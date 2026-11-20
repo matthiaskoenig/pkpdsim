@@ -99,12 +99,14 @@ export const RUNTIME_ASSETS = ["engine.wasm", "mathlib.wasm", "sbmlsim-core.js"]
  * `solver/`, so the bytes of the engine are served once for both pages
  * (scripts/lobes_examples.py writes only the model).
  */
-export function assetPath(species, name) {
-  return RUNTIME_ASSETS.includes(name) ? `solver/${name}` : `solver_lobes/${species}/${name}`;
+export function assetPath(species, name, sex = "male") {
+  if (RUNTIME_ASSETS.includes(name)) return `solver/${name}`;
+  const folder = sex === "male" ? "" : `${sex}/`;
+  return `${folder}solver_lobes/${species}/${name}`;
 }
 
-async function defaultLoadAsset(species, name) {
-  const response = await fetch(new URL(assetPath(species, name), import.meta.url));
+async function defaultLoadAsset(species, name, sex) {
+  const response = await fetch(new URL(assetPath(species, name, sex), import.meta.url));
   if (!response.ok) throw new Error(`Could not load ${name} of the ${species}: HTTP ${response.status}.`);
   return new Uint8Array(await response.arrayBuffer());
 }
@@ -112,20 +114,21 @@ async function defaultLoadAsset(species, name) {
 /** A worker of the installed sbmlsim-core host which runs the lobed liver of a species.
  *
  * One worker holds the compiled models of every species which was asked for,
- * under the key of the species, so switching species does not recompile.
+ * under the key of the species, so switching species does not recompile. The
+ * models of a sex are its own, so a worker is a worker of one sex.
  */
-export async function createLobeSolver({host = globalThis.sbmlsimCore, loadAsset = defaultLoadAsset, createWorker, species = []} = {}) {
+export async function createLobeSolver({host = globalThis.sbmlsimCore, loadAsset = defaultLoadAsset, createWorker, species = [], sex = "male"} = {}) {
   if (species.length === 0) throw new RangeError("A solver of the lobes needs the species whose models it runs.");
   if (!host?.blobWorkers && !createWorker) throw new Error("The sbmlsim-core browser host has not loaded.");
   const decoder = new TextDecoder();
   const configs = {};
   const models = {};
   for (const name of species) {
-    const configBytes = await loadAsset(name, "config.json");
+    const configBytes = await loadAsset(name, "config.json", sex);
     configs[name] = JSON.parse(decoder.decode(configBytes));
     const [modelBytes, descriptionBytes] = await Promise.all([
-      loadAsset(name, "model.wasm"),
-      loadAsset(name, "model.json"),
+      loadAsset(name, "model.wasm", sex),
+      loadAsset(name, "model.json", sex),
     ]);
     models[name] = {module: await WebAssembly.compile(modelBytes), description: decoder.decode(descriptionBytes)};
   }

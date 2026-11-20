@@ -11,6 +11,7 @@ import {CONTROLS, createLobeSolver, inflowChanges, normalizeControls} from "./lo
 
 const DAY = 24 * 60;
 const SPECIES = ["rat", "mouse", "human"];
+const SEXES = ["male", "female"];
 const SVG = "http://www.w3.org/2000/svg";
 // the days of the course one second of the animation covers
 const PLAY_DAYS_PER_SECOND = 0.8;
@@ -124,9 +125,10 @@ function bar_legend(svg, parts, left, y) {
 }
 
 /** The explorer of the lobes of the liver on the page it is hosted in. */
-export function createApp(root, {data, anatomy = null, solverFactory = createLobeSolver} = {}) {
+export function createApp(root, {data, anatomy = null, loadData = defaultLoadData, solverFactory = createLobeSolver} = {}) {
   const parts = {
     species: root.querySelector("#species"),
+    sex: root.querySelector("#sex"),
     liver: root.querySelector("#liver"),
     removed: root.querySelector("#removed"),
     legend: root.querySelector("#legend"),
@@ -152,14 +154,18 @@ export function createApp(root, {data, anatomy = null, solverFactory = createLob
     download: root.querySelector("#download"),
     provenance: root.querySelector("#provenance"),
   };
+  // the dataset of a sex is held once it was loaded: the page starts with the
+  // one it was given and fetches the other when a reader asks for it
+  const datasets = {[data.provenance.sex ?? "male"]: data};
+  const solvers = {};
   const state = {
     species: "rat",
+    sex: data.provenance.sex ?? "male",
     states: {},
     controls: normalizeControls({}),
     time: 0,
     series: null,
     source: "precomputed",
-    solver: null,
     running: false,
     again: false,
     plan: {kind: "portal"},
@@ -171,10 +177,14 @@ export function createApp(root, {data, anatomy = null, solverFactory = createLob
   let colours = {};
   let frame = null;
 
-  const of_species = () => data.species[state.species];
+  const dataset = () => datasets[state.sex];
+  const of_species = () => dataset().species[state.species];
+  // the sexes of the species: the parameter database has the female of the
+  // human, and the male alone of the rat and of the mouse
+  const sexesOf = species => dataset().species[species]?.sexes ?? ["male"];
   const tokens = () => of_species().lobes.map(lobe => lobe.token);
   const reset = () => { state.states = Object.fromEntries(tokens().map(token => [token, "intact"])); };
-  const endTime = () => data.provenance.end_time;
+  const endTime = () => dataset().provenance.end_time;
 
   // a set of changes as one string, so two sets are the same when they set the
   // same parameters to the same values whatever order they were written in
@@ -305,8 +315,8 @@ export function createApp(root, {data, anatomy = null, solverFactory = createLob
     parts.scrub.value = String(state.time);
     showPlan();
     parts.provenance.textContent = [
-      `${data.provenance.solver} of sbmlsim-core ${data.provenance.sbmlsim_core_version}, model ${of_species().sbml_sha256.slice(0, 12)}.`,
-      data.provenance.notice,
+      `${dataset().provenance.solver} of sbmlsim-core ${dataset().provenance.sbmlsim_core_version}, ${state.sex} ${state.species}, model ${of_species().sbml_sha256.slice(0, 12)}.`,
+      dataset().provenance.notice,
       anatomy?.attribution,
     ].filter(Boolean).join(" ");
   };
@@ -318,12 +328,12 @@ export function createApp(root, {data, anatomy = null, solverFactory = createLob
    * a page served without the drawings simply has no figure.
    */
   const showBody = () => {
-    const drawn = anatomy?.bodies?.[state.species];
+    const drawn = anatomy?.bodies?.[state.species]?.[state.sex];
     parts.body.hidden = !drawn;
     if (!drawn) { parts.body.replaceChildren(); return; }
     const svg = svgNode("svg", {
       class: "body-figure", viewBox: drawn.box.join(" "), role: "img",
-      "aria-label": `the ${state.species} of this run, its liver marked`,
+      "aria-label": `the ${state.sex} ${state.species} of this run, its liver marked`,
     });
     const group = svgNode("g", {});
     group.innerHTML = drawn.svg;
@@ -396,8 +406,11 @@ export function createApp(root, {data, anatomy = null, solverFactory = createLob
     parts.status.textContent = "Solving the lobed liver with SUNDIALS IDA...";
     const started = clock();
     try {
-      state.solver ??= await solverFactory({species: SPECIES});
-      const result = await state.solver.simulate(state.species, state.controls, changesOfRun());
+      solvers[state.sex] ??= await solverFactory({
+        species: SPECIES.filter(name => sexesOf(name).includes(state.sex)),
+        sex: state.sex,
+      });
+      const result = await solvers[state.sex].simulate(state.species, state.controls, changesOfRun());
       state.series = result.series;
       state.source = "live";
       state.ran = clock() - started;
@@ -517,6 +530,19 @@ export function createApp(root, {data, anatomy = null, solverFactory = createLob
   };
 
   const build = () => {
+    parts.sex.replaceChildren(...SEXES.map(name => {
+      const has = sexesOf(state.species).includes(name);
+      const button = element("button", {
+        class: name === state.sex ? "tab active" : "tab", type: "button",
+        "aria-pressed": String(name === state.sex),
+        title: has
+          ? `the reference ${name} ${state.species} of the parameter database`
+          : `the parameter database has no reference physiology of the ${name} ${state.species}`,
+      }, name);
+      if (!has) button.setAttribute("disabled", "");
+      else button.addEventListener("click", () => void setSex(name));
+      return button;
+    }));
     parts.species.replaceChildren(...SPECIES.map(name => {
       const button = element("button", {class: name === state.species ? "tab active" : "tab", type: "button"}, name);
       button.addEventListener("click", () => void setSpecies(name));
@@ -582,9 +608,22 @@ export function createApp(root, {data, anatomy = null, solverFactory = createLob
     }));
   };
 
+  const setSex = async name => {
+    // the parameter database has no female rat and no female mouse, so the
+    // sex of the page can only be one the species of the page has
+    if (name === state.sex || !sexesOf(state.species).includes(name)) return render();
+    pause();
+    datasets[name] ??= await loadData(name);
+    state.sex = name;
+    return setSpecies(state.species);
+  };
+
   const setSpecies = name => {
     pause();
     state.species = name;
+    // a species the sex of the page has no physiology of falls back to the
+    // male, which every species of the database has
+    if (!sexesOf(name).includes(state.sex)) state.sex = "male";
     colours = lobeColors(of_species().lobes);
     reset();
     state.time = 0;
@@ -625,12 +664,21 @@ export function createApp(root, {data, anatomy = null, solverFactory = createLob
     pause,
     advance,
     setSpecies,
+    setSex,
     setTime(time) { pause(); state.time = time; show(); },
-    close() { pause(); state.solver?.close(); },
+    close() { pause(); Object.values(solvers).forEach(solver => solver?.close()); },
   };
 }
 
 /** Start the explorer in the page which hosts it. */
+/** The dataset of a sex: the male beside the page, the female under `female/`. */
+export async function defaultLoadData(sex) {
+  const path = sex === "male" ? "lobes-data.json" : `${sex}/lobes-data.json`;
+  const response = await fetch(new URL(path, import.meta.url));
+  if (!response.ok) throw new Error(`Could not load the ${sex} reference data: HTTP ${response.status}.`);
+  return response.json();
+}
+
 export async function start(root = document) {
   const response = await fetch(new URL("lobes-data.json", import.meta.url));
   if (!response.ok) throw new Error(`Could not load the reference data: HTTP ${response.status}.`);

@@ -185,6 +185,9 @@ button[disabled] { opacity: 0.55; cursor: progress; }
 .player input[type="range"] { flex: 1 1 auto; }
 .player output { white-space: nowrap; min-width: 4.1rem; text-align: right; }
 
+.switches { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.mode-switch .tab[disabled] { opacity: 0.4; cursor: not-allowed; }
+
 .liver-row { display: flex; align-items: stretch; gap: 8px; }
 .body-host { flex: 0 0 74px; display: flex; align-items: center; }
 .body-figure { width: 100%; height: auto; max-height: 300px; display: block; }

@@ -37,11 +37,13 @@ from pkpdsim.pbpk import (
     PBPKDefinition,
     PressureFlow,
     Route,
+    Sex,
     Substance,
     Variants,
     build,
     ids,
 )
+from pkpdsim.pbpk.data import load
 from pkpdsim.pbpk.interventions import (
     Intervention,
     PortalLigation,
@@ -50,6 +52,7 @@ from pkpdsim.pbpk.interventions import (
 )
 from pkpdsim.pbpk.lobes import HABR, lobe_table
 from pkpdsim.pbpk.organs import Organ
+from pkpdsim.pbpk.physiology import physiology_table
 from pkpdsim.pbpk.remodelling import FlowDriven
 from pkpdsim.pbpk.variants.liver_lobes import LobedLiver
 from pkpdsim.species import Species
@@ -73,7 +76,19 @@ INTEGRATOR: IntegratorSettings = {
 }
 
 
-def definition(species: Species) -> PBPKDefinition:
+def sexes(species: Species) -> tuple[Sex, ...]:
+    """The sexes the parameter database has a reference physiology of.
+
+    The human has both, the rat and the mouse have the male alone
+    (`physiology_rat.toml`, `physiology_mouse.toml`), so the page offers the
+    sex of an individual where the data of the library carries it and says so
+    where it does not.
+    """
+    table = load(physiology_table(species))
+    return tuple(sex for sex in Sex if sex.value in table)
+
+
+def definition(species: Species, sex: Sex = Sex.MALE) -> PBPKDefinition:
     """The lobed liver of a species on the pressure network, with a toy drug.
 
     One drug cleared by the liver, so the exposure of a lobe says what the
@@ -84,6 +99,7 @@ def definition(species: Species) -> PBPKDefinition:
     return PBPKDefinition(
         sid=f"lobes_{species.value}",
         species=species,
+        sex=sex,
         substances=[
             Substance(
                 sid=S,
@@ -224,10 +240,11 @@ def _export(path: Path, output: Path, species: Species) -> str:
     return fingerprint
 
 
-def generate(*, browser: Path | None = None) -> dict[str, Any]:
+def generate(*, sex: Sex = Sex.MALE, browser: Path | None = None) -> dict[str, Any]:
     """Build the lobed liver of every species and generate the dataset.
 
     Args:
+        sex: the sex of the individual every model of the dataset is built for.
         browser: the directory of the compiled browser models, `None` to
             generate the dataset only.
 
@@ -240,6 +257,7 @@ def generate(*, browser: Path | None = None) -> dict[str, Any]:
             "generator": "scripts/lobes_examples.py",
             "engine": "core",
             "solver": "SUNDIALS IDA",
+            "sex": sex.value,
             "sbmlsim_version": version("sbmlsim"),
             "sbmlsim_core_version": version("sbmlsim-core"),
             "end_time": END,
@@ -257,8 +275,8 @@ def generate(*, browser: Path | None = None) -> dict[str, Any]:
     }
     with TemporaryDirectory(prefix="pkpdsim-lobes-examples-") as directory:
         folder = Path(directory)
-        for species in SPECIES:
-            result = build(definition(species), folder / species.value)
+        for species in (name for name in SPECIES if sex in sexes(name)):
+            result = build(definition(species, sex), folder / species.value)
             selections = columns(species)
             fingerprint = (
                 _export(result.flat_path, browser / species.value, species)
@@ -270,6 +288,7 @@ def generate(*, browser: Path | None = None) -> dict[str, Any]:
             lobes = lobe_table(species)
             data["species"][species.value] = {
                 "sbml_sha256": fingerprint,
+                "sexes": [one.value for one in sexes(species)],
                 "lobes": [
                     {
                         "token": lobe.token,
@@ -310,26 +329,28 @@ def generate(*, browser: Path | None = None) -> dict[str, Any]:
     return data
 
 
-def anatomy_of(species: Species) -> dict[str, Any]:
-    """The drawn animal of a species, its box and where its liver sits.
+def anatomy_of(species: Species, sex: Sex = Sex.MALE) -> dict[str, Any]:
+    """The drawn animal of a species and a sex, its box and where its liver sits.
 
     The figure of the library (`pkpdsim.pbpk.visual`), which is the anatomogram
     of the EBI Expression Atlas for the mouse and the rat and the body of
     pkpdsim for the human: the explorer draws the same animal the physiology
     figures of the documentation draw, so a reader sees which individual the
     lobes belong to. The drawings are each scaled to their own box, so the
-    species are not on one scale.
+    species are not on one scale. The body of the human is drawn per sex; the
+    anatomogram of the rat and of the mouse is one drawing for both, which is
+    what the library holds, so there only the numbers of the run differ.
     """
     from pkpdsim.pbpk.visual.animal import AnimalBody
     from pkpdsim.pbpk.visual.body import reference_body
 
     if species is Species.HUMAN:
-        body = reference_body("male")
+        body = reference_body(sex.value)
         drawing = body.svg(arteries=False, tags=True)
         points = np.asarray(body.outline)
         liver = body.centroid("li")
     else:
-        animal = AnimalBody(species.value)
+        animal = AnimalBody(species.value, sex.value)
         drawing = animal.svg(tags=True)
         points = np.asarray(animal.a.outline)
         liver = animal.centroid("li")
@@ -344,38 +365,60 @@ def anatomy_of(species: Species) -> dict[str, Any]:
     }
 
 
+def dataset_path(output: Path, sex: Sex) -> Path:
+    """Where the dataset of a sex lives: the male beside the page, the female under `female/`.
+
+    The convention of the cardiovascular examples, which the page shares its
+    runtime with: the explorer loads the dataset of the sex a reader asks for
+    and not both, so a page costs what it costs today.
+    """
+    return output if sex is Sex.MALE else output.parent / "female" / output.name
+
+
+def anatomy(output: Path = OUTPUT) -> dict[str, Any]:
+    """The drawings of every species and sex, with the licence they travel under."""
+    return {
+        "generated_by": "scripts/lobes_examples.py",
+        "attribution": "Anatomy adapted from EMBL-EBI Expression Atlas anatomograms (CC BY 4.0), using pkpdsim physiology figures.",
+        "source": "https://github.com/ebi-gene-expression-group/anatomogram",
+        "license": "https://creativecommons.org/licenses/by/4.0/",
+        "bodies": {
+            species.value: {
+                sex.value: anatomy_of(species, sex) for sex in sexes(species)
+            }
+            for species in SPECIES
+        },
+    }
+
+
+def _write_json(path: Path, content: dict[str, Any]) -> None:
+    """Write one generated file of the page."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(content, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+        + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
 def write(output: Path = OUTPUT, *, browser: Path | None = SOLVERS) -> None:
-    """Write the dataset and the browser models.
+    """Write the datasets of both sexes, the drawings and the browser models.
 
     Args:
-        output: the path of the dataset.
+        output: the path of the dataset of the male individual.
         browser: the directory of the compiled browser models.
     """
-    data = generate(browser=browser)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(
-        json.dumps(data, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
-        + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
-    (output.parent / "lobes-anatomy.json").write_text(
-        json.dumps(
-            {
-                "generated_by": "scripts/lobes_examples.py",
-                "attribution": "Anatomy adapted from EMBL-EBI Expression Atlas anatomograms (CC BY 4.0), using pkpdsim physiology figures.",
-                "source": "https://github.com/ebi-gene-expression-group/anatomogram",
-                "license": "https://creativecommons.org/licenses/by/4.0/",
-                "bodies": {species.value: anatomy_of(species) for species in SPECIES},
-            },
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
+    for sex in Sex:
+        models = (
+            None
+            if browser is None
+            else (
+                browser if sex is Sex.MALE else browser.parent / "female" / browser.name
+            )
         )
-        + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
+        _write_json(dataset_path(output, sex), generate(sex=sex, browser=models))
+    _write_json(output.parent / "lobes-anatomy.json", anatomy(output))
 
 
 def main() -> None:

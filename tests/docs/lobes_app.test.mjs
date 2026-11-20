@@ -559,16 +559,16 @@ test("the species of the run is drawn, with its liver marked", async () => {
   const figure = () => byId.get("body");
   const svg = () => figure().children.find(child => child.tagName === "svg");
   assert.ok(svg(), "the drawn animal of the species is on the page");
-  assert.equal(svg().getAttribute("viewBox"), anatomy.bodies.rat.box.join(" "));
+  assert.equal(svg().getAttribute("viewBox"), anatomy.bodies.rat.male.box.join(" "));
   // the liver of the drawing is marked, so a reader sees which organ is split
   const mark = descendants(svg()).find(nodeOf => (nodeOf.className ?? "").includes("body-liver"));
   assert.ok(mark, "the liver of the animal is marked");
-  assert.equal(Number(mark.getAttribute("cx")), anatomy.bodies.rat.liver[0]);
+  assert.equal(Number(mark.getAttribute("cx")), anatomy.bodies.rat.male.liver[0]);
 
   // the drawing follows the species
   await app.setSpecies("human");
-  assert.equal(svg().getAttribute("viewBox"), anatomy.bodies.human.box.join(" "));
-  assert.equal(Number(descendants(svg()).find(nodeOf => (nodeOf.className ?? "").includes("body-liver")).getAttribute("cx")), anatomy.bodies.human.liver[0]);
+  assert.equal(svg().getAttribute("viewBox"), anatomy.bodies.human.male.box.join(" "));
+  assert.equal(Number(descendants(svg()).find(nodeOf => (nodeOf.className ?? "").includes("body-liver")).getAttribute("cx")), anatomy.bodies.human.male.liver[0]);
 
   // the licence of the drawings is named on the page
   assert.match(byId.get("provenance").textContent, /CC BY 4\.0/);
@@ -582,5 +582,85 @@ test("the page works when the drawings are not there", async () => {
   assert.equal(byId.get("body").children.length, 0, "no drawing, no figure");
   assert.equal(byId.get("body").hidden, true);
   assert.ok(byId.get("status").textContent.length > 0, "the rest of the page stands");
+  app.close();
+});
+
+/** The dataset of the other sex, recognisable by the remnant it reports. */
+function femaleData() {
+  const female = structuredClone(data);
+  female.provenance.sex = "female";
+  for (const of_species of Object.values(female.species)) {
+    for (const entry of Object.values(of_species.cases)) {
+      entry.series.f_remnant = entry.series.f_remnant.map(() => 0.42);
+    }
+  }
+  return female;
+}
+
+test("the sex of the individual is a switch, and its dataset is loaded once", async () => {
+  const {byId, root: host} = stub();
+  const loaded = [];
+  const app = createApp(host, {
+    data,
+    loadData: async sex => { loaded.push(sex); return femaleData(); },
+    solverFactory: fakeSolver([]),
+  });
+  await app.render();
+  const buttons = () => byId.get("sex").children;
+  assert.deepEqual(buttons().map(child => child.textContent), ["male", "female"]);
+  assert.deepEqual(loaded, [], "the sex of the page is loaded with the page");
+  // the parameter database has no female rat: the switch says so and refuses
+  assert.equal(buttons()[1].getAttribute("disabled"), "");
+  assert.match(buttons()[1].getAttribute("title"), /no reference physiology of the female rat/);
+  await app.setSex("female");
+  assert.equal(app.state.sex, "male", "a sex the species has no physiology of is not taken");
+  assert.deepEqual(loaded, []);
+
+  // the human has both, and its female is fetched once
+  await app.setSpecies("human");
+  assert.ok(!buttons()[1].getAttribute("disabled"), "the female human is offered");
+  await app.setSex("female");
+  assert.deepEqual(loaded, ["female"]);
+  assert.equal(app.state.sex, "female");
+  assert.equal(buttons()[1].getAttribute("aria-pressed"), "true");
+  // the numbers of the page are the ones of the dataset which was loaded
+  assert.ok(
+    descendants(byId.get("plot-remnant")).some(node => (node.textContent ?? "").includes("0.42")),
+    "the remnant of the female dataset is drawn",
+  );
+
+  // both ways, and the dataset of a sex is fetched once
+  await app.setSex("male");
+  await app.setSex("female");
+  assert.deepEqual(loaded, ["female"], "a dataset which is held is not fetched again");
+
+  // a species whose physiology is the male alone takes the page back to the male
+  await app.setSpecies("rat");
+  assert.equal(app.state.sex, "male");
+  assert.match(byId.get("provenance").textContent, /male rat/);
+  app.close();
+});
+
+test("the drawn body and the solver follow the sex", async () => {
+  const {byId, root: host} = stub();
+  const anatomy = JSON.parse(await readFile(new URL("lobes-anatomy.json", root), "utf8"));
+  const made = [];
+  const app = createApp(host, {
+    data, anatomy,
+    loadData: async () => femaleData(),
+    solverFactory: async options => { made.push(options.sex); return (await fakeSolver([])(options)); },
+  });
+  await app.render();
+  await app.setSpecies("human");
+  const viewBox = () => byId.get("body").children.find(child => child.tagName === "svg").getAttribute("viewBox");
+  assert.equal(viewBox(), anatomy.bodies.human.male.box.join(" "));
+
+  await app.setSex("female");
+  assert.equal(viewBox(), anatomy.bodies.human.female.box.join(" "));
+  assert.notEqual(anatomy.bodies.human.female.box.join(" "), anatomy.bodies.human.male.box.join(" "));
+
+  // a live run of the female goes to a solver of the models of the female
+  await app.run();
+  assert.deepEqual(made, ["female"], "the solver is built for the sex which is shown");
   app.close();
 });
