@@ -10,6 +10,10 @@ which is too narrow clips a legitimate value; no other test looks at either.
 
 A failure names a kind: either the domain of the row is wrong, or the value is
 wrong, which is a bug of the library.
+
+The limit of the check: the sweep shows that no domain is too narrow for the
+values the models actually reach, and it cannot show that an upper bound is too
+wide when no value ever approaches it. A green file is no proof of more.
 """
 
 import math
@@ -20,7 +24,9 @@ import pytest
 
 from pkpdsim.pbpk import (
     Adipose,
+    FirstOrder,
     LumenConversion,
+    Metabolism,
     Organ,
     PBPKDefinition,
     Pregnancy,
@@ -59,8 +65,6 @@ from .conftest import (
     reference_definition,
     turnover_reference_definition,
 )
-from .test_lobes_build import RAT_TOKENS
-from .test_lobes_interventions import _definition as lobed_rat_definition
 
 ABS_TOL = 1e-12
 """The tolerance of a bound (the units of the quantity), the absolute tolerance
@@ -69,9 +73,15 @@ of the integrator (`_check`).
 It absorbs the noise of the solver on a quantity which is zero in exact
 arithmetic and nothing else: a state which decays to 0 (an amount in a lumen
 after the dose has passed, `IVDOSE_drg`) dips to -3e-17 at this tolerance and to
--3e-12 at the default one of roadrunner. It is absolute only: no quantity of
+-3e-12 at the default one of roadrunner. The integrator runs at abs 1e-12 and
+rel 1e-10; with it the worst excursion beyond any bound across every shape,
+measured with tolerance 0, is 2.6e-17, all of it states decaying to 0, so the
+tolerance is noise and no slack for a real violation. It is absolute only: no quantity of
 the sweep left its upper bound at all, so a relative slack would only widen the
 domains (the bug of pkpdsim#207 is a bound off by 13 percent)."""
+
+RAT_TOKENS = ("cl", "lll", "lml", "rl", "rml")
+"""The lobes of the liver of the rat."""
 
 DOSE = 10.0
 """The dose of every route the shapes give (the units of the model)."""
@@ -213,7 +223,22 @@ def _shapes() -> dict[str, Callable[[], Shape]]:
         return d, [({"GA": ga} | _both("drg"), DAY) for ga in (0.0, 13.0, 26.0, TERM)]
 
     def hepatectomy() -> Shape:
-        d = lobed_rat_definition(LobedLiver())
+        d = definition(
+            sid="lobes",
+            species=Species.RAT,
+            chemistry=[
+                Metabolism(
+                    sid="DRG2M",
+                    organ=Organ.LIVER,
+                    substrate="drg",
+                    products={"drg_m": 1.0},
+                    kinetics=FirstOrder(k=0.5),
+                    protein="CYP3A4",
+                )
+            ],
+            routes=[Route.iv("drg")],
+            variants=Variants(organs={Organ.LIVER: LobedLiver()}),
+        )
         changes = scenarios(Species.RAT)["hepatectomy90"].changes(RAT_TOKENS)
         return d, [(changes | _iv("drg"), DAY), (_iv("drg"), DAY)]
 
