@@ -1,11 +1,18 @@
 # Release notes for pkpdsim (unreleased)
 
-Two follow-ups of the domain contract of 0.32.0 ([#226](https://github.com/matthiaskoenig/pkpdsim/issues/226)): the two forms of `Domain.clip` disagreed about the value set of a domain, and one of the two public constants named `SEVERITIES` is renamed, which the hash seed of a run had decided the order of.
+Follow-ups of the domain contract of 0.32.0 ([#226](https://github.com/matthiaskoenig/pkpdsim/issues/226)): the two forms of `Domain.clip` disagreed about the value set of a domain, one of the two public constants named `SEVERITIES` is renamed, which the hash seed of a run had decided the order of, and the contract has one reader again, the one of sbmlsim, which pkpdsim writes for and re-exports.
 
 ## Changes
+
+- **The reader of the domain contract is the one of sbmlsim** ([#245](https://github.com/matthiaskoenig/pkpdsim/issues/245)). `pkpdsim.sbml.domains` writes the contract and read it back with an implementation of its own, and sbmlsim reads it too since its 0.35.0 (`sbmlsim.domains`, matthiaskoenig/sbmlsim#592), because a local design of sbmlsim clamps the step of a parameter to the domain its model states and must not import pkpdsim. One contract with two readers drifts, and it had begun to: the interval clip and the refusal of a domain which holds no value were fixed on one side only. `Domain`, `Values`, `DOMAIN`, `VALUE_SET_URL`, `domain_of` and `domains` are now re-exported from `sbmlsim.domains`, so nothing of pkpdsim or of a model package changes an import, and the writer (`domain_uncertainty`), the named domains `FRACTION`, `NONNEGATIVE`, `REAL` and `BOOLEAN` and `integers` stay here, where the models are written. `domains` of a path which is no file raises a `FileNotFoundError` where it read as a model without domains before, and it takes the SBML of a model as well as its path.
 
 - **`pkpdsim.sensitivity.SEVERITIES` is `SEVERITY_IDS`, and a tuple** ([#231](https://github.com/matthiaskoenig/pkpdsim/issues/231), [#232](https://github.com/matthiaskoenig/pkpdsim/issues/232)). The constant holds the ids of the severities and shared its name with `pkpdsim.pbpk.virtual.SEVERITIES`, which maps each condition to the range a virtual population samples it from, so one of the two had to change and the newer one did. It is a `tuple[str, ...]` where it was a `frozenset[str]`, so the order the ids are reported in is the order they are written in and no longer depends on the hash seed of the run.
 
 ## Fixes
 
 - **The interval form of `Domain.clip` respects the value set of a domain** ([#230](https://github.com/matthiaskoenig/pkpdsim/issues/230)). `BOOLEAN.clip(0.85, 1.15)` returned `(0.85, 1)`, a pair whose lower bound the domain itself rejects, and `integers(0, 4).clip(0.3, 3.7)` returned its argument unchanged, while the single value form of the same method has always snapped onto the values of the domain. Each finite bound of an interval is now widened onto a value the domain holds, the lower one down and the upper one up, and the widening is logged at WARNING, because a fractional span of a switch or of a count is a modelling error and not a rounding one. An interval whose bounds are reversed is still returned as it is, so the inverted pair sbmlsim builds for a negative value is not repaired into one a sampler would accept.
+
+## Dependencies
+
+- `sbmlsim>=0.35.0`, which carries `sbmlsim.domains`, the reader of the domain contract, and the value set of an interval clip (matthiaskoenig/sbmlsim#599).
+- `libroadrunner>=2.12.0.dev714`, the floor of sbmlsim 0.35.0: the build which carries the fixes of the rounding of the event times of roadrunner (sys-bio/roadrunner#1430 and #1460, matthiaskoenig/sbmlsim#598). `import sbmlsim` raises for a build below its own floor, so a lower floor here would let an install resolve to a libroadrunner sbmlsim refuses; the install commands of `docs/installation.md` name the build.

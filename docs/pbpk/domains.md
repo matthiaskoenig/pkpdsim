@@ -331,7 +331,7 @@ A raw sbmlutils `Parameter` in a definition is the model writing the element its
 
 ## Read the domains of a model
 
-`domains(model_path)` of `pkpdsim.sbml.domains` reads the domain of every parameter, compartment and species of an SBML file which states one. The module imports libsbml and sbmlutils only, no simulator, so a model package and the other libraries can read it. The model of the snippet is built with one `ModelParameter` of its own, a fraction absorbed:
+`domains(model_path)` of `pkpdsim.sbml.domains` reads the domain of every parameter, compartment and species of an SBML file which states one. The reader itself is the one of sbmlsim (`sbmlsim.domains`), re-exported here next to the writer: a tool which samples, scans or fits a model reads the contract with it without importing pkpdsim, and one contract has one implementation of its reader ([pkpdsim#245](https://github.com/matthiaskoenig/pkpdsim/issues/245)). The module imports libsbml, sbmlutils and that reader, which imports libsbml and the standard library only, so no simulator is loaded and a model package and the other libraries can read it. The model of the snippet is built with one `ModelParameter` of its own, a fraction absorbed:
 
 ```python
 from pathlib import Path
@@ -434,7 +434,7 @@ The clip reaches the sampled analyses (`SamplingAnalysis`, `FastAnalysis`, `Sobo
 
 ## The domain itself
 
-A `Domain` is a closed interval of two floats, infinities allowed, with the value set. `clip` limits each bound of an interval on its own side, `(max(lower, lo), min(upper, hi))`, so an interval whose bounds are reversed is returned as it is, and a caller may rely on that: an interval which lies wholly above the domain comes back as `(2.0, 1.0)`. A single value is limited to the domain and, for an integer or boolean domain, rounded to an integer it contains. `contains` rejects a value which is not finite, so `[0, inf)` means what it renders: infinity is no value of it. A domain of the integers or of the truth values whose interval holds no integer is rejected when it is constructed.
+A `Domain` is a closed interval of two floats, infinities allowed, with the value set. It is the `Domain` of `sbmlsim.domains`, re-exported by `pkpdsim.sbml.domains` with the named domains of the library, so the writer and the readers of the contract share one class. `clip` limits each bound of an interval on its own side, `(max(lower, lo), min(upper, hi))`, so an interval whose bounds are reversed is returned as it is, and a caller may rely on that: an interval which lies wholly above the domain comes back as `(2.0, 1.0)`. For an integer or boolean domain each finite bound of an interval which is not reversed is then widened onto a value the domain holds, the lower one down and the upper one up, which is logged as a warning: `BOOLEAN.clip(0.85, 1.15)` is `(0.0, 1.0)` and not `(0.85, 1)`, a pair whose lower bound the domain rejects, because a fractional span of a switch or of a count is a modelling error and not a rounding one. A single value is limited to the domain and, for an integer or boolean domain, rounded to an integer it contains. `contains` rejects a value which is not finite, so `[0, inf)` means what it renders: infinity is no value of it. A domain of the integers or of the truth values whose interval holds no integer is rejected when it is constructed.
 
 ```python
 import math

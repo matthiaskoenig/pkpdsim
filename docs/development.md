@@ -246,7 +246,7 @@ A release is made from `develop`. Since `develop` only accepts pull requests, th
 
     ```bash
     uv venv --python 3.14
-    uv pip install --no-deps --index-url https://matthiaskoenig.github.io/roadrunner-wheels/simple/ "libroadrunner>=2.12.0.dev700"
+    uv pip install --no-deps --index-url https://matthiaskoenig.github.io/roadrunner-wheels/simple/ "libroadrunner>=2.12.0.dev714"
     uv pip install "pkpdsim==x.y.z"
     ```
 

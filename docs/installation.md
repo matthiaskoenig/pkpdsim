@@ -1,13 +1,13 @@
 # Installation
 
-`pkpdsim` requires python >= 3.14 and is available from [pypi](https://pypi.org/project/pkpdsim/). It is tested on Linux, macOS and Windows with python 3.14 and on Linux with python 3.15. It simulates with sbmlsim 0.34 (`sbmlsim>=0.34.0`, installed with it), whose simulator [libroadrunner](https://libroadrunner.org) is not on PyPI: sbmlsim relies on fixes of the events of libroadrunner which are not released yet, so it needs a build of the `develop` branch, `libroadrunner>=2.12.0.dev700`, which the package index [roadrunner-wheels](https://github.com/matthiaskoenig/roadrunner-wheels) serves. Install the build from that index first and then `pkpdsim` from PyPI, whose requirement the installed build satisfies:
+`pkpdsim` requires python >= 3.14 and is available from [pypi](https://pypi.org/project/pkpdsim/). It is tested on Linux, macOS and Windows with python 3.14 and on Linux with python 3.15. It simulates with sbmlsim 0.35 (`sbmlsim>=0.35.0`, installed with it), whose simulator [libroadrunner](https://libroadrunner.org) is not on PyPI: sbmlsim relies on fixes of the events of libroadrunner which are not released yet, so it needs a build of the `develop` branch, `libroadrunner>=2.12.0.dev714`, which the package index [roadrunner-wheels](https://github.com/matthiaskoenig/roadrunner-wheels) serves. Install the build from that index first and then `pkpdsim` from PyPI, whose requirement the installed build satisfies:
 
 ```bash
-pip install --no-deps --index-url https://matthiaskoenig.github.io/roadrunner-wheels/simple/ "libroadrunner>=2.12.0.dev700"
+pip install --no-deps --index-url https://matthiaskoenig.github.io/roadrunner-wheels/simple/ "libroadrunner>=2.12.0.dev714"
 pip install pkpdsim
 ```
 
-The index serves the wheels of libroadrunner only, so the first command takes nothing else from it (`--no-deps`, the numpy of libroadrunner comes from PyPI with `pkpdsim`). `pip install pkpdsim` alone stops with `No matching distribution found for libroadrunner>=2.12.0.dev700`. Once libroadrunner is released with these fixes, the release on PyPI satisfies the requirement as well and the index is no longer needed.
+The index serves the wheels of libroadrunner only, so the first command takes nothing else from it (`--no-deps`, the numpy of libroadrunner comes from PyPI with `pkpdsim`). `pip install pkpdsim` alone stops with `No matching distribution found for libroadrunner>=2.12.0.dev714`. Once libroadrunner is released with these fixes, the release on PyPI satisfies the requirement as well and the index is no longer needed.
 
 ## With uv
 
@@ -35,7 +35,7 @@ Into an existing virtual environment libroadrunner is installed from the index f
 
 ```bash
 uv venv --python 3.14
-uv pip install --no-deps --index-url https://matthiaskoenig.github.io/roadrunner-wheels/simple/ "libroadrunner>=2.12.0.dev700"
+uv pip install --no-deps --index-url https://matthiaskoenig.github.io/roadrunner-wheels/simple/ "libroadrunner>=2.12.0.dev714"
 uv pip install pkpdsim
 ```
 
