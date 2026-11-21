@@ -1,4 +1,11 @@
-"""Tests of the domain of a quantity, written and read as a distrib range span."""
+"""Tests of the writer of the domain of a quantity, and of its round trip.
+
+The reader is the one of sbmlsim (`sbmlsim.domains`, re-exported by
+`pkpdsim.sbml.domains`) and is tested there: the clip of a value and of an
+interval, the containment, the interval notation and the domain which holds no
+value. What is tested here is what pkpdsim writes, read back through that
+reader.
+"""
 
 import logging
 import math
@@ -44,40 +51,13 @@ def _read(path: Path) -> libsbml.Model:
 
 
 def test_named_domains() -> None:
+    """The vocabulary of the writer, over the `Domain` of sbmlsim."""
     assert (FRACTION.lower, FRACTION.upper) == (0.0, 1.0)
     assert (NONNEGATIVE.lower, NONNEGATIVE.upper) == (0.0, math.inf)
     assert (REAL.lower, REAL.upper) == (-math.inf, math.inf)
-
-
-def test_clip_moves_only_the_bound_outside() -> None:
-    assert FRACTION.clip(0.799, 1.127) == (0.799, 1.0)
-    assert FRACTION.clip(-0.2, 0.5) == (0.0, 0.5)
-    assert FRACTION.clip(0.2, 0.5) == (0.2, 0.5)
-    assert NONNEGATIVE.clip(0.85, 1.15) == (0.85, 1.15)
-
-
-def test_clip_keeps_a_bound_which_is_the_bound() -> None:
-    assert FRACTION.clip(1.0, 1.0) == (1.0, 1.0)
-
-
-def test_contains_rejects_what_is_not_finite() -> None:
-    """An infinite bound is open and a state which blows up is no value."""
-    for d in (NONNEGATIVE, REAL):
-        for x in (math.inf, -math.inf, math.nan):
-            assert not d.contains(x)
-    assert REAL.contains(-1e300)
-
-
-def test_contains_accepts_the_bounds() -> None:
-    assert FRACTION.contains(0.0) and FRACTION.contains(1.0)
-    assert not FRACTION.contains(1.0000001)
-    assert NONNEGATIVE.contains(0.0) and not NONNEGATIVE.contains(-1e-9)
-
-
-def test_text() -> None:
-    assert str(FRACTION) == "[0, 1]"
-    assert str(NONNEGATIVE) == "[0, inf)"
-    assert str(REAL) == "(-inf, inf)"
+    assert (BOOLEAN.lower, BOOLEAN.upper, BOOLEAN.values) == (0, 1, Values.BOOLEAN)
+    assert integers(0, 3) == Domain(0, 3, Values.INTEGER)
+    assert str(FRACTION) == "[0, 1]" and str(integers(0, 3)) == "[0, 3] integer"
 
 
 def test_round_trip_of_a_bounded_domain(tmp_path: Path) -> None:
@@ -258,12 +238,6 @@ def test_an_uncertainty_named_domain_without_a_range_span_reads_as_none(
     assert domains(path) == {}
 
 
-def test_text_of_a_non_finite_bound_does_not_raise() -> None:
-    assert str(Domain(math.inf, math.inf)) == "(inf, inf)"
-    assert str(Domain(-math.inf, -math.inf)) == "(-inf, -inf)"
-    assert str(Domain(math.nan, 1.0)) == "(nan, 1]"
-
-
 def test_writing_a_domain_logs_no_sbmlutils_warning(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -284,56 +258,12 @@ def test_writing_a_domain_logs_no_sbmlutils_warning(
     assert [r.getMessage() for r in caplog.records] == []
 
 
-def test_a_boolean_domain_is_the_integers_of_zero_and_one() -> None:
-    assert BOOLEAN.contains(0) and BOOLEAN.contains(1)
-    assert not BOOLEAN.contains(0.5)
-    assert (BOOLEAN.lower, BOOLEAN.upper) == (0, 1)
-
-
-def test_an_integer_domain_clips_onto_its_integers_across_zero() -> None:
-    d = integers(-2, 2)
-    for value, expected in [(-2.6, -2.0), (-0.4, 0.0), (0.5, 0.0), (7.0, 2.0)]:
-        clipped = d.clip(value)
-        assert clipped == expected
-        assert d.contains(clipped)
-
-
 def test_an_integer_domain_without_an_integer_is_rejected() -> None:
+    """`integers` of an interval which holds none has no value to give."""
     with pytest.raises(ValueError, match=r"\[0\.2, 0\.8\]"):
         integers(0.2, 0.8)
     with pytest.raises(ValueError, match="no integer"):
         Domain(0.2, 0.8, Values.BOOLEAN)
-
-
-def test_clipping_an_infinite_value_returns_the_infinite_bound() -> None:
-    assert integers(0, math.inf).clip(math.inf) == math.inf
-    assert integers(-math.inf, 0).clip(-math.inf) == -math.inf
-
-
-def test_clipping_not_a_number_raises() -> None:
-    with pytest.raises(ValueError, match="not a number"):
-        integers(0, 3).clip(math.nan)
-
-
-def test_an_integer_domain_does_not_contain_a_non_integral_value() -> None:
-    assert not integers(0, 3).contains(2.5)
-    assert integers(0, 3).contains(2)
-
-
-def test_a_continuous_domain_contains_a_non_integral_value() -> None:
-    assert FRACTION.contains(0.94)
-
-
-def test_clip_of_an_integer_domain_returns_a_value_it_contains() -> None:
-    d = integers(0, 3)
-    for x in (-1.0, 0.4, 2.5, 7.0):
-        assert d.contains(d.clip(x))
-
-
-def test_the_text_of_an_integer_domain_states_its_value_set() -> None:
-    assert str(integers(0, 3)) == "[0, 3] integer"
-    assert str(BOOLEAN) == "[0, 1] boolean"
-    assert str(FRACTION) == "[0, 1]"
 
 
 def _one_parameter(tmp_path: Path, d: Domain) -> Path:
@@ -391,67 +321,3 @@ def test_the_value_one_of_the_value_set_child_is_needed_by_antimony(
     # externalParameter without a value
     path = _one_parameter(tmp_path, d)
     assert sbml_to_antimony(path)
-
-
-def test_an_interval_of_a_boolean_domain_is_widened_onto_its_values() -> None:
-    """A fractional span of a switch is widened onto the values of the switch.
-
-    `BOOLEAN.clip(0.85, 1.15)` returned `(0.85, 1)` before, a pair whose lower
-    bound the domain itself rejects (#230).
-    """
-    low, high = BOOLEAN.clip(0.85, 1.15)
-    assert (low, high) == (0.0, 1.0)
-    assert BOOLEAN.contains(low)
-    assert BOOLEAN.contains(high)
-
-
-def test_an_interval_of_an_integer_domain_is_widened_onto_its_values() -> None:
-    domain = integers(0, 4)
-    low, high = domain.clip(0.3, 3.7)
-    assert (low, high) == (0.0, 4.0)
-    assert domain.contains(low)
-    assert domain.contains(high)
-
-
-def test_widening_an_interval_keeps_both_bounds_inside_the_domain() -> None:
-    """A domain whose own bounds are not integral is not left by the widening."""
-    domain = integers(0.5, 3.5)
-    low, high = domain.clip(0.6, 3.4)
-    assert (low, high) == (1.0, 3.0)
-    assert domain.contains(low)
-    assert domain.contains(high)
-
-
-def test_widening_an_interval_onto_the_values_is_logged(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    with caplog.at_level(logging.WARNING, logger="pkpdsim.sbml.domains"):
-        BOOLEAN.clip(0.85, 1.15)
-    assert "widened to (0.0, 1.0)" in caplog.text
-
-
-def test_an_integral_interval_of_an_integer_domain_is_not_logged(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    with caplog.at_level(logging.WARNING, logger="pkpdsim.sbml.domains"):
-        assert integers(0, 4).clip(1.0, 3.0) == (1.0, 3.0)
-    assert [r.getMessage() for r in caplog.records] == []
-
-
-def test_an_interval_of_a_continuous_domain_is_not_widened() -> None:
-    assert FRACTION.clip(0.2, 0.7) == (0.2, 0.7)
-
-
-def test_a_reversed_interval_of_an_integer_domain_stays_reversed() -> None:
-    """The contract of a reversed interval holds for an integer domain too.
-
-    sbmlsim builds an inverted pair for a negative value on purpose and
-    refuses it by name later, so the widening must not repair such a pair into
-    an interval which a sampler would accept.
-    """
-    assert integers(0, 4).clip(1.5, 0.5) == (1.5, 0.5)
-
-
-def test_an_infinite_bound_of_an_integer_domain_is_not_widened() -> None:
-    domain = integers(0, math.inf)
-    assert domain.clip(0.3, math.inf) == (0.0, math.inf)

@@ -1,18 +1,24 @@
-"""The domain of a quantity of a model.
+"""The domain of a quantity of a model: the writer of the contract.
 
-A domain is the interval of values the model accepts for a quantity: a fraction
-lies in [0, 1], a volume or a rate in [0, inf). It is written into the SBML as a
-`distrib` uncertainty named `DOMAIN` whose single span is of type `range`, on the
-parameter, compartment or species it constrains, and read back by `domain_of` and
-`domains`.
+A domain is the interval of values the model accepts for a quantity, and the
+value set inside that interval: a fraction lies in [0, 1], a volume or a rate
+in [0, inf), a severity in the integers of [0, 3], a switch is 0 or 1. It is
+written into the SBML as a `distrib` uncertainty named `DOMAIN` whose single
+span is of type `range`, on the parameter, compartment or species it
+constrains, with an `externalParameter` whose `definitionURL` is the XSD
+datatype of the value set for an integer or boolean domain; a continuous domain
+writes none, so a document written before the value sets keeps its meaning.
+Nothing enforces the value set at run time, it is the contract for the tools
+which read it.
 
-A domain also states which values of its interval the model accepts (`Values`):
-every real number, the integers (an index, a count, a class, `integers`) or the
-two truth values (a flag, `BOOLEAN`). An integer or boolean domain writes one
-further child of the uncertainty, an `externalParameter` whose `definitionURL`
-is the XSD datatype of the value set; a continuous domain writes none, so a
-document written before the value sets keeps its meaning. Nothing enforces the
-value set at run time, it is the contract for the tools which read it.
+pkpdsim writes the models, so `domain_uncertainty` lives here, and the reader of
+the contract is the one of sbmlsim (`sbmlsim.domains`), which every tool that
+samples, scans, fits or checks a model reads it with: `sampling.local` of
+sbmlsim clamps the step of a parameter to the domain of its target, and a design
+must not import pkpdsim. `Domain`, `Values`, `domain_of` and `domains` are that
+reader, re-exported here next to the writer, so one contract has one
+implementation of its reader (#245). The named domains of the library and
+`integers` are the vocabulary of the writer and stay here.
 
 A domain is not the uncertainty of a source (`pkpdsim.pbpk.data.sbml_uncertainty`,
 a confidence interval around a literature value) and not the distribution of a
@@ -22,18 +28,22 @@ span type and ignores every other uncertainty.
 
 A reader of a model which states no domain learns nothing: `domain_of` gives
 `None` and `domains` leaves the element out, there is no default. This module
-imports no simulator and no library of pkpdsim, it belongs to the layer below
-them (see `pkpdsim.sbml`).
+imports libsbml, sbmlutils and the reader of sbmlsim, which imports libsbml and
+the standard library only, no simulator and no library of pkpdsim: it belongs to
+the layer below them (see `pkpdsim.sbml`).
 """
 
-import logging
 import math
-from dataclasses import dataclass
-from enum import StrEnum
-from pathlib import Path
-from typing import overload
 
 import libsbml
+from sbmlsim.domains import (
+    DOMAIN,
+    VALUE_SET_URL,
+    Domain,
+    Values,
+    domain_of,
+    domains,
+)
 from sbmlutils.factory import Uncertainty, UncertParameter, UncertSpan
 
 __all__ = [
@@ -42,6 +52,7 @@ __all__ = [
     "FRACTION",
     "NONNEGATIVE",
     "REAL",
+    "VALUE_SET_URL",
     "Domain",
     "Values",
     "domain_of",
@@ -49,174 +60,6 @@ __all__ = [
     "domains",
     "integers",
 ]
-
-logger = logging.getLogger(__name__)
-
-DOMAIN = "domain"
-"""Name of the uncertainty which carries a domain."""
-
-
-def _bound(x: float) -> str:
-    """Render a bound: an integral value without the trailing `.0`, else its text."""
-    return str(int(x)) if math.isfinite(x) and x == int(x) else str(x)
-
-
-class Values(StrEnum):
-    """The values inside the interval of a domain which the model accepts.
-
-    A flag is kept apart from an integer domain of the same interval on
-    purpose: a tool which offers a flag as a checkbox and a class as a spinner
-    has to know which it has.
-    """
-
-    CONTINUOUS = "continuous"
-    """Every real number of the interval, the default."""
-    INTEGER = "integer"
-    """The integers of the interval: an index, a count, a stage or a class."""
-    BOOLEAN = "boolean"
-    """The integers 0 and 1 as the truth values: a flag which is off or on."""
-
-
-VALUE_SET_URL: dict[Values, str] = {
-    Values.INTEGER: "http://www.w3.org/2001/XMLSchema#integer",
-    Values.BOOLEAN: "http://www.w3.org/2001/XMLSchema#boolean",
-}
-"""The `definitionURL` which writes a value set, the XSD datatype; `CONTINUOUS`
-has none, a continuous domain writes no such child."""
-
-
-@dataclass(frozen=True)
-class Domain:
-    """Closed interval of accepted values, a bound may be infinite.
-
-    Attributes:
-        lower: Lower bound.
-        upper: Upper bound.
-        values: Which values of the interval are accepted.
-    """
-
-    lower: float
-    upper: float
-    values: Values = Values.CONTINUOUS
-
-    def __post_init__(self) -> None:
-        """Reject an integer or boolean domain whose interval holds no integer."""
-        if self.values is Values.CONTINUOUS:
-            return
-        lowest = math.ceil(self.lower) if math.isfinite(self.lower) else self.lower
-        highest = math.floor(self.upper) if math.isfinite(self.upper) else self.upper
-        if lowest > highest:
-            raise ValueError(
-                f"the interval [{_bound(self.lower)}, {_bound(self.upper)}] "
-                f"holds no integer, so no {self.values.value} domain has a value"
-            )
-
-    @overload
-    def clip(self, lower: float, upper: float) -> tuple[float, float]: ...
-
-    @overload
-    def clip(self, lower: float, upper: None = None) -> float: ...
-
-    def clip(
-        self, lower: float, upper: float | None = None
-    ) -> tuple[float, float] | float:
-        """Move a value or an interval which lies outside the domain onto it.
-
-        An interval has each bound limited to the interval of the domain, each
-        on its own side, so an interval whose bounds are reversed is returned
-        as it is; a caller may rely on that. An interval of an integer or
-        boolean domain which is not reversed has each finite bound widened
-        onto a value the domain contains, the lower one down and the upper one
-        up, which is logged: a fractional span of a switch or of a count is a
-        modelling error, not a rounding one. A single value is limited to the
-        domain and, for an integer or boolean domain, rounded to the nearest
-        integer it contains.
-
-        Args:
-            lower: The value, or the lower bound of an interval.
-            upper: Upper bound of the interval, `None` for a single value.
-
-        Returns:
-            The interval with each bound limited to the domain, or the value
-            limited to it. An infinite value is returned at the infinite bound
-            of a domain which has one, so the result of `clip` lies inside the
-            interval but is not necessarily a value `contains` accepts.
-
-        Raises:
-            ValueError: If a single value is not a number.
-        """
-        if upper is not None:
-            low, high = max(lower, self.lower), min(upper, self.upper)
-            if self.values is Values.CONTINUOUS or low > high:
-                return low, high
-            return self._onto_values(low, high)
-        if math.isnan(lower):
-            raise ValueError("a value which is not a number cannot be clipped")
-        x = min(max(lower, self.lower), self.upper)
-        if self.values is Values.CONTINUOUS or not math.isfinite(x):
-            return x
-        x = float(round(x))
-        if x < self.lower:
-            x = float(math.ceil(self.lower))
-        if x > self.upper:
-            x = float(math.floor(self.upper))
-        return x
-
-    def _onto_values(self, low: float, high: float) -> tuple[float, float]:
-        """Widen the bounds of an interval onto the values this domain holds.
-
-        The lower bound moves down and the upper bound moves up, so the
-        interval asked for stays inside the one returned and the result is
-        never empty, and neither bound leaves the interval of the domain. A
-        bound which is not finite stays as it is, since no integral value lies
-        nearer to it than it does itself.
-        """
-        wide_low, wide_high = low, high
-        if math.isfinite(low):
-            wide_low = float(math.floor(low))
-            if wide_low < self.lower:
-                wide_low = float(math.ceil(self.lower))
-        if math.isfinite(high):
-            wide_high = float(math.ceil(high))
-            if wide_high > self.upper:
-                wide_high = float(math.floor(self.upper))
-        if (wide_low, wide_high) != (low, high):
-            logger.warning(
-                "The domain %s holds integral values only, so the interval "
-                "(%s, %s) is widened to (%s, %s). A fractional span of a "
-                "switch or of a count is a modelling error, not a rounding "
-                "one.",
-                self,
-                low,
-                high,
-                wide_low,
-                wide_high,
-            )
-        return wide_low, wide_high
-
-    def contains(self, value: float) -> bool:
-        """Whether a value is one the domain accepts, the bounds included.
-
-        An integer or boolean domain accepts only an integral value. No domain
-        accepts a value which is not finite: an infinite bound is open
-        (`[0, inf)`), so `inf` is no value of it, and `nan` is no number at all.
-        """
-        if not math.isfinite(value) or not self.lower <= value <= self.upper:
-            return False
-        return self.values is Values.CONTINUOUS or value == int(value)
-
-    def __str__(self) -> str:
-        """Interval notation: a finite bound is inclusive, an infinite one open.
-
-        The value set follows when it is not continuous: `[0, 3] integer`.
-        """
-        left = "[" if math.isfinite(self.lower) else "("
-        right = "]" if math.isfinite(self.upper) else ")"
-        text = f"{left}{_bound(self.lower)}, {_bound(self.upper)}{right}"
-        if self.values is Values.CONTINUOUS:
-            return text
-        return f"{text} {self.values.value}"
-
 
 FRACTION = Domain(0.0, 1.0)
 NONNEGATIVE = Domain(0.0, math.inf)
@@ -281,80 +124,3 @@ def domain_uncertainty(d: Domain) -> Uncertainty:
             )
         )
     return _MetadataUncertainty(uncertParameters=parameters, name=DOMAIN)
-
-
-def domain_of(sbase: libsbml.SBase) -> Domain | None:
-    """Read the domain of an element.
-
-    Args:
-        sbase: A parameter, compartment or species.
-
-    Returns:
-        The domain, or None if the element states none. A bound which is not
-        set reads as the infinity on its side.
-    """
-    plugin = sbase.getPlugin("distrib")
-    if plugin is None:
-        return None
-    for i in range(plugin.getNumUncertainties()):
-        uncertainty = plugin.getUncertainty(i)
-        if uncertainty.getName() != DOMAIN:
-            continue
-        values = _values_of(uncertainty)
-        for j in range(uncertainty.getNumUncertParameters()):
-            span = uncertainty.getUncertParameter(j)
-            if not isinstance(span, libsbml.UncertSpan):
-                continue
-            if span.getType() != libsbml.DISTRIB_UNCERTTYPE_RANGE:
-                continue
-            lower = span.getValueLower() if span.isSetValueLower() else -math.inf
-            upper = span.getValueUpper() if span.isSetValueUpper() else math.inf
-            return Domain(lower, upper, values)
-    return None
-
-
-def _values_of(uncertainty: libsbml.Uncertainty) -> Values:
-    """The value set a domain uncertainty states, by the URL of its child.
-
-    A domain with no such child is continuous.
-    """
-    by_url = {url: values for values, url in VALUE_SET_URL.items()}
-    for j in range(uncertainty.getNumUncertParameters()):
-        child = uncertainty.getUncertParameter(j)
-        if child.getType() != libsbml.DISTRIB_UNCERTTYPE_EXTERNALPARAMETER:
-            continue
-        values = by_url.get(child.getDefinitionURL())
-        if values is not None:
-            return values
-    return Values.CONTINUOUS
-
-
-def domains(model_path: Path) -> dict[str, Domain]:
-    """Read the domains of the parameters, compartments and species of a model.
-
-    Only the top-level model is read, the elements of a submodel are not in
-    the result.
-
-    Args:
-        model_path: Path of the flat SBML file of a model. A composed document
-            gives only the quantities of its top-level model, and the silence
-            about the others is not a statement that they have no domain.
-
-    Returns:
-        The domain by id, for the elements which state one.
-    """
-    doc = libsbml.readSBMLFromFile(str(model_path))
-    model = doc.getModel()
-    result: dict[str, Domain] = {}
-    if model is None:
-        return result
-    for elements in (
-        model.getListOfParameters(),
-        model.getListOfCompartments(),
-        model.getListOfSpecies(),
-    ):
-        for element in elements:
-            domain = domain_of(element)
-            if domain is not None:
-                result[element.getId()] = domain
-    return result

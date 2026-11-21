@@ -257,7 +257,9 @@ def test_importing_the_library_imports_no_simulator() -> None:
     Of sbmlsim it imports only the modules without a simulator (`sbmlsim.distrib`,
     the units of the package, the writer of the archive,
     `sbmlsim.release.archive`, the panels it annotates the flat models with,
-    `sbmlsim.panel` and `sbmlsim.panel_sbml`, and `sbmlsim.engine`, with which `import sbmlsim`
+    `sbmlsim.panel` and `sbmlsim.panel_sbml`, the reader of the domain contract
+    `sbmlsim.domains`, which `pkpdsim.sbml.domains` re-exports (#245), and
+    `sbmlsim.engine`, with which `import sbmlsim`
     checks the installed libroadrunner since sbmlsim 0.22.0 and which imports
     the standard library only), never roadrunner, COPASI or AMICI.
     """
@@ -266,7 +268,8 @@ def test_importing_the_library_imports_no_simulator() -> None:
         "print(sorted(m for m in sys.modules "
         "if m.split('.')[0] in {'roadrunner', 'COPASI', 'amici'} "
         "or (m.startswith('sbmlsim') "
-        "and m not in {'sbmlsim', 'sbmlsim.distrib', 'sbmlsim.units', "
+        "and m not in {'sbmlsim', 'sbmlsim.distrib', 'sbmlsim.domains', "
+        "'sbmlsim.units', "
         "'sbmlsim.engine', 'sbmlsim.release', 'sbmlsim.release.archive', "
         "'sbmlsim.panel', 'sbmlsim.panel_sbml'}) "
         "or m in {'pkpdsim.experiment', 'pkpdsim.pbpk.experiment'})); "

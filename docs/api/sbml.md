@@ -30,4 +30,6 @@ Two names of the kit are the names a library has always called the object by and
 
 ## domains
 
+The writer of the domain contract, see [Domains](../pbpk/domains.md). The reader is the one of sbmlsim, which this module re-exports, so `Domain`, `Values`, `domain_of` and `domains` are documented in [domains](https://matthiaskoenig.github.io/sbmlsim/api/domains/) of sbmlsim and imported from here unchanged.
+
 ::: pkpdsim.sbml.domains
