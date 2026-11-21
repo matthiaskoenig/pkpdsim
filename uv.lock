@@ -987,16 +987,16 @@ wheels = [
 
 [[package]]
 name = "libroadrunner"
-version = "2.12.0.dev700"
+version = "2.12.0.dev714"
 source = { registry = "https://matthiaskoenig.github.io/roadrunner-wheels/simple/" }
 dependencies = [
     { name = "numpy" },
 ]
 wheels = [
-    { url = "https://github.com/matthiaskoenig/roadrunner-wheels/releases/download/v2.12.0.dev700/libroadrunner-2.12.0.dev700-cp310-abi3-macosx_15_0_arm64.whl", hash = "sha256:955d3e4fb6cf69c09e4fcb62cb3e4355ff79a2e34c09e817e28c30cf8448e75e" },
-    { url = "https://github.com/matthiaskoenig/roadrunner-wheels/releases/download/v2.12.0.dev700/libroadrunner-2.12.0.dev700-cp310-abi3-macosx_15_0_x86_64.whl", hash = "sha256:56afdce8ed425d300da25deb782af41555d721d9d3cbe6b2f951f8686d5bc706" },
-    { url = "https://github.com/matthiaskoenig/roadrunner-wheels/releases/download/v2.12.0.dev700/libroadrunner-2.12.0.dev700-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:61875a61b9083a6badfef7e8473489bccdd25b71f836ac483d25e830249fddaf" },
-    { url = "https://github.com/matthiaskoenig/roadrunner-wheels/releases/download/v2.12.0.dev700/libroadrunner-2.12.0.dev700-cp310-abi3-win_amd64.whl", hash = "sha256:4c8bf66c296b2702302c9f75e2f120a4dff304b265f40c33f75f453cf6bfb83c" },
+    { url = "https://github.com/matthiaskoenig/roadrunner-wheels/releases/download/v2.12.0.dev714/libroadrunner-2.12.0.dev714-cp310-abi3-macosx_15_0_arm64.whl", hash = "sha256:1cb0a48a5d1f9e66919637a4e01e9540268f285e336f7d317c2e521d0f761e0b" },
+    { url = "https://github.com/matthiaskoenig/roadrunner-wheels/releases/download/v2.12.0.dev714/libroadrunner-2.12.0.dev714-cp310-abi3-macosx_15_0_x86_64.whl", hash = "sha256:10bcfdbc17a5bec40dac90fd847e79b2faa7bac669505c209dd3bbd5b7137410" },
+    { url = "https://github.com/matthiaskoenig/roadrunner-wheels/releases/download/v2.12.0.dev714/libroadrunner-2.12.0.dev714-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:58c40676e5ded9b970cfc4e6319e6e81b4174ec516276d0dbb0804eb80831f00" },
+    { url = "https://github.com/matthiaskoenig/roadrunner-wheels/releases/download/v2.12.0.dev714/libroadrunner-2.12.0.dev714-cp310-abi3-win_amd64.whl", hash = "sha256:3e8ff4a36d0ecac1f142399ce11378f1b380c0a5a7bae91115ff616112048fa6" },
 ]
 
 [[package]]
@@ -1663,7 +1663,7 @@ requires-dist = [
     { name = "certifi", specifier = ">=2026.10.19" },
     { name = "contourpy", specifier = ">=1.4.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
-    { name = "libroadrunner", specifier = ">=2.12.0.dev700", index = "https://matthiaskoenig.github.io/roadrunner-wheels/simple/" },
+    { name = "libroadrunner", specifier = ">=2.12.0.dev714", index = "https://matthiaskoenig.github.io/roadrunner-wheels/simple/" },
     { name = "matplotlib", specifier = ">=3.11.2" },
     { name = "mkdocstrings-python", marker = "extra == 'dev'", specifier = ">=2.0.9" },
     { name = "numpy", specifier = ">=2.5.3" },
@@ -1679,7 +1679,7 @@ requires-dist = [
     { name = "python-libsbml", specifier = ">=5.21.2" },
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.3" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.3" },
-    { name = "sbmlsim", specifier = ">=0.34.0" },
+    { name = "sbmlsim", specifier = ">=0.35.0" },
     { name = "sbmlsim", extras = ["amici"], marker = "extra == 'amici'" },
     { name = "sbmlutils", specifier = ">=0.17.2" },
     { name = "scipy", specifier = ">=1.18.1" },
@@ -2308,7 +2308,7 @@ wheels = [
 
 [[package]]
 name = "sbmlsim"
-version = "0.34.0"
+version = "0.35.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -2342,9 +2342,9 @@ dependencies = [
     { name = "typst" },
     { name = "xarray" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d4/d4/683ed4797989aa72b5185b61aac2e8c691ec8f977e83dbb9e4c07b3cd4ad/sbmlsim-0.34.0.tar.gz", hash = "sha256:0fec5e6097df78e791ac116ad63147a99e63ecf86af76407637f95d9dfe5be98", size = 6968364, upload-time = "2026-11-20T11:13:02.728Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/08/68/68e5ac6977511a0e51dc6882cf39e0c0effd189df1ab483b92b072d28506/sbmlsim-0.35.0.tar.gz", hash = "sha256:a6eecdb2cc2f13c30101a2ecb638b074907ce0bacdc44eb12e2eb3f9b8fae55e", size = 6996303, upload-time = "2026-11-21T02:56:45.994Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5b/87/f235ea10d6229c16d59e8545120c2dfe1c5680f14b7258b5fbf8b8430f3b/sbmlsim-0.34.0-py3-none-any.whl", hash = "sha256:093a08cabca133d3d63cfba52dbd20bb66554e3fc1d6c059fc206a8ba1b04b1d", size = 1640380, upload-time = "2026-11-20T11:13:00.059Z" },
+    { url = "https://files.pythonhosted.org/packages/4c/f8/e8e09a42d93a0cb96de5a38aa28e8705d87a4984c4755b3432413c4f4334/sbmlsim-0.35.0-py3-none-any.whl", hash = "sha256:1b1bc167b1e99aaac308fc966abcc1ad843aa0d41e59043f151d1000c131a23b", size = 1654427, upload-time = "2026-11-21T02:56:44.039Z" },
 ]
 
 [package.optional-dependencies]
