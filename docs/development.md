@@ -242,11 +242,14 @@ A release is made from `develop`. Since `develop` only accepts pull requests, th
 
     This starts the `CI-CD` workflow, which runs the test matrix, publishes to [pypi](https://pypi.org/project/pkpdsim/) through the trusted publisher of the GitHub environment `pypi`, creates the GitHub release from `release-notes/x.y.z.md` and fast-forwards `main` to the tagged commit. Zenodo archives the GitHub release. Check the version before pushing, a tag cannot be moved or deleted afterwards.
 
-8. test the installation from pypi in a fresh environment:
+8. test the installation from pypi in a fresh environment. `pkpdsim` alone does not resolve, since libroadrunner is installed from the index of its builds and not from PyPI, see `docs/installation.md`:
 
     ```bash
     uv venv --python 3.14
-    uv pip install pkpdsim
+    uv pip install --no-deps --index-url https://matthiaskoenig.github.io/roadrunner-wheels/simple/ "libroadrunner>=2.12.0.dev700"
+    uv pip install "pkpdsim==x.y.z"
     ```
+
+    Then import the package and the feature of the release, which is what a plain install of the wheel cannot show: `python -c "import pkpdsim; print(pkpdsim.__version__)"`.
 
 9. once Zenodo has archived the release, update the citation information, i.e., `date-released` and `doi` in `CITATION.cff` and the version, date and DOI of the release in the citation of `README.md` and `docs/index.md`. `bump-my-version` updates the version and `date-released`, the day of the bump, not the DOI, which is only known after the release. These changes go in through a pull request like everything else
