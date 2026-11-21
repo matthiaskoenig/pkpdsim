@@ -46,7 +46,7 @@ dependencies = [
     # of the initial value resolvers (sys-bio/roadrunner#1435), which 2.11.0
     # lacks, so a build with the physiology over age (`PBPKDefinition.age`)
     # compiles in seconds instead of minutes and the tests which build one run
-    # on every platform. The floor is the one of sbmlsim 0.35.0, which compares
+    # on every platform. The floor is the one of sbmlsim 0.36.0, which compares
     # the installed libroadrunner with its own requirement at `import sbmlsim`
     # and raises an `ImportError` for an older build, so a lower floor here
     # would let an install resolve to a libroadrunner sbmlsim refuses
@@ -61,8 +61,12 @@ dependencies = [
     # archive, so the sidecar of a body figure is an entry of the archive;
     # 0.35.0 has `sbmlsim.domains`, the reader of the domain contract which
     # `pkpdsim.sbml.domains` writes and re-exports instead of reading it a
-    # second time (#245), with the value set of an interval clip)
-    "sbmlsim>=0.35.0",
+    # second time (#245), with the value set of an interval clip; 0.36.0
+    # estimates the Sobol, FAST and Morris indices of every element of an
+    # output at once, so a sampling analysis of a library model of many
+    # readouts costs a fraction of one call of SALib per element, and adds the
+    # polynomial chaos and the local sensitivities the engine core integrates)
+    "sbmlsim>=0.36.0",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`)
     "pkpdutils>=1.7.0",
     # the study folders of format 2 of PK-DB, read as `pkdb check` reads them (`pkpdsim.data`)
