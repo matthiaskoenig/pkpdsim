@@ -39,6 +39,7 @@ of the model (the builds of the sexes), which a reader switches between.
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import math
 import re
@@ -52,6 +53,7 @@ from typing import TYPE_CHECKING, Any, Final
 import libsbml
 from pint.errors import PintError
 from sbmlsim.panel import (
+    MAX_CURVES,
     MAX_END,
     App,
     AppPage,
@@ -416,6 +418,17 @@ def body_figure(
             msg = f"the {what} of the figure is not at {path}"
             raise FileNotFoundError(msg)
     entities = _entities(sbml)
+    crowded = _crowded(sidecar)
+
+    def group(key: str, readout: Mapping[str, str]) -> tuple[str, str]:
+        """The group of a readout within its key and the label of its curve.
+
+        A key which fits a panel is one group, the panel of every substance it
+        states; a key which does not is split by substance, see `_crowded`.
+        """
+        label = readout["label"]
+        return ("" if key not in crowded else label.partition(", ")[0], label)
+
     panels, figure, dropped = restrict_to_model(
         *panels_from_figure(
             svg,
@@ -424,6 +437,7 @@ def body_figure(
             title=title,
             credit=credit,
             knobs=tuple(knobs),
+            group=group,
         ),
         lambda selection: selection in entities,
     )
@@ -433,6 +447,39 @@ def body_figure(
         figure,
         dropped,
     )
+
+
+def _crowded(readouts: Path) -> frozenset[str]:
+    """The keys of a sidecar whose readouts of one unit do not fit a panel.
+
+    `write_readouts` reports the drug of every segment of the intestine under
+    the key of the lumen, so a model of several substances states more
+    readouts of one unit there than a panel draws (`MAX_CURVES`): such a key
+    is split by substance, one panel per substance, which is the panel the key
+    of the place and the substance (`lumen/sub:gli`) gives as well. Every key
+    which fits keeps the panel of all its substances, which is what the curves
+    of one compartment are read against each other in.
+
+    Args:
+        readouts: the sidecar of the drawing.
+
+    Returns:
+        The keys whose readouts of one unit are more than a panel draws.
+    """
+    keys = json.loads(readouts.read_text(encoding="utf-8")).get("keys", {})
+    crowded = set()
+    for key, declaration in keys.items():
+        entries = (
+            declaration.get("readouts", []) if isinstance(declaration, dict) else []
+        )
+        counts = Counter(
+            entry.get("unit") or ""
+            for entry in entries
+            if isinstance(entry, dict) and isinstance(entry.get("label"), str)
+        )
+        if any(count > MAX_CURVES for count in counts.values()):
+            crowded.add(key)
+    return frozenset(crowded)
 
 
 def _part(label: str, place: str) -> str:

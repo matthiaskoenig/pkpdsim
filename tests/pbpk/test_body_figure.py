@@ -3,9 +3,9 @@
 from pathlib import Path
 
 import pytest
-from sbmlsim.panel import Knob, PanelSimulation
+from sbmlsim.panel import MAX_CURVES, Knob, PanelSimulation
 
-from pkpdsim.pbpk import build
+from pkpdsim.pbpk import Route, build
 from pkpdsim.pbpk.visual.anatomy import anatomy_figure
 from pkpdsim.pbpk.visual.content import ModelContent
 from pkpdsim.pbpk.visual.interactive import write_readouts
@@ -28,14 +28,13 @@ KNOBS = (
 )
 
 
-def _figure(tmp_path: Path) -> tuple[Path, Path]:
+def _figure(tmp_path: Path, **overrides: object) -> tuple[Path, Path]:
     """The drawing with its sidecar and the flat build of the fixture.
 
-    The drug and its one metabolite, since a panel of sbmlsim draws at most
-    16 curves of one unit and the figure of a model of seven substances has
-    18 in the liver.
+    The drug and its one metabolite, so that the places of the drawing stay
+    the ones of a small model; `overrides` are fields of the definition.
     """
-    model = definition()
+    model = definition(**overrides)
     svg = anatomy_figure(model, tmp_path / "m_body.svg")
     write_readouts(ModelContent.of(model), svg)
     return svg, build(model, tmp_path).flat_path
@@ -85,6 +84,33 @@ def test_a_curve_is_labelled_as_a_panel_of_an_app_labels_it(tmp_path: Path) -> N
     assert not any("," in label for label in labels), labels
     assert not any(label.endswith(" unbound") for label in labels), labels
     assert max(len(label) for label in labels) <= 30, labels
+
+
+def test_a_key_too_crowded_for_one_panel_is_split_by_substance(
+    tmp_path: Path,
+) -> None:
+    """The lumen of two orally dosed substances is one panel per substance.
+
+    The lumen reports the drug of every segment of the intestine, so two
+    substances in it are 24 readouts of one unit while a panel of sbmlsim
+    draws at most 16 curves: the key is split by substance, which is the
+    panel its keys of a place and a substance give as well.
+    """
+    svg, sbml = _figure(
+        tmp_path, routes=[Route.iv("drg"), Route.oral("drg"), Route.oral("drg_m")]
+    )
+    panels, figure, _ = body_figure(svg, sbml, simulation=SIMULATION, title="fixture")
+    lumen = [panels[pid] for pid in figure.panels["lumen"]]
+    assert [p.id for p in lumen] == ["lumen_drug", "lumen_metabolite"]
+    assert [p.title for p in lumen] == [
+        "intestinal lumen, drug",
+        "intestinal lumen, metabolite",
+    ]
+    assert [len(p.curves) for p in lumen] == [12, 12]
+    assert [p.curves for p in lumen] == [
+        panels[f"lumen_{sid}"].curves for sid in ("drg", "drg_m")
+    ]
+    assert all(len(p.curves) <= MAX_CURVES for p in panels.values())
 
 
 def test_a_path_which_does_not_exist_is_named(tmp_path: Path) -> None:
