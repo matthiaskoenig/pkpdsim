@@ -417,7 +417,7 @@ def body_figure(
         if not path.exists():
             msg = f"the {what} of the figure is not at {path}"
             raise FileNotFoundError(msg)
-    entities = _entities(sbml)
+    selectable = _selections(sbml)
     crowded = _crowded(sidecar)
 
     def group(key: str, readout: Mapping[str, str]) -> tuple[str, str]:
@@ -439,7 +439,7 @@ def body_figure(
             knobs=tuple(knobs),
             group=group,
         ),
-        lambda selection: selection in entities,
+        lambda selection: selection in selectable,
     )
     short = substances or {}
     return (
@@ -529,12 +529,43 @@ def _entities(sbml: Path) -> set[str]:
     """Get the ids a panel sets or selects in a model: its entities and `[S]`."""
     doc: libsbml.SBMLDocument = libsbml.readSBMLFromFile(str(sbml))
     model: libsbml.Model = doc.getModel()
+    return _entity_ids(model)
+
+
+def _entity_ids(model: libsbml.Model) -> set[str]:
+    """Get the ids of the entities of a model and the `[S]` of its species.
+
+    Args:
+        model: the model of the build.
+
+    Returns:
+        The ids of its parameters, compartments and species, with the
+        concentration of every species beside its amount.
+    """
     ids = {p.getId() for p in model.getListOfParameters()}
     ids |= {c.getId() for c in model.getListOfCompartments()}
     for species in model.getListOfSpecies():
         ids.add(species.getId())
         ids.add(f"[{species.getId()}]")
     return ids
+
+
+def _selections(sbml: Path) -> set[str]:
+    """Get the ids a curve of a panel selects: the entities and the reactions.
+
+    A readout of the sidecar may name a reaction, e.g. the metabolism of the
+    liver, whose selection is its rate, while a knob of an app sets an entity
+    and never a reaction, which is why the entities are a set of their own.
+
+    Args:
+        sbml: the flat build of the model.
+
+    Returns:
+        The ids of its entities and of its reactions.
+    """
+    doc: libsbml.SBMLDocument = libsbml.readSBMLFromFile(str(sbml))
+    model: libsbml.Model = doc.getModel()
+    return _entity_ids(model) | {r.getId() for r in model.getListOfReactions()}
 
 
 def _classes(model: PKPDModel) -> list[type[SimulationExperiment]]:

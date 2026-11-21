@@ -59,6 +59,22 @@ def test_every_panel_selects_an_entity_of_the_build(tmp_path: Path) -> None:
     assert all(key not in panels for key in dropped)
 
 
+def test_a_readout_which_names_a_reaction_is_kept(tmp_path: Path) -> None:
+    """A curve selects the rate of a reaction the build carries.
+
+    The sidecar reports the metabolism of the liver, `LI__DRG2M` of the
+    fixture, whose selection is the rate of that reaction and no entity of the
+    model, so the restriction reads the reactions of the build as well.
+    """
+    svg, sbml = _figure(tmp_path)
+    panels, _figure_of, dropped = body_figure(
+        svg, sbml, simulation=SIMULATION, title="fixture"
+    )
+    selected = {curve.id for panel in panels.values() for curve in panel.curves}
+    assert "LI__DRG2M" in selected
+    assert "LI__DRG2M" not in dropped
+
+
 def test_the_knobs_of_the_app_are_on_every_panel(tmp_path: Path) -> None:
     """A derived target of the simulation reads a knob of its own panel."""
     svg, sbml = _figure(tmp_path)
