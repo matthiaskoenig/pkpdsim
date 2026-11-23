@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 import roadrunner
+from sbmlsim.model import SBMLModel, load_model
 from sbmlutils.factory import Compartment, Model, Species, create_model
 
 from pkpdsim.initial_values import (
@@ -24,7 +25,7 @@ def test_get_species_keys_no_match() -> None:
 
 
 @pytest.fixture(scope="module")
-def r(tmp_path_factory: pytest.TempPathFactory) -> roadrunner.RoadRunner:
+def sbml(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """A model with a substance `x` in the venous blood, the liver and the urine."""
     model = Model(
         sid="distribution",
@@ -45,25 +46,32 @@ def r(tmp_path_factory: pytest.TempPathFactory) -> roadrunner.RoadRunner:
     )
     path: Path = tmp_path_factory.mktemp("model") / "distribution.xml"
     create_model(model, filepath=path, validate=False)
-    return roadrunner.RoadRunner(str(path))
+    return path
 
 
-def test_init_concentrations_changes(r: roadrunner.RoadRunner) -> None:
+@pytest.fixture(scope="module", params=["roadrunner", "core"])
+def model(sbml: Path, request: pytest.FixtureRequest) -> SBMLModel:
+    """The model in every engine, whose changes must be the same."""
+    return load_model(sbml, engine=request.param)
+
+
+def test_init_concentrations_changes(model: SBMLModel) -> None:
     """The concentration of the substance is set in every tissue but the urine."""
-    changes = init_concentrations_changes(r, "x", 2.0)
+    changes = init_concentrations_changes(model, "x", 2.0)
     assert changes == {"[Cve_x]": 2.0, "[Cli_plasma_x]": 2.0, "[Cli_x]": 2.0}
 
 
-def test_init_amounts_changes(r: roadrunner.RoadRunner) -> None:
+def test_init_amounts_changes(model: SBMLModel) -> None:
     """The amount of the substance is set in every tissue but the urine."""
-    changes = init_amounts_changes(r, "x", 3.0)
+    changes = init_amounts_changes(model, "x", 3.0)
     assert changes == {"Cve_x": 3.0, "Cli_plasma_x": 3.0, "Cli_x": 3.0}
 
 
-def test_changes_apply(r: roadrunner.RoadRunner) -> None:
+def test_changes_apply(sbml: Path) -> None:
     """The changes are selections of roadrunner, which sets them on the model."""
-    r.resetAll()
-    for key, value in init_concentrations_changes(r, "x", 2.0).items():
+    model = load_model(sbml, engine="roadrunner")
+    r = roadrunner.RoadRunner(str(sbml))
+    for key, value in init_concentrations_changes(model, "x", 2.0).items():
         r.setValue(f"init({key})", value)
     r.reset()
     assert r.getValue("[Cve_x]") == pytest.approx(2.0)
@@ -72,7 +80,7 @@ def test_changes_apply(r: roadrunner.RoadRunner) -> None:
     assert r.getValue("[Cve_y]") == pytest.approx(0.0)
 
 
-def test_unknown_method(r: roadrunner.RoadRunner) -> None:
+def test_unknown_method(model: SBMLModel) -> None:
     """Only concentrations and amounts are initial values."""
     with pytest.raises(ValueError, match="method must be"):
-        _set_initial_values(r, "x", 1.0, method="volume")
+        _set_initial_values(model, "x", 1.0, method="volume")

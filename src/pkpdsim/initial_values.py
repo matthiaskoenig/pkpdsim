@@ -10,12 +10,18 @@ The species of a substance are found by the naming pattern of the ids of the
 models, `C<tissue>_<substance>` for a concentration and `A<tissue>_<substance>`
 for an amount (`Cve_len`, `Cli_plasma_len`, `Aurine_len`), see
 `get_species_keys`.
+
+The model is an `sbmlsim.model.SBMLModel` of any engine: the species are read
+from its symbols (`ModelSymbols.species`, every species of the model it was
+read from, a boundary species included) and not from a loaded simulator, so
+the changes of a model of the engine core are the ones of a model of
+roadrunner.
 """
 
 import logging
 import re
 
-import roadrunner
+from sbmlsim.model import SBMLModel
 
 logger = logging.getLogger(__name__)
 
@@ -29,39 +35,37 @@ logger = logging.getLogger(__name__)
 
 
 def init_concentrations_changes(
-    r: roadrunner.RoadRunner, skey: str, value: float
+    model: SBMLModel, skey: str, value: float
 ) -> dict[str, float]:
     """Get changes to set initial concentrations for skey.
 
     Args:
-        r: roadrunner model.
+        model: the model, of any engine.
         skey: substance key, e.g., `len` for the species `Cve_len`.
         value: initial concentration in model units.
 
     Returns:
         Changes for the model, species selection to value.
     """
-    return _set_initial_values(r, skey, value, method="concentration")
+    return _set_initial_values(model, skey, value, method="concentration")
 
 
-def init_amounts_changes(
-    r: roadrunner.RoadRunner, skey: str, value: float
-) -> dict[str, float]:
+def init_amounts_changes(model: SBMLModel, skey: str, value: float) -> dict[str, float]:
     """Get changes to set initial amounts for skey.
 
     Args:
-        r: roadrunner model.
+        model: the model, of any engine.
         skey: substance key, e.g., `len` for the species `Cve_len`.
         value: initial amount in model units.
 
     Returns:
         Changes for the model, species selection to value.
     """
-    return _set_initial_values(r, skey, value, method="amount")
+    return _set_initial_values(model, skey, value, method="amount")
 
 
 def _set_initial_values(
-    r: roadrunner.RoadRunner, skey: str, value: float, method: str = "concentration"
+    model: SBMLModel, skey: str, value: float, method: str = "concentration"
 ) -> dict[str, float]:
     """Set the initial value of a distributing substance.
 
@@ -69,7 +73,7 @@ def _set_initial_values(
     Units are in model units.
 
     Args:
-        r: roadrunner model.
+        model: the model, of any engine.
         skey: substance key.
         value: initial value in model units.
         method: `concentration` or `amount`.
@@ -83,7 +87,8 @@ def _set_initial_values(
     if method not in ["amount", "concentration"]:
         raise ValueError(f"method must be 'amount' or 'concentration': '{method}'")
 
-    species_ids = r.model.getFloatingSpeciesIds() + r.model.getBoundarySpeciesIds()
+    # the symbols of the model, so that the changes do not depend on its engine
+    species_ids = sorted(model.symbols.species)
     changeset: dict[str, float] = {}
 
     for key in get_species_keys(skey, species_ids):
