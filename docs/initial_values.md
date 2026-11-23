@@ -6,12 +6,12 @@ The species of a substance are found by the naming pattern of the ids of the mod
 
 ## Usage
 
-A model with a substance `x` in the venous blood, the liver and the urine, simulated with [libroadrunner](https://libroadrunner.org):
+A model with a substance `x` in the venous blood, the liver and the urine, loaded with [sbmlsim](https://github.com/matthiaskoenig/sbmlsim):
 
 ```python
 from pathlib import Path
 
-import roadrunner
+from sbmlsim.model import load_model
 from sbmlutils.factory import Compartment, Model, Species, create_model
 
 from pkpdsim.initial_values import init_concentrations_changes
@@ -30,19 +30,22 @@ model = Model(
     ],
 )
 create_model(model, filepath=Path("distribution.xml"), validate=False)
-r = roadrunner.RoadRunner("distribution.xml")
+sbml_model = load_model("distribution.xml", engine="core")
 
-changes = init_concentrations_changes(r, "x", 2.0)
+changes = init_concentrations_changes(sbml_model, "x", 2.0)
 print(changes)
 ```
 
 ```text
-{'[Cve_x]': 2.0, '[Cli_plasma_x]': 2.0}
+{'[Cli_plasma_x]': 2.0, '[Cve_x]': 2.0}
 ```
 
-The keys are selections of roadrunner: `[sid]` the concentration of a species and `sid` its amount (`init_amounts_changes`). The changes are applied to the initial values of the model before the simulation starts: a `Simulation` of [sbmlsim](https://github.com/matthiaskoenig/sbmlsim) takes them as its `preinit_changes`, here they are set in roadrunner directly:
+The species are read from the symbols of the model and not from a loaded simulator, so the changes of a model of the engine core are the ones of a model of roadrunner, of COPASI and of AMICI. The keys are the selections of sbmlsim, which every engine reads: `[sid]` the concentration of a species and `sid` its amount (`init_amounts_changes`). The changes are applied to the initial values of the model before the simulation starts: a `Simulation` of sbmlsim takes them as its `preinit_changes`, here they are set in roadrunner directly:
 
 ```python
+import roadrunner
+
+r = roadrunner.RoadRunner("distribution.xml")
 for key, value in changes.items():
     r.setValue(f"init({key})", value)
 r.reset()
