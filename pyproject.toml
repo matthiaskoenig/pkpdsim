@@ -37,8 +37,13 @@ keywords = [
 dependencies = [
     # the factory, the metadata and the console of the models
     "sbmlutils>=0.17.2",
-    # the PBPKO terms of the annotations of a library model (`pkpdsim.pbpk.annotation`)
-    "pymetadata>=0.8.3",
+    # the PBPKO terms of the annotations of a library model (`pkpdsim.pbpk.annotation`);
+    # its `pymetadata.omex` also writes the COMBINE archive of a model, which
+    # pkpdsim reaches through `sbmlsim.release.archive`. 0.9.0 reads and writes
+    # an archive through the Rust `pymetadata-core` and is therefore no longer
+    # pure python: a platform without an abi3 wheel of the core needs a Rust
+    # toolchain, see the installation page and the release notes of 0.36.0
+    "pymetadata>=0.9.0",
     # the simulator, the initial values are selections of a roadrunner model.
     # sbmlsim simulates with a build of the branch `develop` of libroadrunner,
     # which is not on PyPI, so every install names the index of its wheels, see
@@ -65,10 +70,14 @@ dependencies = [
     # estimates the Sobol, FAST and Morris indices of every element of an
     # output at once, so a sampling analysis of a library model of many
     # readouts costs a fraction of one call of SALib per element, and adds the
-    # polynomial chaos and the local sensitivities the engine core integrates)
-    "sbmlsim>=0.36.0",
+    # polynomial chaos and the local sensitivities the engine core integrates;
+    # 0.37.0 makes the engine core the default engine of every simulator and
+    # 0.38.0 moves the objective of a parameter fit into it, so the residuals
+    # of a fit are integrated by the CVODE of the engine and the fitted numbers
+    # of a model package can move in their last digits)
+    "sbmlsim>=0.38.0",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`)
-    "pkpdutils>=1.7.0",
+    "pkpdutils>=1.7.1",
     # the study folders of format 2 of PK-DB, read as `pkdb check` reads them (`pkpdsim.data`)
     "pkdb>=0.12.19",
     # imported directly, also the dependencies of the packages above

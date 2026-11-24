@@ -185,10 +185,15 @@ def test_the_comparison_of_statements() -> None:
 #: the session gives again; another platform fits a slightly different rate
 #: (macOS differed in the last digit of the GMFE, about 1e-16 relative), and
 #: the least squares stops at its tolerance of about 1e-8 of the parameter, so
-#: a metric within 1e-6 relative (1e-12 absolute) is the same, far below any
+#: a metric within 1e-5 relative (1e-12 absolute) is the same, far below any
 #: limit of a rule (1.3 of a GMFE, a percentage of points); an integer, a text
-#: and a bool are compared exactly
-FIT_RTOL = 1e-6
+#: and a bool are compared exactly. The window was 1e-6 while the residuals of
+#: a fit were integrated by roadrunner; sbmlsim 0.38.0 computes the objective of
+#: a fit in the engine core, whose CVODE chooses its own steps, which moved the
+#: AFE of the record of the toy from 1.000848541045419 to 1.0008498702539537,
+#: 1.33e-6 relative, while every verdict, status, acceptance row, quantity,
+#: coverage and input of the record is unchanged (matthiaskoenig/sbmlsim#627)
+FIT_RTOL = 1e-5
 
 
 def _same(a: object, b: object) -> bool:
