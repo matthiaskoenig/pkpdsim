@@ -89,8 +89,14 @@ dependencies = [
     # analysis, and makes the factor `integrator` of the credibility
     # verification a check of its own again on the engine, on the floor
     # `sbmlsim-core>=0.25.0`, whose integrator takes the order of its method
-    # and the bounds of its error test from the request)
-    "sbmlsim>=0.39.0",
+    # and the bounds of its error test from the request); 0.40.0 simulates the
+    # groups of fit mappings of one evaluation of the objective as one batch of
+    # the engine, so a single evaluation - a profile point, a polishing step,
+    # the evaluation of a report - uses the CPUs of the machine instead of the
+    # thread of its caller, and reads a change whose value is a formula over a
+    # concentration as a form of the request instead of folding it into the
+    # number of the point it was built at
+    "sbmlsim>=0.40.0",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`)
     "pkpdutils>=1.7.1",
     # the study folders of format 2 of PK-DB, read as `pkdb check` reads them (`pkpdsim.data`)
