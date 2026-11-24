@@ -80,8 +80,17 @@ dependencies = [
     # floors of sbmlode and sbmlutils onto the releases which read and write
     # the wide math of a model, so the COMBINE archive of a model package
     # whose assignment rule sums a thousand parameters is written through
-    # `sbmlsim.release.archive` instead of failing with a `RecursionError`)
-    "sbmlsim>=0.38.1",
+    # `sbmlsim.release.archive` instead of failing with a `RecursionError`,
+    # and 0.38.2 raises the floor of `sbmlsim-core` onto 0.24.1, where a
+    # profile of the engine which steps onto a bound of its parameter ends at
+    # that bound instead of failing the whole identifiability analysis with a
+    # value an ulp outside the bounds; 0.39.0 adds the `ChaosAnalysis` of the
+    # sensitivity runner, which the runners of pkpdsim take as a fifth
+    # analysis, and makes the factor `integrator` of the credibility
+    # verification a check of its own again on the engine, on the floor
+    # `sbmlsim-core>=0.25.0`, whose integrator takes the order of its method
+    # and the bounds of its error test from the request)
+    "sbmlsim>=0.39.0",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`)
     "pkpdutils>=1.7.1",
     # the study folders of format 2 of PK-DB, read as `pkdb check` reads them (`pkpdsim.data`)
