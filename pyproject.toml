@@ -35,8 +35,10 @@ keywords = [
     "simulation",
 ]
 dependencies = [
-    # the factory, the metadata and the console of the models
-    "sbmlutils>=0.17.2",
+    # the factory, the metadata and the console of the models (0.17.3 carries
+    # the wide math of sbmlode 0.3.3, which `sbmlutils.converters.ode`
+    # re-exports module for module, see the floor of sbmlsim below)
+    "sbmlutils>=0.17.3",
     # the PBPKO terms of the annotations of a library model (`pkpdsim.pbpk.annotation`);
     # its `pymetadata.omex` also writes the COMBINE archive of a model, which
     # pkpdsim reaches through `sbmlsim.release.archive`. 0.9.0 reads and writes
@@ -74,8 +76,12 @@ dependencies = [
     # 0.37.0 makes the engine core the default engine of every simulator and
     # 0.38.0 moves the objective of a parameter fit into it, so the residuals
     # of a fit are integrated by the CVODE of the engine and the fitted numbers
-    # of a model package can move in their last digits)
-    "sbmlsim>=0.38.0",
+    # of a model package can move in their last digits; 0.38.1 raises its own
+    # floors of sbmlode and sbmlutils onto the releases which read and write
+    # the wide math of a model, so the COMBINE archive of a model package
+    # whose assignment rule sums a thousand parameters is written through
+    # `sbmlsim.release.archive` instead of failing with a `RecursionError`)
+    "sbmlsim>=0.38.1",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`)
     "pkpdutils>=1.7.1",
     # the study folders of format 2 of PK-DB, read as `pkdb check` reads them (`pkpdsim.data`)
