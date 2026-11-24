@@ -1,6 +1,6 @@
 # Installation
 
-`pkpdsim` requires python >= 3.14 and is available from [pypi](https://pypi.org/project/pkpdsim/). It is tested on Linux, macOS and Windows with python 3.14 and on Linux with python 3.15. It simulates with sbmlsim 0.36 (`sbmlsim>=0.36.0`, installed with it), whose simulator [libroadrunner](https://libroadrunner.org) is not on PyPI: sbmlsim relies on fixes of the events of libroadrunner which are not released yet, so it needs a build of the `develop` branch, `libroadrunner>=2.12.0.dev714`, which the package index [roadrunner-wheels](https://github.com/matthiaskoenig/roadrunner-wheels) serves. Install the build from that index first and then `pkpdsim` from PyPI, whose requirement the installed build satisfies:
+`pkpdsim` requires python >= 3.14 and is available from [pypi](https://pypi.org/project/pkpdsim/). It is tested on Linux, macOS and Windows with python 3.14 and on Linux with python 3.15. It simulates with sbmlsim 0.38 (`sbmlsim>=0.38.0`, installed with it), whose simulator [libroadrunner](https://libroadrunner.org) is not on PyPI: sbmlsim relies on fixes of the events of libroadrunner which are not released yet, so it needs a build of the `develop` branch, `libroadrunner>=2.12.0.dev714`, which the package index [roadrunner-wheels](https://github.com/matthiaskoenig/roadrunner-wheels) serves. Install the build from that index first and then `pkpdsim` from PyPI, whose requirement the installed build satisfies:
 
 ```bash
 pip install --no-deps --index-url https://matthiaskoenig.github.io/roadrunner-wheels/simple/ "libroadrunner>=2.12.0.dev714"
@@ -89,6 +89,8 @@ export LD_LIBRARY_PATH="$(uv run python -c 'import sys; print(sys.base_prefix)')
 ```
 
 An interpreter of the system or of conda is not affected, nor are macOS and Windows. On python 3.15 the wheel of libroadrunner 2.11 takes the symbol `__jit_debug_register_code` from `libpython`, which only an interpreter built with the experimental JIT defines: the interpreters of uv are, others may not be (deadsnakes on Ubuntu is not), and `import roadrunner` fails with `undefined symbol: __jit_debug_register_code` ([roadrunner#1406](https://github.com/sys-bio/roadrunner/issues/1406)); use an interpreter of uv there.
+
+[pymetadata](https://github.com/matthiaskoenig/pymetadata), with which the COMBINE archive of a model is written, reads and writes an archive through the Rust extension [`pymetadata-core`](https://pypi.org/project/pymetadata-core/) since its 0.9.0 and is therefore no longer pure python. The core ships one abi3 wheel per platform which every CPython from 3.11 on installs, `manylinux2014_x86_64` and `manylinux2014_aarch64`, `macosx_10_12_x86_64`, `macosx_11_0_arm64` and `win_amd64`, so an install on linux with glibc, macOS or 64 bit windows needs nothing extra. On every other platform, i.e. musl based linux (Alpine), linux on armv7, ppc64le or s390x, FreeBSD, 32 bit or ARM windows, or an implementation other than CPython such as PyPy, the install falls back to the source distribution of the core and compiles it, which needs a [Rust toolchain](https://rustup.rs), i.e. `cargo`.
 
 ## Logging
 

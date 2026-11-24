@@ -178,6 +178,18 @@ def test_the_value_at_the_time_of_a_change_is_the_value_before_it(
     The first row at the time is the state before the change (the state of
     the simulation without the change), the second the state after it, and
     a fit compares a data point at the time with the state before.
+
+    The two runs are compared to the accuracy of the integration and not
+    bitwise: the change splits the run into segments which end at its time,
+    the plain run integrates through it, and the CVODE of the engine core,
+    the default engine since sbmlsim 0.37.0, chooses its own steps for each.
+    roadrunner gave the two the same steps and agreed bitwise; the engine
+    core agrees to 4.1e-11 relative, on `alt`, `ast` and `ldh`, whose
+    concentrations are about 1e-6, where the `absolute_tolerance=1e-14` of
+    `_simulate` alone permits about 3e-9 relative. `rel` is therefore one
+    decade looser than the `relative_tolerance=1e-10` the two runs are
+    integrated at, instead of the 1e-12 which asked them to agree more
+    closely than either is accurate.
     """
     times = [0.0, 30.0, FIRST, 90.0]
     changed = _simulate(
@@ -192,7 +204,7 @@ def test_the_value_at_the_time_of_a_change_is_the_value_before_it(
     for q in _reservoir(liver):
         sid = f"[{ids.species(q, ids.RESERVOIR)}]"
         assert _column(changed, sid)[before] == pytest.approx(
-            _column(plain, sid)[unchanged], rel=1e-12, abs=1e-18
+            _column(plain, sid)[unchanged], rel=1e-9, abs=1e-18
         ), q
     lactate = "[lac_res]"
     assert _column(changed, lactate)[after] != pytest.approx(
