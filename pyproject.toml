@@ -37,8 +37,10 @@ keywords = [
 dependencies = [
     # the factory, the metadata and the console of the models (0.17.3 carries
     # the wide math of sbmlode 0.3.3, which `sbmlutils.converters.ode`
-    # re-exports module for module, see the floor of sbmlsim below)
-    "sbmlutils>=0.17.3",
+    # re-exports module for module, see the floor of sbmlsim below; 0.18.0
+    # drops the integrations which are not about SBML, none of which pkpdsim
+    # uses, and prints its output on a rich console)
+    "sbmlutils>=0.18.0",
     # the PBPKO terms of the annotations of a library model (`pkpdsim.pbpk.annotation`);
     # its `pymetadata.omex` also writes the COMBINE archive of a model, which
     # pkpdsim reaches through `sbmlsim.release.archive`. 0.9.0 reads and writes
@@ -95,8 +97,10 @@ dependencies = [
     # the evaluation of a report - uses the CPUs of the machine instead of the
     # thread of its caller, and reads a change whose value is a formula over a
     # concentration as a form of the request instead of folding it into the
-    # number of the point it was built at
-    "sbmlsim>=0.40.0",
+    # number of the point it was built at; 0.41.0 walks a profile at the scale
+    # of its parameter and corrects its step by the curvature, on the floor
+    # `sbmlsim-core>=0.26.0`, which takes the first steps of a request
+    "sbmlsim>=0.41.0",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`)
     "pkpdutils>=1.7.1",
     # the study folders of format 2 of PK-DB, read as `pkdb check` reads them (`pkpdsim.data`)
