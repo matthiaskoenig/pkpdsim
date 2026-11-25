@@ -34,6 +34,8 @@ MODEL = PKPDModel(
     factory=".factory:create_sexes_models",
     experiments=".simulations:EXPERIMENTS",
     fit_definitions=".fitting:FIT_DEFINITIONS",
+    sensitivities={"decay": ".sensitivity:SENSITIVITY"},
+    pipeline=".pipeline:PIPELINE",
     simulator=SimulatorSettings(absolute_tolerance=1e-10, relative_tolerance=1e-10),
     figures=FigureSettings(formats=("svg",)),
 )

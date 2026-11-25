@@ -1,6 +1,6 @@
 """The commands of the models, wrappers of the run layer of sbmlsim.
 
-pkpdsim installs five console scripts which take the dotted name of a model
+pkpdsim installs seven console scripts which take the dotted name of a model
 package first and the options of the command for that model after it
 (`main`, `resolve_model`):
 
@@ -17,6 +17,10 @@ run_report pkdb_models.models.hctz --adopted
 run_identifiability pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
 run_credibility pkdb_models.models.hctz
 run_credibility pkdb_models.models.hctz --from-json results/credibility/credibility.json -o /tmp/credibility
+run_sensitivity pkdb_models.models.hctz
+run_sensitivity pkdb_models.models.hctz sampling --workers 8
+run_pipeline pkdb_models.models.hctz --list
+run_pipeline pkdb_models.models.hctz --cores 12
 ```
 
 The package is imported and its model object `MODEL` gives everything which
@@ -84,6 +88,19 @@ moves them up into its `--output_dir`, `--from-json` is the input `record`
 which the kind writes into its output, is moved into the folder of the model,
 where the assessment compares the evidence with it. All write into the
 results of the model unless `--output_dir` is given.
+
+`run_sensitivity` (`sensitivity_command`) runs the kind `sensitivity` on a
+sensitivity analysis of the model over the groups of its simulations
+(`sensitivities` of the model object, a `SensitivityRunner` of
+`sbmlsim.sensitivity.runner` or a reference to one) into the folder of its
+name in the results (`sensitivity/`), the table of its parameters and a folder
+per analysis next to the records of the run.
+
+`run_pipeline` (`pipeline_command`) runs the pipeline of the model
+(`pipeline` of the model object, see `pkpdsim.pipeline`): the commands of its
+steps one after the other, each in a process of its own, with the times, the
+cores and the memory of every step and the output of its process in a folder
+of the run below `pipeline/` of the results.
 
 `--profile` anywhere after the model package runs a command under the
 sampling profiler of python 3.15 and writes its flame graph and statistics
@@ -488,6 +505,10 @@ def _check_result(target: Path, kind: str) -> None:
         if kind == "identifiability":
             files.append("identifiability.json")
         recognized = all((target / filename).is_file() for filename in files)
+    elif kind == "sensitivity" and not (target / RUN_FILE).exists():
+        # The runs of a sensitivity script (`SensitivityRunner.main`) predate
+        # the run records, their table of the parameters marks them.
+        recognized = (target / "parameters.tsv").is_file()
     else:
         recognized = False
     if not recognized:
@@ -2240,6 +2261,346 @@ def credibility_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
     return out
 
 
+# ----------------------------------------------------------------------------
+# run_sensitivity
+# ----------------------------------------------------------------------------
+#: the sensitivity analysis a command runs without `--name`, when a model has
+#: several (`Project.sensitivities`)
+SENSITIVITY_NAME = "sensitivity"
+
+
+def _names(text: str) -> list[str]:
+    """Get the names of a comma separated list."""
+    return [name.strip() for name in text.split(",") if name.strip()]
+
+
+def _default_sensitivity(model: PKPDModel) -> str | None:
+    """Get the sensitivity analysis of a model which runs without `--name`.
+
+    The only one of the model, else the one named `SENSITIVITY_NAME`, else none.
+    """
+    names = list(model.sensitivities)
+    if len(names) == 1:
+        return names[0]
+    return SENSITIVITY_NAME if SENSITIVITY_NAME in names else None
+
+
+def sensitivity_parser(model: PKPDModel) -> argparse.ArgumentParser:
+    """Get the parser of the `sensitivity` command of a model."""
+    names = sorted(model.sensitivities)
+    default = _default_sensitivity(model)
+    p = argparse.ArgumentParser(
+        prog=f"run_sensitivity {model.package}",
+        description=(
+            "Run the sensitivity analyses of the model over the groups of its "
+            "simulations (`sensitivities` of the model object, a "
+            "`sbmlsim.sensitivity.runner.SensitivityRunner`) with the kind "
+            "`sensitivity` of the run layer, into the results of the model."
+        ),
+    )
+    p.add_argument(
+        "analyses",
+        nargs="*",
+        metavar="ANALYSIS",
+        help="the analyses of the runner, e.g. sampling or chaos (see --list); "
+        "the default analyses of the runner without one",
+    )
+    p.add_argument(
+        "-n",
+        "--name",
+        choices=names,
+        default=default,
+        required=default is None,
+        help=f"the sensitivity analysis of the model, of {', '.join(names)} "
+        f"(default: {default})",
+    )
+    p.add_argument(
+        "-o",
+        "--output_dir",
+        type=Path,
+        default=None,
+        help="directory of the results, replaced if it holds an earlier run "
+        "(default: the folder of the name of the analysis in the results of the "
+        f"model, {model.results_dir / (default or '<name>')})",
+    )
+    p.add_argument(
+        "-w",
+        "--workers",
+        type=int,
+        default=None,
+        help="the processes of the pool of the simulations, at least 1; sbmlsim "
+        "chooses without (every CPU for a large design)",
+    )
+    p.add_argument(
+        "-s",
+        "--subfolders",
+        type=_names,
+        default=[],
+        help="comma separated simulations of a model whose analysis runs several "
+        "(the runners by their subfolder), every one by default",
+    )
+    p.add_argument(
+        "--list",
+        action="store_true",
+        help="list the analyses of the runner and its default ones instead",
+    )
+    return p
+
+
+def sensitivity_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
+    """Run the sensitivity analyses of a model.
+
+    Runs the kind `sensitivity` of `sbmlsim.run` on the sensitivity analysis of
+    the model object (`Project.sensitivities`, by `--name`) into the output
+    directory through a staged swap: the table of the parameters and a folder
+    per analysis, next to the records of the run.
+
+    Args:
+        model: the model, the model object of its package.
+        args: command line arguments, `sys.argv[1:]` by default.
+
+    Returns:
+        The directory of the results.
+    """
+    arguments = sys.argv[1:] if args is None else list(args)
+    p = sensitivity_parser(model)
+    if not model.sensitivities and not {"-h", "--help"} & set(arguments):
+        p.error(
+            f"the model '{model.name}' ({model.package}) declares no sensitivity "
+            "analysis (`sensitivities` of its model object)"
+        )
+    options = p.parse_args(arguments)
+    try:
+        runner = model.sensitivity(options.name)
+    except (ImportError, AttributeError, TypeError, ValueError) as err:
+        _failed(f"The sensitivity analysis '{options.name}' is not resolved: {err}")
+    # a runner, or the runners of the simulations of a model by their subfolder
+    runners: dict[str, Any] = (
+        dict(runner) if isinstance(runner, Mapping) else {"": runner}
+    )
+    available = list(
+        dict.fromkeys(
+            name for one in runners.values() for name in getattr(one, "analyses", {})
+        )
+    )
+    default = list(getattr(next(iter(runners.values())), "default", ()))
+    subfolders = [name for name in runners if name]
+    if options.list:
+        display.section("Sensitivity analyses", icon=":bar_chart:")
+        display.key_values(
+            {
+                "name": options.name,
+                "analyses": ", ".join(available),
+                "default": ", ".join(default),
+                **({"subfolders": ", ".join(subfolders)} if subfolders else {}),
+            }
+        )
+        return model.results_dir / options.name
+    unknown = [name for name in options.analyses if name not in available]
+    if available and unknown:
+        p.error(
+            f"{', '.join(unknown)} is no analysis of '{options.name}', the analyses "
+            f"are {', '.join(available)}"
+        )
+    unknown = [name for name in options.subfolders if name not in subfolders]
+    if unknown:
+        p.error(
+            f"{', '.join(unknown)} is no simulation of '{options.name}', the "
+            f"simulations are {', '.join(subfolders) or 'none'}"
+        )
+    if options.workers is not None and options.workers < 1:
+        p.error("--workers is at least 1")
+    out = options.output_dir or model.results_dir / options.name
+    _check_out(p, model, out)
+    log.enable_rich_logging()
+    display.section(model.title, icon=":pill:")
+    display.key_values(
+        {
+            "sensitivity": options.name,
+            "analyses": ", ".join(options.analyses or default),
+            "workers": options.workers or "sbmlsim",
+        }
+    )
+    spec: dict[str, Any] = {
+        "project": project_reference(model),
+        "analysis": options.name,
+    }
+    if options.analyses:
+        spec["analyses"] = list(options.analyses)
+    if options.subfolders:
+        spec["subfolders"] = list(options.subfolders)
+    _staged(
+        out,
+        lambda staging: _execute(
+            p, "sensitivity", spec, staging, workers=options.workers
+        ),
+        kind="sensitivity",
+    )
+    display.link("results", out)
+    return out
+
+
+# ----------------------------------------------------------------------------
+# run_pipeline
+# ----------------------------------------------------------------------------
+#: the folder of the runs of the pipeline in the results of a model
+PIPELINE_DIR = "pipeline"
+
+
+def pipeline_parser(model: PKPDModel, steps: Sequence[str]) -> argparse.ArgumentParser:
+    """Get the parser of the `pipeline` command of a model."""
+    p = argparse.ArgumentParser(
+        prog=f"run_pipeline {model.package}",
+        description=(
+            "Run the pipeline of the model (`pipeline` of the model object, a "
+            "`pkpdsim.pipeline.Pipeline`): its steps, commands of pkpdsim, one "
+            "after the other, each in a process of its own, with the progress "
+            "on the console and the output, the times and the machine in a "
+            f"folder of the run below `{PIPELINE_DIR}/` of the results. The steps "
+            f"are {', '.join(steps) or 'none'}."
+        ),
+    )
+    p.add_argument(
+        "-c",
+        "--cores",
+        type=int,
+        default=available_cpus(),
+        help="the processes of a step, `{cores}` of the arguments of a step "
+        "(default: the CPUs available to the process, %(default)s)",
+    )
+    p.add_argument(
+        "--steps",
+        type=_names,
+        default=[],
+        help="comma separated steps which run, every step by default",
+    )
+    p.add_argument(
+        "--skip",
+        type=_names,
+        default=[],
+        help="comma separated steps which do not run",
+    )
+    p.add_argument(
+        "--from",
+        dest="start",
+        default=None,
+        help="the first step which runs, e.g. to continue a run which failed",
+    )
+    p.add_argument(
+        "-k",
+        "--keep-going",
+        action="store_true",
+        help="run the steps after a step which failed, which are skipped without",
+    )
+    p.add_argument(
+        "-r",
+        "--results-dir",
+        type=Path,
+        default=model.results_dir,
+        help="the results, `{results}` of the arguments of a step, so a pipeline "
+        "whose steps write below it writes there (default: the results of the "
+        "model, %(default)s)",
+    )
+    p.add_argument(
+        "-o",
+        "--output_dir",
+        type=Path,
+        default=None,
+        help="directory of the runs of the pipeline, a run in a folder of its "
+        f"time (default: `{PIPELINE_DIR}` of the results)",
+    )
+    p.add_argument(
+        "--list",
+        action="store_true",
+        help="list the steps with their command lines instead of running them",
+    )
+    return p
+
+
+def pipeline_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
+    """Run the pipeline of a model, see `pkpdsim.pipeline`.
+
+    Args:
+        model: the model, the model object of its package.
+        args: command line arguments, `sys.argv[1:]` by default.
+
+    Returns:
+        The folder of the run.
+
+    Raises:
+        SystemExit: with 1 if a step failed.
+    """
+    from pkpdsim.pipeline import run_pipeline
+
+    arguments = sys.argv[1:] if args is None else list(args)
+    try:
+        pipeline = model.load_pipeline()
+    except (ValueError, TypeError) as err:
+        p = pipeline_parser(model, [])
+        if {"-h", "--help"} & set(arguments):
+            p.parse_args(arguments)
+        p.error(str(err))
+    p = pipeline_parser(model, pipeline.names)
+    options = p.parse_args(arguments)
+    if options.cores < 1:
+        p.error("--cores is at least 1")
+    commands = [name for name in COMMANDS if name != "run_pipeline"]
+    for step in pipeline.steps:
+        if step.command not in commands:
+            _failed(
+                f"The step '{step.name}' of the pipeline of '{model.name}' runs "
+                f"'{step.command}', which is no command of a pipeline: one of "
+                f"{', '.join(commands)}."
+            )
+    try:
+        steps = pipeline.select(options.steps, options.skip, options.start)
+    except ValueError as err:
+        p.error(str(err))
+    if not steps:
+        p.error("no step runs")
+    results_dir = options.results_dir.resolve()
+    values = {"cores": options.cores, "results": results_dir}
+    if options.list:
+        display.section("Pipeline", icon=":gear:")
+        for step in pipeline.steps:
+            mark = "" if step in steps else "  (skipped)"
+            console.print(
+                f"[bold]{step.name}[/bold]{mark}: {step.command} {model.package} "
+                f"{' '.join(step.arguments(values))}",
+                soft_wrap=True,
+            )
+            if step.description:
+                console.print(f"    {step.description}", style="dim")
+        return results_dir / PIPELINE_DIR
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    out = (options.output_dir or results_dir / PIPELINE_DIR) / stamp
+    display.section(model.title, icon=":pill:")
+    display.key_values(
+        {
+            "pipeline": pipeline.description or model.package,
+            "steps": ", ".join(step.name for step in steps),
+            "cores": options.cores,
+        }
+    )
+    display.link("run", out)
+    results = run_pipeline(
+        model.package,
+        "Pipeline",
+        steps,
+        results_dir,
+        out,
+        cores=options.cores,
+        keep_going=options.keep_going,
+    )
+    display.link("timings", out / "timings.tsv")
+    failed = [result.step.name for result in results if result.status == "failed"]
+    if failed:
+        _failed(
+            f"The steps {', '.join(failed)} failed, see their logs in {out / 'logs'}."
+        )
+    return out
+
+
 DOTTED_PACKAGE = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)*$")
 """The form of a dotted package, e.g. `pkdb_models.models.hctz`."""
 
@@ -2347,6 +2708,20 @@ COMMANDS: dict[str, Command] = {
             "adopted fits.",
             function=credibility_command,
             fits=True,
+        ),
+        Command(
+            name="run_sensitivity",
+            description="Run the sensitivity analyses of a model over the "
+            "groups of its simulations.",
+            function=sensitivity_command,
+            fits=False,
+        ),
+        Command(
+            name="run_pipeline",
+            description="Run the pipeline of a model: its commands one after "
+            "the other, timed and logged.",
+            function=pipeline_command,
+            fits=False,
         ),
     )
 }
@@ -2524,6 +2899,16 @@ def run_identifiability_main(argv: Sequence[str] | None = None) -> None:
 def run_credibility_main(argv: Sequence[str] | None = None) -> None:
     """The console script `run_credibility`, see `credibility_command`."""
     main("run_credibility", argv)
+
+
+def run_sensitivity_main(argv: Sequence[str] | None = None) -> None:
+    """The console script `run_sensitivity`, see `sensitivity_command`."""
+    main("run_sensitivity", argv)
+
+
+def run_pipeline_main(argv: Sequence[str] | None = None) -> None:
+    """The console script `run_pipeline`, see `pipeline_command`."""
+    main("run_pipeline", argv)
 
 
 if __name__ == "__main__":

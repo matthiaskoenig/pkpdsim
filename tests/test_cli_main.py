@@ -17,7 +17,9 @@ from pkpdsim.cli import (
     run_credibility_main,
     run_fit_main,
     run_identifiability_main,
+    run_pipeline_main,
     run_report_main,
+    run_sensitivity_main,
     run_simulation_main,
 )
 from pkpdsim_toy import MODEL
@@ -30,6 +32,8 @@ MAINS: dict[str, Main] = {
     "run_report": run_report_main,
     "run_identifiability": run_identifiability_main,
     "run_credibility": run_credibility_main,
+    "run_sensitivity": run_sensitivity_main,
+    "run_pipeline": run_pipeline_main,
 }
 
 
