@@ -90,7 +90,8 @@ def test_the_pipeline_lists_its_steps(capsys: pytest.CaptureFixture[str]) -> Non
     run_pipeline_main(["pkpdsim_sexes", "--list", "-c", "3", "-r", "/results"])
     text = capsys.readouterr().out
     assert "experiments: run_simulation pkpdsim_sexes --action list_experiments" in text
-    assert "local --workers 3 -o /results/sensitivity" in text
+    results = Path("/results").resolve().as_posix()
+    assert f"local --workers 3 -o {results}/sensitivity" in text
 
 
 def test_the_pipeline_runs_its_steps_timed_and_logged(

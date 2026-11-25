@@ -213,10 +213,35 @@ from pkpdsim.pipeline import Pipeline, Step
 PIPELINE = Pipeline(
     description="The complete analysis of the model from its adopted fits.",
     steps=(
-        Step("simulate", "run_simulation", ("--action", "simulate", "--experiments", "all", "--workers", "{cores}", "-r", "{results}")),
-        Step("sensitivity", "run_sensitivity", ("--workers", "{cores}", "-o", "{results}/sensitivity")),
-        Step("credibility", "run_credibility", ("--uncertainty", "-o", "{results}/credibility")),
-        Step("fit_PK", "run_fit", ("--subset", "PK", "--cores", "{cores}", "-o", "{results}/fit")),
+        Step(
+            "simulate",
+            "run_simulation",
+            (
+                "--action",
+                "simulate",
+                "--experiments",
+                "all",
+                "--workers",
+                "{cores}",
+                "-r",
+                "{results}",
+            ),
+        ),
+        Step(
+            "sensitivity",
+            "run_sensitivity",
+            ("--workers", "{cores}", "-o", "{results}/sensitivity"),
+        ),
+        Step(
+            "credibility",
+            "run_credibility",
+            ("--uncertainty", "-o", "{results}/credibility"),
+        ),
+        Step(
+            "fit_PK",
+            "run_fit",
+            ("--subset", "PK", "--cores", "{cores}", "-o", "{results}/fit"),
+        ),
     ),
 )
 ```

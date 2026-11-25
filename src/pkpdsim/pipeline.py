@@ -142,9 +142,17 @@ class Step:
                     )
 
     def arguments(self, values: Mapping[str, object]) -> list[str]:
-        """Get the arguments with the placeholders replaced by their values."""
+        """Get the arguments with the placeholders replaced by their values.
+
+        A path is written with forward slashes, which every platform reads, so
+        `{results}/fit` is one path on Windows as well.
+        """
+
+        def text(value: object) -> str:
+            return value.as_posix() if isinstance(value, Path) else str(value)
+
         return [
-            re.sub(r"\{(\w+)\}", lambda m: str(values[m.group(1)]), arg)
+            re.sub(r"\{(\w+)\}", lambda m: text(values[m.group(1)]), arg)
             for arg in self.args
         ]
 
