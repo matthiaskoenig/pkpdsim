@@ -1,12 +1,14 @@
 # Commands
 
-pkpdsim installs six commands which work with every model package. The model is the first argument of a command, the dotted name of its package; everything after it are the options of the command for that model:
+pkpdsim installs eight commands which work with every model package. The model is the first argument of a command, the dotted name of its package; everything after it are the options of the command for that model:
 
 - `run_simulation` creates the models with the factory, runs the simulation experiments and the extra actions of the model.
 - `run_fit` fits the parameters of a fit problem, analyses their identifiability, or adopts a finished fit.
 - `run_report` writes the report of a fit for stored parameter sets.
 - `run_identifiability` analyses the identifiability of a stored parameter set.
 - `run_credibility` assesses the contexts of use of a model against its adopted fits.
+- `run_sensitivity` runs the sensitivity analyses of a model over the groups of its simulations.
+- `run_pipeline` runs the pipeline of a model, its commands one after the other, timed and logged.
 - `pkpd_release` makes the complete release of the repository of a model.
 
 ```bash
@@ -15,6 +17,8 @@ run_fit pkdb_models.models.hctz --subset PK --runs 10 --cores 10
 run_report pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
 run_identifiability pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
 run_credibility pkdb_models.models.hctz
+run_sensitivity pkdb_models.models.hctz
+run_pipeline pkdb_models.models.hctz
 pkpd_release pkdb_models.models.hctz --version 0.8.0 --no-publish
 ```
 
@@ -22,7 +26,7 @@ A model package registers no commands of its own: the commands are defined once,
 
 ## The run layer of sbmlsim
 
-`run_simulation`, `run_fit`, `run_report`, `run_identifiability` and `run_credibility` are wrappers of the run layer of sbmlsim, `python -m sbmlsim.run` (see [Analyses, the run layer and simrun](https://matthiaskoenig.github.io/sbmlsim/run/) of sbmlsim, which describes the kinds, the output directory, the records of a run and the exit codes): they keep their options and defaults, translate them into the spec of a kind and run it with `sbmlsim.run.execute` on the model object of the package, the project `<package>:MODEL` (`pkpdsim.cli.project_reference`). A kind runs into an empty output directory and writes the records of the run next to its results: `run.json` (the kind, the versions, the host, the status), `spec.json` (the planned spec), `summary.json` and `progress.jsonl`. A command therefore runs the kind into the folder of its result below the folder it always wrote into. The run writes into a hidden staging directory next to that folder, `.<name>.<id>`, and replaces an earlier result only after it succeeded (the earlier result is renamed aside, the new one renamed into place, the earlier one removed); a run or a plan which fails leaves the earlier result available. Each staged output uses a persistent hidden `.<name>.lock` file next to the result. A concurrent command targeting that result exits with 1 and can be retried after the writer finishes. The next writer restores the sole backup of an interrupted publication if the result is missing and removes abandoned staging directories. A nonempty output must hold a recognizable result of the same kind. An error of the run itself keeps its traceback. A result which is not moved into its place exits with 1 and names the backup if it could not be restored. An output which equals, contains or lies inside an input (the fit records being read, the adopted fits `MODEL.fits_dir`, the factory directory, a build or a dedicated model data directory) is a usage error before anything runs, as is an output which equals or contains the model package. For example, `run_report --name <fit id> -o results/fit results/fit/<fit id>/parameters.json` would write the report to the fit it is reading. A spec which does not plan is a usage error (exit 2), a configuration error of the run itself exits with 1:
+`run_simulation`, `run_fit`, `run_report`, `run_identifiability`, `run_credibility` and `run_sensitivity` are wrappers of the run layer of sbmlsim, `python -m sbmlsim.run` (see [Analyses, the run layer and simrun](https://matthiaskoenig.github.io/sbmlsim/run/) of sbmlsim, which describes the kinds, the output directory, the records of a run and the exit codes): they keep their options and defaults, translate them into the spec of a kind and run it with `sbmlsim.run.execute` on the model object of the package, the project `<package>:MODEL` (`pkpdsim.cli.project_reference`). A kind runs into an empty output directory and writes the records of the run next to its results: `run.json` (the kind, the versions, the host, the status), `spec.json` (the planned spec), `summary.json` and `progress.jsonl`. A command therefore runs the kind into the folder of its result below the folder it always wrote into. The run writes into a hidden staging directory next to that folder, `.<name>.<id>`, and replaces an earlier result only after it succeeded (the earlier result is renamed aside, the new one renamed into place, the earlier one removed); a run or a plan which fails leaves the earlier result available. Each staged output uses a persistent hidden `.<name>.lock` file next to the result. A concurrent command targeting that result exits with 1 and can be retried after the writer finishes. The next writer restores the sole backup of an interrupted publication if the result is missing and removes abandoned staging directories. A nonempty output must hold a recognizable result of the same kind. An error of the run itself keeps its traceback. A result which is not moved into its place exits with 1 and names the backup if it could not be restored. An output which equals, contains or lies inside an input (the fit records being read, the adopted fits `MODEL.fits_dir`, the factory directory, a build or a dedicated model data directory) is a usage error before anything runs, as is an output which equals or contains the model package. For example, `run_report --name <fit id> -o results/fit results/fit/<fit id>/parameters.json` would write the report to the fit it is reading. A spec which does not plan is a usage error (exit 2), a configuration error of the run itself exits with 1:
 
 | command | kind | output of the run | the spec |
 |---------|------|-------------------|----------|
@@ -33,6 +37,7 @@ A model package registers no commands of its own: the commands are defined once,
 | `run_report <parameters.json>` | `report` | `results/report/<name>` | `{project, subset, mapping_figures, group_by}`, the input `fit` the folder of the file |
 | `run_report --adopted` | `report` | `results/report/<fit id>` | `{project, subset, adopted: true, mapping_figures}` |
 | `run_identifiability <parameters.json>` | `identifiability`, `report` | `results/identifiability/<name>/analysis`, `.../report` | the profile settings, `pids`, `fisher`; the report of the analysis |
+| `run_sensitivity` | `sensitivity` | `results/sensitivity` | `{project, analysis, analyses}` |
 | `run_credibility` | `credibility` | `results/credibility` | `{project, verification, lock, uncertainty, draws, seed, variability, subjects, studies, source_commit}`, the input `record` the file of `--from-json` |
 
 The same run from the command line of sbmlsim, e.g. for a fit:
@@ -177,6 +182,82 @@ run_credibility pkdb_models.models.hctz --from-json results/credibility/credibil
 
 It writes `credibility.json` (the assessment), `contexts.tsv`, `evidence.tsv`, `domain.tsv`, `quantities.tsv`, `ratios.tsv`, `temporal.tsv`, `studies.tsv`, `inputs.tsv`, `input_ranges.tsv`, `cross_validation.tsv`, `uncertainty.tsv`, `uncertainty_quantities.tsv`, `uncertainty_sensitivity.tsv`, `variability.tsv`, `variability_quantities.tsv`, `vpc.tsv`, `verification.tsv`, `battery.tsv`, `fates.tsv` and the report `index.html` into `MODEL.credibility_dir` (`results/credibility`), next to the records of the run of the kind `credibility` (see [The run layer of sbmlsim](#the-run-layer-of-sbmlsim)), and prints a table of the contexts of use with their verdicts, the role of the evidence which decided them (decided on: calibration for a description, C1, else validation) and the evaluable points with their minimum (`evaluable/minimum`), and how many of them are verified. The decisive predictions are verified (the fits evaluated again with tightened tolerances and with a second integration method, and the builds checked, see [Verification](https://matthiaskoenig.github.io/sbmlsim/credibility/#verification)) and the builds run the battery of their checks (mass balance, non-negativity, zero dose, steady state, superposition, AMICI as a second simulator when installed, plausibility and rebuild, the battery of sbmlsim with the PK battery of pkpdsim, see [Battery of the builds](credibility.md#battery-of-the-builds)); `--no-verification` skips both, the factors of the verification are then not assessed. `--uncertainty` propagates the parameter uncertainty of the adopted fits to the decisive predictions: every fit is evaluated at `--draws` draws of its parameters (128 by default, with the seed `--seed`, 1234), which costs as many evaluations of every fit, and the factor model inputs is assessed (see [Parameter uncertainty](https://matthiaskoenig.github.io/sbmlsim/credibility/#parameter-uncertainty)); `--draws` or `--seed` without `--uncertainty` and fewer than two draws are usage errors. `--variability` checks the decisive points with the variability of the subjects the declaration has (`Credibility.variability`): every fit is evaluated for `--subjects` subjects (64 by default) at every parameter vector, the adopted one or the draws of `--uncertainty`, with a variability between the studies in `--studies` studies (16 by default) of `--subjects` subjects each, and the coverage of the bands of the predictive check is recorded (see [Variability and the predictive check](https://matthiaskoenig.github.io/sbmlsim/credibility/#variability-and-the-predictive-check)); `--subjects` or `--studies` without `--variability`, fewer than two subjects, no study and `--variability` with `--from-json` are usage errors, a declaration without a variability is an error. `--output_dir` (`-o`) replaces the directory; the same input and data directory protections as the other staged commands apply. `--from-json` writes the outputs again from a written `credibility.json` without evaluating the fits. `--lock` writes the lock of the evidence (`credibility.lock.json` in the folder of the model) instead of comparing the evidence with it; an evidence which differs from an existing lock is an error (see [Locked splits](https://matthiaskoenig.github.io/sbmlsim/credibility/#locked-splits)). `--source-commit SHA` records the commit of the source repository in the provenance instead of the commit of the working directory, with the dirty state unknown; `pkpd_release` passes it, since it runs the assessment in the release repository. Without it the provenance is the commit of the repository of the model and whether the folder of the model has changes. A directory that holds a `credibility.json` is replaced, so no file of an earlier assessment survives (e.g. of a context of use that was removed); a non-empty directory without one is refused and left as it is. An error of the declaration, of the evidence (a validation on fitted data, an evidence without a point), of the records (a split that differs from the kinds the adopted fits recorded, a record without the kinds of its mappings), of a `credibility.json` that is no assessment or of the directory is printed and ends the command with exit code 1. `--no-verification`, `--lock`, `--uncertainty`, `--variability` or `--source-commit` with `--from-json` is a usage error (exit code 2), and so are settings of the uncertainty or the variability which the kind refuses.
 
+## run_sensitivity
+
+Runs a sensitivity analysis of the model over the groups of its simulations: a `SensitivityRunner` of `sbmlsim.sensitivity.runner` which the model object declares by its name in `sensitivities`, the runner itself or a reference to it (see [Sensitivity analysis](https://matthiaskoenig.github.io/sbmlsim/sensitivity/) of sbmlsim):
+
+```python
+# not executed
+MODEL = PKPDModel(
+    ...,
+    sensitivities={"sensitivity": ".sensitivity.sensitivity_analysis:SENSITIVITY"},
+)
+```
+
+```bash
+run_sensitivity pkdb_models.models.hctz                        # the default analyses of the runner
+run_sensitivity pkdb_models.models.hctz sampling --workers 8   # one analysis on 8 processes
+run_sensitivity pkdb_models.models.hctz --list                 # the analyses and the default ones
+```
+
+The analyses are the names of the analyses of the runner (`analyses`), its `default` without one; an analysis the runner does not have is a usage error. `--name` (`-n`) selects the runner of a model which declares several, the only one or the one named `sensitivity` without it. The command runs the kind `sensitivity` of the run layer into `results/<name>` (`--output_dir` replaces it): the table of the parameters (`parameters.tsv`) and a folder per analysis with its tables and figures, next to the records of the run. `--workers` (`-w`) is the number of processes of the pool of the simulations; sbmlsim chooses without, every CPU for a large design.
+
+## run_pipeline
+
+The analysis of a model is a sequence of these commands: the experiments, their bands over the draws of the fitted parameters, the sensitivity analyses, the credibility, the refits of the adopted fits, the check of the factory. Which of them a model runs, in which order and with which options differs between models, so a model package declares its pipeline (`pkpdsim.pipeline.Pipeline`, `PIPELINE` in its `pipeline.py`) and its model object references it, `pipeline=".pipeline:PIPELINE"`:
+
+```python
+# not executed
+from pkpdsim.pipeline import Pipeline, Step
+
+PIPELINE = Pipeline(
+    description="The complete analysis of the model from its adopted fits.",
+    steps=(
+        Step(
+            "simulate",
+            "run_simulation",
+            (
+                "--action",
+                "simulate",
+                "--experiments",
+                "all",
+                "--workers",
+                "{cores}",
+                "-r",
+                "{results}",
+            ),
+        ),
+        Step(
+            "sensitivity",
+            "run_sensitivity",
+            ("--workers", "{cores}", "-o", "{results}/sensitivity"),
+        ),
+        Step(
+            "credibility",
+            "run_credibility",
+            ("--uncertainty", "-o", "{results}/credibility"),
+        ),
+        Step(
+            "fit_PK",
+            "run_fit",
+            ("--subset", "PK", "--cores", "{cores}", "-o", "{results}/fit"),
+        ),
+    ),
+)
+```
+
+```bash
+run_pipeline pkdb_models.models.hctz --list                  # the steps and their command lines
+run_pipeline pkdb_models.models.hctz                         # every step
+run_pipeline pkdb_models.models.hctz --cores 12 --skip fit_PK
+run_pipeline pkdb_models.models.hctz --from credibility      # continue a run which failed
+run_pipeline pkdb_models.models.hctz -r /scratch/hctz        # the results elsewhere
+```
+
+A step is a command of pkpdsim with its arguments after the model package. `{cores}` in an argument is the number of processes of a step (`--cores`, `-c`, the CPUs available to the process by default) and `{results}` the results (`--results-dir`, `-r`, the results of the model by default); a pipeline whose steps write below `{results}` and run their pools on `{cores}` states where it parallelizes and lets the machine decide how wide. `--steps` and `--skip` (comma separated names) and `--from` select the steps, `--list` prints them with their command lines.
+
+The steps run one after the other, each in a process of its own (`python -m pkpdsim.cli <command> <package> ...`): a command parallelizes internally (the runs of a fit and the scans of its profiles, the experiments of a simulation, the points of a sensitivity design), so every step has the machine to itself, and a step which fails or runs out of memory leaves the runner and the results of the steps before it intact. The steps after a failed step are skipped, with `--keep-going` (`-k`) they run; the command exits with 1 if a step failed. The console shows a table of the steps with their status, time, cores and peak memory and the last line of progress of the running step (a line every 30 s, the steps run with `--progress log`). A run writes into `pipeline/<time>/` of the results (`--output_dir` replaces `pipeline`): the output of every step in `logs/<nn>_<step>.log`, `timings.tsv` (per step the status, the exit code, the wall time, the CPU time of its process and of every process it started, the cores this is on average, and the peak memory of its processes, sampled every second) and `pipeline.json` (the command lines, the versions of the packages, the machine and the cores), written again after every step.
+
 ## pkpd_release
 
 `pkpd_release` makes the complete release of the repository of a model (`hctz-model`) from its package with the release of sbmlsim: the build (the kind `release` of the run layer of sbmlsim: export, models, simulations, fit reports, credibility, release notes, docs) into a clone of the release repository in an output, then the publishing (commit, tag, push, Docker image and GitHub release). `--no-publish` stops before the commit, so the build can be reviewed; a later run without the flag publishes the reviewed build:
@@ -227,6 +308,8 @@ Every command writes into the folders of the model object unless an option names
 - `run_report`: `MODEL.report_dir` (`results/report/report`, `--name` names the last folder), `--output_dir` replaces it; with `--adopted` one folder per adopted fit below it.
 - `run_identifiability`: `MODEL.identifiability_dir` (`results/identifiability/identifiability`, `--name` names the last folder), `--output_dir` replaces it.
 - `run_credibility`: `MODEL.credibility_dir` (`results/credibility`), `--output_dir` replaces it.
+- `run_sensitivity`: `results/<name>` (`results/sensitivity`), `--output_dir` replaces it.
+- `run_pipeline`: `results/pipeline/<time>`, `--output_dir` replaces `results/pipeline`; its steps write where their arguments say.
 
 `results` is `MODEL.results_dir`, the folder `results` of the model package unless the model object sets `results_path`; so every result stays in the folder of its model.
 

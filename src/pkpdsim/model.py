@@ -77,6 +77,8 @@ if TYPE_CHECKING:
     from sbmlsim.experiment.draws import UncertaintySettings
     from sbmlsim.panel import App, Panel
 
+    from pkpdsim.pipeline import Pipeline
+
 #: the actions of the `run` command of a model, see `pkpdsim.cli`
 RUN_ACTIONS: tuple[str, ...] = ("simulate", "list_experiments", "factory", "all")
 
@@ -581,6 +583,10 @@ class PKPDModel(Project):
         credibility_settings: the credibility settings of the project,
             `CREDIBILITY_SETTINGS` (the metadata, the domain, the evidence
             extensions and the battery hook of pkpdsim) by default.
+        pipeline: the pipeline of the model, its commands in order, which
+            `run_pipeline` runs: a `pkpdsim.pipeline.Pipeline` or a reference
+            `module:attribute` to it, relative to the package if it starts
+            with a dot (`.pipeline:PIPELINE`), see `load_pipeline`.
     """
 
     # the fields of the project a model always has, narrowed: a model is frozen
@@ -597,6 +603,7 @@ class PKPDModel(Project):
     adopted_ids: tuple[str, ...] = ()
     simulator: SimulatorSettings = DEFAULT_SIMULATOR
     credibility_settings: CredibilitySettings = CREDIBILITY_SETTINGS
+    pipeline: Any = None
 
     def __init__(self, **data: Any) -> None:  # noqa: ANN401
         """Create a model from the keywords of a model package or the fields.
@@ -905,6 +912,35 @@ class PKPDModel(Project):
                 )
             fits[subset] = fit_id
         return fits
+
+    # ------------------------------------------------------------------------
+    # pipeline
+    # ------------------------------------------------------------------------
+    def load_pipeline(self) -> Pipeline:
+        """Get the pipeline of the model, resolved.
+
+        Raises:
+            ValueError: if the model has no pipeline.
+            TypeError: if the pipeline is no `pkpdsim.pipeline.Pipeline`.
+        """
+        from pkpdsim.pipeline import Pipeline
+
+        if self.pipeline is None:
+            raise ValueError(
+                f"The model '{self.name}' ({self.package}) declares no pipeline "
+                "(`pipeline` of its model object)."
+            )
+        pipeline = (
+            resolve(self.pipeline, self.package)
+            if isinstance(self.pipeline, str)
+            else self.pipeline
+        )
+        if not isinstance(pipeline, Pipeline):
+            raise TypeError(
+                f"The pipeline of '{self.name}' ({self.pipeline}) is a "
+                f"{type(pipeline).__name__}, not a Pipeline."
+            )
+        return pipeline
 
     # ------------------------------------------------------------------------
     # credibility and experiments

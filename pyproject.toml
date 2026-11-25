@@ -120,6 +120,9 @@ dependencies = [
     # the outlines of the layers of a body traced on its raster (`pkpdsim.pbpk.visual.body`)
     "contourpy>=1.4.0",
     "python-libsbml>=5.21.2",
+    # the live table of the steps of a pipeline (`pkpdsim.pipeline`) and the
+    # console of `pkpdsim-verify`
+    "rich>=15.0.0",
     # not imported: the CA bundle of requests, through which sbmlutils and pymetadata
     # reach the network; 2026.10.19 removes the emSign roots (GHSA-6q48-6c7w-9gw2)
     "certifi>=2026.10.19",
@@ -161,6 +164,8 @@ run_fit = "pkpdsim.cli:run_fit_main"
 run_report = "pkpdsim.cli:run_report_main"
 run_identifiability = "pkpdsim.cli:run_identifiability_main"
 run_credibility = "pkpdsim.cli:run_credibility_main"
+run_sensitivity = "pkpdsim.cli:run_sensitivity_main"
+run_pipeline = "pkpdsim.cli:run_pipeline_main"
 # the release of a model repository
 pkpd_release = "pkpdsim.release.cli:main"
 
