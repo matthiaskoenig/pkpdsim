@@ -149,22 +149,6 @@ def as_model(monkeypatch: pytest.MonkeyPatch) -> Callable[[PKPDModel], PKPDModel
     return use
 
 
-@pytest.fixture
-def no_pyplot(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make `matplotlib.pyplot.figure` raise, so a figure on pyplot fails the test.
-
-    A pyplot figure belongs to the interactive backend (TkAgg with a display),
-    whose objects abort the process when they are collected next to a pool of
-    processes (`main thread is not in main loop`, `Tcl_AsyncDelete`).
-    """
-    import matplotlib.pyplot as plt
-
-    def refuse(*args: object, **kwargs: object) -> None:
-        raise AssertionError("A figure must be a matplotlib.figure.Figure, not pyplot.")
-
-    monkeypatch.setattr(plt, "figure", refuse)
-
-
 @pytest.fixture(scope="module")
 def toy_fit(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """Fit the toy model with its profile likelihood and Fisher information.

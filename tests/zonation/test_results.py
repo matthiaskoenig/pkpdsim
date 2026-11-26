@@ -3,13 +3,9 @@
 import warnings
 from collections.abc import Mapping, Sequence
 
-import matplotlib
 import numpy as np
 import pytest
 import xarray as xr
-
-matplotlib.use("Agg")
-
 from sbmlsim import Q
 from sbmlsim.experiment.draws import UncertaintyRun, UncertaintySettings
 from sbmlsim.result.scan import ScanResult, point_timecourse

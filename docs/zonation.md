@@ -110,17 +110,17 @@ The position of a zone is its centre, `(k - 0.5) / n`. `lobular_weight` is the a
 
 ## The figures
 
-Five visualizations are functions over a simulation result, usable by every zonated model. The result is a `pandas.DataFrame` with a `time` column and a column per selection named by its plain id (`result_frame` converts a roadrunner result); the number of zones and the layers are read from the ids present. A figure is a `matplotlib.figure.Figure` owned by the caller, `matplotlib.pyplot` is not used, and every figure is vector: the heatmap and the colorbar are not rasterized, so an SVG holds no embedded image, which a viewer that drops raster data would show as an empty panel. A position axis names its ends (0 periportal, 1 pericentral), a time carries its unit (`time_unit`, default min) and a concentration its unit (`unit`, default mM) and an optional display `name`. A line axis starts at zero when no value is negative; a colour scale spans the range of the values it draws (the zero is explicit on the ticks of a colorbar, and a scale from zero would show a small gradient as one shade). `space_time` and `lobule_map` take `vmin` and `vmax` to clip a scale which a spike dominates, e.g. the initial condition in one zone; a caption can state the pair. `data_axes(fig)` gives the panels without the colorbars.
+Five visualizations are functions over a simulation result, usable by every zonated model. The result is a `pandas.DataFrame` with a `time` column and a column per selection named by its plain id (`result_frame` converts a roadrunner result); the number of zones and the layers are read from the ids present. A figure is a [`sbmlsim.plot.Chart`](https://matthiaskoenig.github.io/sbmlsim/plotting/) owned by the caller, the spec which the renderer of sbmlsim-core draws, and `figure.save("zones.svg")` writes it as SVG, PNG or its JSON spec by the suffix (`svg()` and `png()` give the drawing itself). Every figure is vector: the cells of a heatmap and the bands of a lobule are polygons and a colour bar is a gradient, so an SVG holds no embedded image, which a viewer that drops raster data would show as an empty panel. A position axis names its ends (0 periportal, 1 pericentral), a time carries its unit (`time_unit`, default min) and a concentration its unit (`unit`, default mM) and an optional display `name`. A line axis starts at zero when no value is negative; a colour scale spans the range of the values it draws (the zero is explicit on the ticks of a colour bar, and a scale from zero would show a small gradient as one shade), and a scale of one value is never degenerate: zero to the value, the value to zero for a negative one. `space_time` and `lobule_map` take `vmin` and `vmax` to clip a scale which a spike dominates, e.g. the initial condition in one zone; a caption can state the pair. `space_time(..., log=True)` draws its colour on a log scale over the positive values, a zero (a zone the substance has not reached) is a gap. A NaN, of a profile, of the data or of a heatmap, is a gap of its line, marker or cell. `data_axes(fig)` gives the plots of the panels, a colour bar is a field of its plot and no plot of its own.
 
 1. `zone_profiles`: a row per observable, the zones on the x axis, a line per time, data overlaid; a column per condition with the bands of a fit, below.
 2. `space_time`: the zones against the time, the colour the concentration, a heatmap per layer and the outflow curve below.
 3. `layer_profile`: one substance in every layer which carries it, at one time, on one scale.
-4. `lobule_map`: the idealized lobule hexagon, below; `draw_lobule` draws one into the axes of a caller and `colorbar` is the colorbar every figure here goes through.
+4. `lobule_map`: the idealized lobule hexagon, below; `draw_lobule` draws one into a plot of a caller, `ColorScale` is the colour of a value and `colorbar` the colour bar of that scale, which every figure here goes through.
 5. `tube_mesh` (`pkpdsim.zonation.render`): the points and cells of the sinusoid tube, below.
 
 ### The grid of conditions
 
-`zone_profiles` draws more than one condition: in place of a frame it takes a sequence of `ZoneColumn`, one column of the grid each, and draws `len(profiles)` rows by `len(columns)` columns with the x axis shared and the y axis shared per row. The label of a column is the title of its panel in the top row, the colour of a line is the colour of its column where the column has one, and the line style stays the style of the time, so a reader tells the times apart inside a column and the columns apart by colour. A column carries a `Band` per profile and time, the median and, over the draws of an adopted fit, the ends of the band, which are filled in the colour of the line. A row draws times of its own where it has them (`ZoneProfile.times`) instead of the times of the figure, with its own legend right of the last column, and a row of the data names the column it belongs to in the column `column` (a row without one is drawn in every column).
+`zone_profiles` draws more than one condition: in place of a frame it takes a sequence of `ZoneColumn`, one column of the grid each, and draws `len(profiles)` rows by `len(columns)` columns with the x axis shared and the y axis shared per row. The label of a column is the title of its panel in the top row, the colour of a line is the colour of its column where the column has one, and the line style stays the style of the time, so a reader tells the times apart inside a column and the columns apart by colour; every row has one legend right of the grid, whose entries stand for the times of the row, in a neutral grey where the columns carry the colour. A column carries a `Band` per profile and time, the median and, over the draws of an adopted fit, the ends of the band, which are filled in the colour of the line. A row draws times of its own where it has them (`ZoneProfile.times`) instead of the times of the figure, with its own legend right of the last column, and a row of the data names the column it belongs to in the column `column` (a row without one is drawn in every column).
 
 ```python
 import numpy as np
@@ -141,7 +141,7 @@ for label, color, level in (("1 ml/min", "#1f77b4", 1.0), ("3 ml/min", "#d62728"
             values[(profile.label, time)] = Band(median, 0.8 * median, 1.2 * median)
     columns.append(ZoneColumn(label, values, color))
 figure = zone_profiles(columns, profiles, times=times)
-figure.savefig("zones.svg")
+figure.save("zones.svg")
 ```
 
 The bands are plain arrays, so the figures need no result object of a simulator; `pkpdsim.zonation.results` is the bridge which reads them out of a `sbmlsim.result.scan.ScanResult`, with the draws of an adopted fit as the band. `zone_values` reads the zones at a time, matched and not interpolated: the nearest point of the result, and of several points at the same distance the last, because a change of the simulation (a medium change, a second dose) gives two points at its time and the state after the change is the one to draw. `zone_band` is the same over the draws of an `UncertaintyRun` (the median and the quantiles of the run), `series_band` a time course over the draws, `zone_column` the whole column of a condition (every profile at its own times, read in `source_unit or unit` and transformed into `unit`, so a living fraction becomes the percentage of dead cells) and `band_text` the text a title names the band with:
@@ -164,12 +164,12 @@ columns = [
     for group in groups
 ]
 figure = zone_profiles(columns, profiles, times=TIMES, data=measured, time_unit="hr")
-figure.suptitle("The zones of the liver" + band_text(run))
+figure.title = "The zones of the liver" + band_text(run)
 ```
 
 ### The lobule hexagon
 
-`lobule_map(result, quantity, *, time, zones)` draws the value of every zone on the hexagonal lobule: the central vein is the centre, the six portal triads are the corners, and a point has the normalized distance `d_pp / (d_pp + d_pc)` of its nearest triad and the central vein. The rim is zone 1 (periportal), the centre is zone `zones` (pericentral). The bands of the zones are the intervals `[(k - 1) / n, k / n]` of that distance, bounded by its isolines (Apollonius circles of a triad and the centre, cut off by the edges of the hexagon), so the area of a band is exactly `zone_areas(n)`: the periportal and pericentral zones are small and the zones in between, where the isoline reaches the edges, are large. The area of a zone is not the weight `lobular_weight` at its centre: at 10 zones that midpoint rule overstates the zone of the peak by 5.6 % once its weights are divided by their weighted mean, which is what a profile does to them (6.7 % as computed, the number `pkpdsim.zonation.profiles` states), and the map does not use it. The map is meant for patterns such as necrosis, which are results of the one-dimensional model and not a two-dimensional model. It draws the hepatocytes by default (`layer=Layer.CELL`) and a vector patch per band and wedge.
+`lobule_map(result, quantity, *, time, zones)` draws the value of every zone on the hexagonal lobule: the central vein is the centre, the six portal triads are the corners, and a point has the normalized distance `d_pp / (d_pp + d_pc)` of its nearest triad and the central vein. The rim is zone 1 (periportal), the centre is zone `zones` (pericentral). The bands of the zones are the intervals `[(k - 1) / n, k / n]` of that distance, bounded by its isolines (Apollonius circles of a triad and the centre, cut off by the edges of the hexagon), so the area of a band is exactly `zone_areas(n)`: the periportal and pericentral zones are small and the zones in between, where the isoline reaches the edges, are large. The area of a zone is not the weight `lobular_weight` at its centre: at 10 zones that midpoint rule overstates the zone of the peak by 5.6 % once its weights are divided by their weighted mean, which is what a profile does to them (6.7 % as computed, the number `pkpdsim.zonation.profiles` states), and the map does not use it. The map is meant for patterns such as necrosis, which are results of the one-dimensional model and not a two-dimensional model. It draws the hepatocytes by default (`layer=Layer.CELL`) and a vector polygon per band of its twelve wedges.
 
 ```python
 import numpy as np
@@ -184,10 +184,10 @@ columns = {"time": time}
 for k, sid in enumerate(observers.profile_ids("drg", Layer.CELL, 10), start=1):
     columns[sid] = k * time / 60.0
 figure = lobule_map(pd.DataFrame(columns), "drg", time=60, zones=10)
-figure.savefig("lobule.svg")
+figure.save("lobule.svg")
 ```
 
-`draw_lobule(ax, values, mappable=...)` is the renderer behind the map, for a model which composes a grid of lobules of its own (its conditions, its measured data and its legend stay in the model): it draws one compound patch per zone (the twelve wedges of its band as one path, so a grid of 53 panels is 530 artists and not 6360) into the axes its caller made and sets them up for the hexagon, the limits, the equal aspect, no ticks and no spines. A value which is not finite is a zone without data and is drawn in `missing`, a grey (`MISSING`) which the caller may change; the colour is taken here and not from the `bad` of the colormap, whose default is transparent, because a white hole in the hexagon reads as a defect of the geometry. `thirds=True` adds the isolines of 1/3 and 2/3 as dotted rings, the thirds a histology counts its zones in; `anatomy=True` the outline of the hexagon and the three dots of the portal triad of every corner (portal vein, hepatic artery, bile duct); `labels=True` names the vessels, `CV` at the centre and `PT` below the lower right corner, for the first panel of a grid; both are written over a white stroke, so they read on a dark map and on a light one. `points` is the sampling of the isolines (the default of `lobule_bands`), which a grid of small panels sets lower. The centre of this idealization is the central vein itself, so no disc of a vein lumen covers the pericentral bands. `fill_band(ax, x, band, color, alpha=...)` fills a `Band` between its ends the way the profiles of the grid do, for a model which draws a profile of its own beside a map. `colorbar(figure, mappable, ax, label=...)` is the one colorbar of the package: it un-rasterizes the solids of the bar, which matplotlib draws as an embedded image, and marks its axes `COLORBAR`; it passes its keyword arguments on to `Figure.colorbar`, so a grid takes one bar over its panels (`ax=[...]`, `location`, `shrink`, `aspect`).
+`draw_lobule(plot, values, scale=...)` is the renderer behind the map, for a model which composes a grid of lobules of its own (its conditions, its measured data and its legend stay in the model): it draws one polygon per zone (the twelve wedges of its band as the rings of one element, whose id is `<plot id>-z<k>`, so a grid of 53 panels is 530 elements and not 6360) into a plot its caller made with the axes of `lobule_axes`. The renderer has no equal aspect, so `lobule_axes(aspect)` makes the hexagon regular by its limits: they hold the hexagon with its triads and widen the direction in which the panel has room to spare, for a panel of the given width over height, which `panel_aspects(chart)` measures by the layout of the renderer. A caller builds its chart once, measures it and builds it again, as below; the layout does not depend on the limits of axes without ticks. A value which is not finite is a zone without data and is drawn in `missing`, a grey (`MISSING`) which the caller may change, because a gap in the hexagon reads as a defect of the geometry. `thirds=True` adds the isolines of 1/3 and 2/3 as dotted rings, the thirds a histology counts its zones in; `anatomy=True` the outline of the hexagon and the three dots of the portal triad of every corner (portal vein, hepatic artery, bile duct); `labels=True` names the vessels, `CV` at the centre and `PT` below the lower right corner, for the first panel of a grid; `CV` is dark on a light centre and light on a dark one, so it reads on any map. `points` is the sampling of the isolines (the default of `lobule_bands`), which a grid of small panels sets lower. The centre of this idealization is the central vein itself, so no disc of a vein lumen covers the pericentral bands. `fill_band(plot, x, band, color, alpha=...)` fills a `Band` between its ends the way the profiles of the grid do, for a model which draws a profile of its own beside a map. `ColorScale(low, high, name="viridis", log=False, start=0.0, end=1.0)` is the colour of a value, through the colour maps of sbmlsim-core (`sbmlsim_core.color_scale`, `None` for a gap), and `colorbar(plot, scale, label=...)` the one colour bar of the package, of exactly that scale; a grid takes one bar on one of its plots.
 
 `lobule_isoline(position)` (`pkpdsim.zonation.render`) is one contour of the lobular position over the same hexagon, the twelve wedges of `lobular_radius` joined into a closed ring around the centre: the isoline of 0 is the hexagon itself (the radius 1 towards a triad, the apothem `cos(pi / 6)` towards the middle of an edge), the isoline of 1 is the centre, the radius towards a triad is `1 - position`, and the area inside the ring is `1 - lobular_area(position)` of the area of the hexagon. A band of `lobule_bands` is two such isolines, so the inner arc of a band is point for point the outer arc of the band inside it and the two leave no seam.
 
@@ -195,22 +195,37 @@ Both take the sampling of their isolines as `points`, the directions over the ar
 
 ```python
 import numpy as np
-from matplotlib import colormaps
-from matplotlib.cm import ScalarMappable
-from matplotlib.colors import Normalize
-from matplotlib.figure import Figure
+from sbmlsim.plot import Chart
 
-from pkpdsim.zonation.figures import colorbar, draw_lobule
+from pkpdsim.zonation.figures import (
+    ColorScale,
+    colorbar,
+    draw_lobule,
+    lobule_axes,
+    panel_aspects,
+)
 
 values = np.linspace(0.2, 1.0, 10)
 values[3] = np.nan  # a zone without data, drawn in the grey of `MISSING`
-scale = ScalarMappable(Normalize(0.2, 1.0), colormaps["viridis"])
-figure = Figure(figsize=(6.4, 3.2), layout="constrained")
-left, right = figure.subplots(1, 2)
-draw_lobule(left, values, mappable=scale, thirds=True, anatomy=True, labels=True)
-draw_lobule(right, values[::-1], mappable=scale, anatomy=True)
-colorbar(figure, scale, [left, right], label="Drug [mM]", location="right", shrink=0.8)
-figure.savefig("lobules.svg")
+scale = ColorScale(0.2, 1.0)
+
+
+def lobules(aspects: dict[str, float]) -> Chart:
+    """Two lobules side by side, the panels at the given aspects."""
+    chart = Chart(460.0, 230.0, columns=2)
+    plots = []
+    for column in (0, 1):
+        x, y = lobule_axes(aspects.get(f"p{column}"))
+        plots.append(chart.plot(0, column, x=x, y=y, legend=False))
+    left, right = plots
+    draw_lobule(left, values, scale=scale, thirds=True, anatomy=True, labels=True)
+    draw_lobule(right, values[::-1], scale=scale, anatomy=True)
+    colorbar(right, scale, label="Drug [mM]")
+    return chart
+
+
+figure = lobules(panel_aspects(lobules({})))
+figure.save("lobules.svg")
 ```
 
 ### The tube
