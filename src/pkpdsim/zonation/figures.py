@@ -125,11 +125,13 @@ MISSING = "#f0f0f0"
 LOBULE_X = 1.1
 """The half width the axes of a lobule hold: the hexagon and the dots of its triads."""
 LOBULE_Y = 1.08
-"""The half height the axes of a lobule hold: the hexagon, its triads and `PT` below."""
+"""The half height the axes of a lobule with the names hold: the hexagon, its triads and `PT` below."""
+LOBULE_Y_BARE = 0.93
+"""The half height the axes of a lobule without names hold: the hexagon and its triads, which reach 0.91."""
 _CV = (0.0, 0.0)
 """The position of the name of the central vein, the centre of the hexagon."""
-_PT = (0.5, -1.0)
-"""The position of the name of the portal triad, below the corner at 300 degrees."""
+_PT = (0.5, -1.03)
+"""The position of the name of the portal triad, below the triad dots of the corner at 300 degrees."""
 _LIGHT = 0.5
 """The luminance above which a colour is light and a text on it is dark."""
 _PX_PER_INCH = 72.0
@@ -1077,7 +1079,9 @@ def space_time(
 
     Raises:
         KeyError: if the result has no zone of a layer or no outflow.
-        ValueError: if there is no layer and no outflow to draw, and on a log
+        ValueError: if there is no layer and no outflow to draw, for fewer
+            than two distinct time points (the cells of the time would have no
+            width), and on a log
             scale if a layer has no positive value.
     """
     if not layers and not outflow:
@@ -1087,6 +1091,8 @@ def space_time(
     _columns(result, ["time"])
     name = quantity if name is None else name
     time = result["time"].to_numpy(dtype=float)
+    if np.unique(time[np.isfinite(time)]).size < 2:
+        raise ValueError("space_time needs at least two time points.")
     rows = HEATMAP_SPAN * len(layers) + OUTFLOW_SPAN * int(outflow)
     height = _HEATMAP_HEIGHT * rows / HEATMAP_SPAN
     chart = Chart(
@@ -1233,12 +1239,13 @@ def layer_profile(
 
 
 def lobule_axes(
-    aspect: float | None = None, *, label: str | None = None
+    aspect: float | None = None, *, label: str | None = None, labels: bool = False
 ) -> tuple[ChartAxis, ChartAxis]:
     """Get the axes of a panel of the lobule: the hexagon at one scale, no ticks.
 
     The renderer has no equal aspect of its own, so the limits do it: they
-    hold the hexagon with its triads (`LOBULE_X`, `LOBULE_Y`) and widen the
+    hold the hexagon with its triads (`LOBULE_X`, and `LOBULE_Y_BARE` high, or
+    `LOBULE_Y` with the room of the names below it) and widen the
     direction in which the panel has room to spare, so a unit of x and a
     unit of y are one length and the hexagon is regular. `panel_aspects`
     measures the aspect of the panels of a chart.
@@ -1247,6 +1254,8 @@ def lobule_axes(
         aspect: the width over the height of the panel in pixels, `None` the
             aspect of the hexagon itself.
         label: the label under the panel, `None` none.
+        labels: whether the panel carries the names of the vessels
+            (`draw_lobule(labels=True)`), which need room below the hexagon.
 
     Returns:
         The x and the y axis.
@@ -1254,7 +1263,8 @@ def lobule_axes(
     Raises:
         ValueError: for an aspect which is not positive.
     """
-    own = LOBULE_X / LOBULE_Y
+    height = LOBULE_Y if labels else LOBULE_Y_BARE
+    own = LOBULE_X / height
     aspect = own if aspect is None else float(aspect)
     if not aspect > 0.0:
         raise ValueError(f"The aspect of a panel is positive, not {aspect}.")
@@ -1262,8 +1272,8 @@ def lobule_axes(
         (LOBULE_X, LOBULE_X / aspect)
         if aspect < own
         else (
-            LOBULE_Y * aspect,
-            LOBULE_Y,
+            height * aspect,
+            height,
         )
     )
     hidden: dict[str, Any] = {"ticks_visible": False, "tick_marks_visible": False}
@@ -1500,6 +1510,7 @@ def lobule_map(
         chart = Chart(*_LOBULE_SIZE)
         x, y = lobule_axes(
             aspect,
+            labels=False,
             label="Corners: portal triads (0, periportal)\n"
             "Centre: central vein (1, pericentral)",
         )

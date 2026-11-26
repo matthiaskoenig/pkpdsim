@@ -23,6 +23,7 @@ from pkpdsim.zonation.figures import (
     _PT,
     LOBULE_X,
     LOBULE_Y,
+    LOBULE_Y_BARE,
     MISSING,
     POSITION,
     Band,
@@ -971,6 +972,13 @@ def test_a_space_time_heatmap_on_a_log_scale_leaves_its_zeros_out() -> None:
     _rendered(chart)
 
 
+def test_space_time_needs_two_time_points() -> None:
+    """One time point gives cells of no width and an axis of min == max (#c)."""
+    one = _result().iloc[:1]
+    with pytest.raises(ValueError, match="at least two time points"):
+        space_time(one, "drg", layers=LAYERS)
+
+
 def test_a_log_scale_needs_a_positive_value_and_a_positive_end() -> None:
     result = _flat(plasma=0.0)
     with pytest.raises(ValueError, match="No value is positive"):
@@ -1286,7 +1294,7 @@ def test_draw_lobule_colours_a_band_per_zone() -> None:
 
 
 def test_the_axes_of_a_lobule_hold_it_at_one_scale_without_ticks() -> None:
-    for aspect in (0.5, LOBULE_X / LOBULE_Y, 2.0):
+    for aspect in (0.5, LOBULE_X / LOBULE_Y_BARE, 2.0):
         x, y = lobule_axes(aspect)
         assert x.min is not None and x.max is not None
         assert y.min is not None and y.max is not None
@@ -1296,8 +1304,10 @@ def test_the_axes_of_a_lobule_hold_it_at_one_scale_without_ticks() -> None:
         assert (x.max - x.min) / (y.max - y.min) == pytest.approx(aspect)
         # the hexagon and its triads are inside
         assert x.max >= LOBULE_X
-        assert y.max >= LOBULE_Y
-        assert min(x.max - LOBULE_X, y.max - LOBULE_Y) == pytest.approx(0.0, abs=1e-12)
+        assert y.max >= LOBULE_Y_BARE
+        assert min(x.max - LOBULE_X, y.max - LOBULE_Y_BARE) == pytest.approx(
+            0.0, abs=1e-12
+        )
         for axis in (x, y):
             assert axis.ticks_visible is False
             assert axis.tick_marks_visible is False
@@ -1306,6 +1316,32 @@ def test_the_axes_of_a_lobule_hold_it_at_one_scale_without_ticks() -> None:
     assert abs(_PT[1]) < LOBULE_Y
     with pytest.raises(ValueError, match="positive"):
         lobule_axes(0.0)
+
+
+def test_the_axes_of_a_lobule_reserve_room_for_the_names_only_when_it_has_them() -> (
+    None
+):
+    """The hexagon fills the panel height unless `PT` stands below it (#a)."""
+    _, bare = lobule_axes()
+    _, named = lobule_axes(labels=True)
+    assert bare.max == pytest.approx(LOBULE_Y_BARE)
+    assert named.max == pytest.approx(LOBULE_Y)
+    # the triad dots reach 0.91, the hexagon 0.866: inside the bare axes
+    assert 0.91 < LOBULE_Y_BARE < 0.95
+    # the map has no names, so its hexagon fills its panel
+    (plot,) = _plots(lobule_map(_result(), "drg", time=60.0, zones=N))
+    assert plot["y"]["max"] < LOBULE_Y_BARE * 1.5  # widened only for the aspect
+    outline = _curves(plot)[0]
+    assert np.abs(_y(outline)).max() / plot["y"]["max"] > 0.85
+
+
+def test_the_name_of_the_portal_triad_is_clear_of_its_triad_dots() -> None:
+    """The `PT` glyph of the labelled lobule must not touch the green dot (#b)."""
+    spec = _lobule(labels=True, anatomy=True)
+    (text,) = [e for e in _elements(spec, "text") if e.get("text") == "PT"]
+    lowest = min(_y(e).min() for e in _curves(spec)[1:])
+    assert text["y"] < lowest - 0.08
+    assert abs(text["y"]) < LOBULE_Y
     x, _ = lobule_axes(label="below")
     assert (x.label, x.label_visible) == ("below", True)
 
