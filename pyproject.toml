@@ -101,8 +101,8 @@ dependencies = [
     # of its parameter and corrects its step by the curvature, on the floor
     # `sbmlsim-core>=0.26.0`, which takes the first steps of a request; 0.42.0 draws
     # every figure with the renderer of `sbmlsim-core>=0.29.0` (svg, png, json) and
-    # imports no matplotlib
-    "sbmlsim>=0.42.0",
+    # imports no matplotlib; 0.42.1 takes every colour name of matplotlib (`tab:grey`)
+    "sbmlsim>=0.42.1",
     # imported directly: the scripts and tests of the browser examples and, at runtime,
     # `pkpdsim.zonation.figures` (`color_scale`, `figure_geometry`)
     "sbmlsim-core>=0.29.0",

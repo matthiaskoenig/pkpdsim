@@ -1048,10 +1048,10 @@ def space_time(
     the time points of a simulation are not equidistant. The outflow panel is
     about two thirds of a heatmap. The axis of the outflow starts at zero when
     no value is negative, but a colour scale spans the range of the values it
-    draws: the
-    zero is explicit on the ticks of a colour bar, and a scale from zero would
-    show a gradient of a few percent as one shade. A value which is NaN, and
-    on a log scale a value which is not positive, is a gap of the heatmap.
+    draws: the zero is explicit on the ticks of a colour bar, and a scale from
+    zero would show a gradient of a few percent as one shade. A value which is
+    NaN, and on a log scale a value which is not positive, is a gap of the
+    heatmap.
 
     Args:
         result: the simulation result.

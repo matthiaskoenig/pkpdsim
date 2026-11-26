@@ -215,7 +215,7 @@ def lobules(aspects: dict[str, float]) -> Chart:
     chart = Chart(460.0, 230.0, columns=2)
     plots = []
     for column in (0, 1):
-        x, y = lobule_axes(aspects.get(f"p{column}"), labels=column == 0)
+        x, y = lobule_axes(aspects.get(f"p{column}"), labels=True)
         plots.append(chart.plot(0, column, x=x, y=y, legend=False))
     left, right = plots
     draw_lobule(left, values, scale=scale, thirds=True, anatomy=True, labels=True)
@@ -227,6 +227,8 @@ def lobules(aspects: dict[str, float]) -> Chart:
 figure = lobules(panel_aspects(lobules({})))
 figure.save("lobules.svg")
 ```
+
+Every panel of the row is made with `labels=True`, although only the left one draws `CV` and `PT`: the panels of a row share the scale of the hexagon, and axes without room for the names would draw it larger than the ones with room.
 
 ### The tube
 

@@ -1682,7 +1682,7 @@ requires-dist = [
     { name = "pyyaml", marker = "extra == 'dev'", specifier = ">=6.0.3" },
     { name = "rich", specifier = ">=15.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.3" },
-    { name = "sbmlsim", specifier = ">=0.42.0" },
+    { name = "sbmlsim", specifier = ">=0.42.1" },
     { name = "sbmlsim", extras = ["amici"], marker = "extra == 'amici'" },
     { name = "sbmlsim-core", specifier = ">=0.29.0" },
     { name = "sbmlutils", specifier = ">=0.18.0" },
@@ -2326,7 +2326,7 @@ wheels = [
 
 [[package]]
 name = "sbmlsim"
-version = "0.42.0"
+version = "0.42.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -2358,9 +2358,9 @@ dependencies = [
     { name = "typst" },
     { name = "xarray" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ce/d4/d3d4849241766263933e9b8533f2ab48dab8a4998c1ca68472e1fad147a5/sbmlsim-0.42.0.tar.gz", hash = "sha256:194c9e6ec4e3506082dc1bbcc09b1c2b8faa07c0b3ea1ca8d59ab7279c47ceb4", size = 6282019, upload-time = "2026-11-26T06:08:59.207Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e6/6e/6232ea662f2299596e11eeb2f8fa0c624ec38b44bcc2820a2c0effabe3d8/sbmlsim-0.42.1.tar.gz", hash = "sha256:bb1e6f7ab3150e5e016dceb1cbe171f19f443e3d4931fabbe8eab5b23c8251c3", size = 6283715, upload-time = "2026-11-26T08:59:30.075Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f8/b8/78e138b80d54a39ec87887445742329ccb327bc84679987fac2909d13033/sbmlsim-0.42.0-py3-none-any.whl", hash = "sha256:82803624bbc637e4a1c196de3f31285f1c352ad2d4750c7e7917e01aba188a54", size = 1771527, upload-time = "2026-11-26T06:08:56.912Z" },
+    { url = "https://files.pythonhosted.org/packages/2d/d6/eae8cbb09b9f4520992a38e1e9b55c06f6617c78d5c82344fbe3d3aec05d/sbmlsim-0.42.1-py3-none-any.whl", hash = "sha256:bfccf2d350ce5ccd41d96ba986515a951242ed14648c0f730b56c0a9d1e732f1", size = 1772041, upload-time = "2026-11-26T08:59:27.845Z" },
 ]
 
 [package.optional-dependencies]
