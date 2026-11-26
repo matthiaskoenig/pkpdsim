@@ -801,10 +801,9 @@ def run_parser(model: PKPDModel) -> argparse.ArgumentParser:
             "-f",
             "--formats",
             default=",".join(model.figures.formats),
-            help="comma separated formats of the figures: static images drawn by "
-            "matplotlib (e.g. 'svg', 'png') and interactive pages drawn by plotly "
-            "('html'). The report shows the SVG and links the interactive page; "
-            "without 'svg' the interactive page is embedded in the report "
+            help="comma separated formats of the figures: images drawn by the "
+            "renderer of sbmlsim-core ('svg', 'png'); the spec of a figure "
+            "('json') is written beside them in any case "
             "(default: %(default)s)",
         )
         p.add_argument(

@@ -316,8 +316,8 @@ def test_sbmlsim_gets_its_settings_without_the_formats() -> None:
 def test_the_outputs_are_the_formats_and_the_resolution() -> None:
     outputs = FigureSettings(formats=("png",), savefig_dpi=17).outputs()
     assert outputs == FigureOutputs(formats=("png",), savefig_dpi=17)
-    assert outputs.rc_params() == {"savefig.dpi": 17}
-    assert FigureSettings().outputs().rc_params() == {}
+    assert outputs.savefig_dpi == 17
+    assert FigureSettings().outputs() == FigureOutputs()
 
 
 def test_the_model_of_the_toy_package() -> None:

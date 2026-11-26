@@ -80,8 +80,8 @@ UNIT_LABELS: Mapping[str, str] = MappingProxyType(
 sbmlsim writes a unit which pint does not read (a unit id of the model,
 `ml_per_min_1p73m2`) on an axis as it is given; the figures show this text
 instead (`unit_label`, `axis`). The words of a text are joined by a
-non-breaking space (U+00A0, `1.73 m²`): sbmlsim wraps a label which is longer
-than its axis at its spaces, and a unit is not broken. The unit definition
+non-breaking space (U+00A0, `1.73 m²`): a renderer may wrap a label which is
+longer than its axis at its spaces, and a unit is not broken. The unit definition
 keeps its name in the SBML."""
 
 
