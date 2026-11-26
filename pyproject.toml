@@ -116,9 +116,7 @@ dependencies = [
     "scipy>=1.18.1",
     # the blocks of the credibility report (`pkpdsim.credibility.blocks`)
     "jinja2>=3.1.6",
-    "matplotlib>=3.11.2",
-    # the raster of the bodies of the figures (`pkpdsim.pbpk.visual`), also the images
-    # of matplotlib; 13.0.0 fixes the advisories of 12.3.0, among them the critical
+    # the raster of the bodies of the figures (`pkpdsim.pbpk.visual`); 13.0.0 fixes the advisories of 12.3.0, among them the critical
     # GHSA-5x8w-8jj5-q52h
     "pillow>=13.0.0",
     # the outlines of the layers of a body traced on its raster (`pkpdsim.pbpk.visual.body`)
@@ -158,6 +156,9 @@ dev = [
     "zensical>=0.0.69",
     "mkdocstrings-python>=2.0.9",
     "pyyaml>=6.0.3",
+    # the tests of the outlines of the bodies (`matplotlib.path`) and of the hook
+    # `figures_mpl()` of a simulation experiment; no module of pkpdsim imports it
+    "matplotlib>=3.11.2",
 ]
 
 [project.scripts]
