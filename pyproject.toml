@@ -103,7 +103,8 @@ dependencies = [
     # every figure with the renderer of `sbmlsim-core>=0.29.0` (svg, png, json) and
     # imports no matplotlib
     "sbmlsim>=0.42.0",
-    # imported directly by the scripts and tests of the browser examples (`sbmlsim_core`)
+    # imported directly: the scripts and tests of the browser examples and, at runtime,
+    # `pkpdsim.zonation.figures` (`color_scale`, `figure_geometry`)
     "sbmlsim-core>=0.29.0",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`)
     "pkpdutils>=1.7.1",
@@ -116,8 +117,8 @@ dependencies = [
     "scipy>=1.18.1",
     # the blocks of the credibility report (`pkpdsim.credibility.blocks`)
     "jinja2>=3.1.6",
-    # the raster of the bodies of the figures (`pkpdsim.pbpk.visual`); 13.0.0 fixes the advisories of 12.3.0, among them the critical
-    # GHSA-5x8w-8jj5-q52h
+    # the raster of the bodies of the figures (`pkpdsim.pbpk.visual`); 13.0.0 fixes
+    # the advisories of 12.3.0, among them the critical GHSA-5x8w-8jj5-q52h
     "pillow>=13.0.0",
     # the outlines of the layers of a body traced on its raster (`pkpdsim.pbpk.visual.body`)
     "contourpy>=1.4.0",

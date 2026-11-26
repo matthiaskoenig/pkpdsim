@@ -132,6 +132,8 @@ _CV = (0.0, 0.0)
 """The position of the name of the central vein, the centre of the hexagon."""
 _PT = (0.5, -1.03)
 """The position of the name of the portal triad, below the triad dots of the corner at 300 degrees."""
+_LABEL_MARGIN = 0.04
+"""The room a name needs between its position and the limit of its axis."""
 _LIGHT = 0.5
 """The luminance above which a colour is light and a text on it is dark."""
 _PX_PER_INCH = 72.0
@@ -1044,8 +1046,9 @@ def space_time(
     axes of the time and the position, which the outflow panel below them
     shares: the cell of a time point reaches half way to its neighbours, as
     the time points of a simulation are not equidistant. The outflow panel is
-    about two thirds of a heatmap. The axis of the outflow starts at zero when no value is
-    negative, but a colour scale spans the range of the values it draws: the
+    about two thirds of a heatmap. The axis of the outflow starts at zero when
+    no value is negative, but a colour scale spans the range of the values it
+    draws: the
     zero is explicit on the ticks of a colour bar, and a scale from zero would
     show a gradient of a few percent as one shade. A value which is NaN, and
     on a log scale a value which is not positive, is a gap of the heatmap.
@@ -1079,10 +1082,11 @@ def space_time(
 
     Raises:
         KeyError: if the result has no zone of a layer or no outflow.
-        ValueError: if there is no layer and no outflow to draw, for fewer
-            than two distinct time points (the cells of the time would have no
-            width), and on a log
-            scale if a layer has no positive value.
+        ValueError: if there is no layer and no outflow to draw, if the time
+            has fewer than two distinct points (the cells of the time would
+            have no width), a non-finite point or is not increasing, if a
+            layer has no finite value, and on a log scale if a layer has no
+            positive value.
     """
     if not layers and not outflow:
         raise ValueError(
@@ -1091,8 +1095,12 @@ def space_time(
     _columns(result, ["time"])
     name = quantity if name is None else name
     time = result["time"].to_numpy(dtype=float)
-    if np.unique(time[np.isfinite(time)]).size < 2:
+    if not np.isfinite(time).all():
+        raise ValueError("space_time needs finite time points.")
+    if np.unique(time).size < 2:
         raise ValueError("space_time needs at least two time points.")
+    if (np.diff(time) < 0.0).any():
+        raise ValueError("space_time needs the time points in increasing order.")
     rows = HEATMAP_SPAN * len(layers) + OUTFLOW_SPAN * int(outflow)
     height = _HEATMAP_HEIGHT * rows / HEATMAP_SPAN
     chart = Chart(
@@ -1342,6 +1350,32 @@ def _luminance(colour: str) -> float:
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
+def _check_label_room(plot: ChartPlot) -> None:
+    """Raise if the limits of a plot do not hold the names `CV` and `PT`.
+
+    Axes without limits (automatic) are not checked.
+
+    Args:
+        plot: the plot the names are drawn into.
+
+    Raises:
+        ValueError: if a name lies outside the limits, with the margin of its
+            glyph, e.g. the axes of `lobule_axes` without `labels=True`.
+    """
+    spec = plot.spec()
+    for name, (x, y) in (("CV", _CV), ("PT", _PT)):
+        for axis, value in (("x", x), ("y", y)):
+            low, high = spec[axis].get("min"), spec[axis].get("max")
+            if (low is not None and value < low + _LABEL_MARGIN) or (
+                high is not None and value > high - _LABEL_MARGIN
+            ):
+                raise ValueError(
+                    f"The name {name} at {axis}={value} is outside the limits "
+                    f"({low}, {high}) of the plot {plot.id!r}: make its axes "
+                    "with lobule_axes(..., labels=True), which reserves the room."
+                )
+
+
 def draw_lobule(
     plot: ChartPlot,
     values: Sequence[float] | np.ndarray,
@@ -1395,8 +1429,12 @@ def draw_lobule(
             of `lobule_bands`.
 
     Raises:
-        ValueError: if there is no value, so no zone to draw.
+        ValueError: if there is no value, so no zone to draw, and for
+            `labels` on a plot whose limits do not hold the names (the axes of
+            `lobule_axes` without `labels=True`).
     """
+    if labels:
+        _check_label_room(plot)
     per_zone = np.asarray(values, dtype=float)
     bands = lobule_bands(len(per_zone), points=points)
     grey = _color(missing)
@@ -1421,8 +1459,7 @@ def draw_lobule(
         plot.curve(*lobule_isoline(0.0).T, width=1.1, color=_ANATOMY_GREY)
         _portal_triads(plot)
     if labels:
-        centre = colours[-1]
-        light = centre is not None and _luminance(centre) > _LIGHT
+        light = _luminance(colours[-1]) > _LIGHT
         plot.text(*_CV, "CV", anchor="middle", color="#000000" if light else "#ffffff")
         plot.text(*_PT, "PT", anchor="middle", color="#000000")
 

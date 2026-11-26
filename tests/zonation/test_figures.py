@@ -972,6 +972,17 @@ def test_a_space_time_heatmap_on_a_log_scale_leaves_its_zeros_out() -> None:
     _rendered(chart)
 
 
+def test_space_time_refuses_time_points_it_cannot_draw_cells_of() -> None:
+    """A NaN time failed later with a JSON error, unsorted times drew misplaced cells."""
+    nan = _result()
+    nan.loc[3, "time"] = float("nan")
+    with pytest.raises(ValueError, match="finite time points"):
+        space_time(nan, "drg", layers=LAYERS)
+    unsorted = _result().iloc[::-1]
+    with pytest.raises(ValueError, match="increasing order"):
+        space_time(unsorted, "drg", layers=LAYERS)
+
+
 def test_space_time_needs_two_time_points() -> None:
     """One time point gives cells of no width and an axis of min == max (#c)."""
     one = _result().iloc[:1]
@@ -1226,7 +1237,7 @@ def _scale_n() -> ColorScale:
 def _lobule(values: Sequence[float] | None = None, **arguments: Any) -> dict[str, Any]:  # noqa: ANN401
     """The spec of a plot of the lobule a caller drew with `draw_lobule`."""
     chart = Chart()
-    x, y = lobule_axes()
+    x, y = lobule_axes(labels=bool(arguments.get("labels")))
     plot = chart.plot(x=x, y=y, legend=False)
     arguments.setdefault("scale", _scale_n())
     draw_lobule(plot, _values() if values is None else values, **arguments)
@@ -1316,6 +1327,8 @@ def test_the_axes_of_a_lobule_hold_it_at_one_scale_without_ticks() -> None:
     assert abs(_PT[1]) < LOBULE_Y
     with pytest.raises(ValueError, match="positive"):
         lobule_axes(0.0)
+    x, _ = lobule_axes(label="below")
+    assert (x.label, x.label_visible) == ("below", True)
 
 
 def test_the_axes_of_a_lobule_reserve_room_for_the_names_only_when_it_has_them() -> (
@@ -1335,6 +1348,32 @@ def test_the_axes_of_a_lobule_reserve_room_for_the_names_only_when_it_has_them()
     assert np.abs(_y(outline)).max() / plot["y"]["max"] > 0.85
 
 
+def test_names_on_axes_without_room_for_them_raise_instead_of_clipping() -> None:
+    """A wide panel on `lobule_axes()` limits y to the hexagon: `PT` would be clipped."""
+    scale = _scale_n()
+    chart = Chart(600.0, 220.0)
+    x, y = lobule_axes(600.0 / 220.0)
+    plot = chart.plot(x=x, y=y, legend=False)
+    with pytest.raises(ValueError, match=r"lobule_axes\(\.\.\., labels=True\)"):
+        draw_lobule(plot, _values(), scale=scale, labels=True)
+    # without the names the same axes are fine
+    draw_lobule(plot, _values(), scale=scale, anatomy=True)
+
+
+def test_a_wide_panel_with_labels_keeps_the_names_inside_its_limits() -> None:
+    chart = Chart(600.0, 220.0)
+    x, y = lobule_axes(600.0 / 220.0, labels=True)
+    plot = chart.plot(x=x, y=y, legend=False)
+    draw_lobule(plot, _values(), scale=_scale_n(), anatomy=True, labels=True)
+    (spec,) = _plots(chart)
+    names = {e["text"]: e for e in _elements(spec, "text")}
+    assert set(names) == {"CV", "PT"}
+    for element in names.values():
+        assert spec["y"]["min"] < element["y"] < spec["y"]["max"]
+        assert spec["x"]["min"] < element["x"] < spec["x"]["max"]
+    assert spec["y"]["min"] <= _PT[1] - 0.04
+
+
 def test_the_name_of_the_portal_triad_is_clear_of_its_triad_dots() -> None:
     """The `PT` glyph of the labelled lobule must not touch the green dot (#b)."""
     spec = _lobule(labels=True, anatomy=True)
@@ -1342,8 +1381,6 @@ def test_the_name_of_the_portal_triad_is_clear_of_its_triad_dots() -> None:
     lowest = min(_y(e).min() for e in _curves(spec)[1:])
     assert text["y"] < lowest - 0.08
     assert abs(text["y"]) < LOBULE_Y
-    x, _ = lobule_axes(label="below")
-    assert (x.label, x.label_visible) == ("below", True)
 
 
 def test_draw_lobule_draws_a_zone_without_data_in_the_missing_colour() -> None:
