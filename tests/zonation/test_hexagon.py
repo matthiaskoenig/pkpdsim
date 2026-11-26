@@ -1,24 +1,19 @@
-"""The lobule hexagon and the tube mesh, measured from the artists and not from pixels."""
+"""The lobule hexagon and the tube mesh, measured from the chart spec and not from pixels."""
 
-import matplotlib
+import json
+from itertools import pairwise
+from pathlib import Path
+from typing import Any
+
 import numpy as np
 import pandas as pd
 import pytest
-
-matplotlib.use("Agg")
-
-from itertools import pairwise
-from pathlib import Path
-
-from matplotlib import colormaps
-from matplotlib.backends.backend_agg import FigureCanvasAgg
-from matplotlib.colors import to_rgba
-from matplotlib.figure import Figure
-from matplotlib.patches import PathPatch
+import sbmlsim_core
+from sbmlsim.plot.chart import Chart
 
 from pkpdsim.species import Species
-from pkpdsim.zonation import ids, observers
-from pkpdsim.zonation.figures import COLORBAR, data_axes, lobule_map, space_time
+from pkpdsim.zonation import observers
+from pkpdsim.zonation.figures import ColorScale, lobule_map, space_time
 from pkpdsim.zonation.geometry import Layer, geometry
 from pkpdsim.zonation.profiles import lobular_area, zone_areas
 from pkpdsim.zonation.render import lobule_bands, lobule_isoline, tube_mesh
@@ -38,18 +33,43 @@ def _result(layer: Layer = Layer.CELL, n: int = N) -> pd.DataFrame:
     return pd.DataFrame(cols)
 
 
-def _patches(fig: Figure) -> list[PathPatch]:
-    """The compound patches of the hexagon, one per zone, from the artists."""
-    (ax,) = data_axes(fig)
-    return [p for p in ax.patches if isinstance(p, PathPatch)]
+def _plot(chart: Chart) -> dict[str, Any]:
+    """The one plot of a chart, from the JSON the renderer reads."""
+    (plot,) = json.loads(chart.to_json())["plots"]
+    return plot
 
 
-def _colour_at(fig: Figure, point: tuple[float, float]) -> tuple[float, ...]:
-    """The face colour of the patch which holds a point (data coordinates)."""
+def _bands(chart: Chart) -> list[dict[str, Any]]:
+    """The polygons of the bands of the hexagon, one per zone."""
+    return [e for e in _plot(chart)["elements"] if e["kind"] == "polygon"]
+
+
+def _zone(band: dict[str, Any]) -> int:
+    """The zone of a band, from its id `<plot id>-z<k>`."""
+    return int(str(band["id"]).rsplit("-", 1)[1].removeprefix("z"))
+
+
+def _rings(band: dict[str, Any]) -> list[np.ndarray]:
+    """The wedges of a band as arrays of points."""
+    return [np.asarray(ring, dtype=float) for ring in band["paths"]]
+
+
+def _inside(ring: np.ndarray, point: tuple[float, float]) -> bool:
+    """Whether a point lies inside a ring, by the crossings of a ray to the right."""
+    x, y = point
+    xs, ys = ring[:, 0], ring[:, 1]
+    xn, yn = np.roll(xs, -1), np.roll(ys, -1)
+    crossing = (ys > y) != (yn > y)
+    at = xs + (y - ys) * (xn - xs) / np.where(yn == ys, 1.0, yn - ys)
+    return bool(np.count_nonzero(crossing & (x < at)) % 2)
+
+
+def _colour_at(chart: Chart, point: tuple[float, float]) -> str:
+    """The colour of the band which holds a point (data coordinates)."""
     colours = {
-        to_rgba(p.get_facecolor())
-        for p in _patches(fig)
-        if p.get_path().contains_point(point, radius=0.0)
+        band["style"]["color"]
+        for band in _bands(chart)
+        if any(_inside(ring, point) for ring in _rings(band))
     }
     assert len(colours) == 1, f"{point} lies in {len(colours)} colours"
     return colours.pop()
@@ -60,47 +80,46 @@ def _rim_point() -> tuple[float, float]:
     return (0.98, 0.0)
 
 
-def _zone_colour(fig: Figure, k: int) -> tuple[float, ...]:
-    """The face colour of the patches of zone `k`."""
-    colours = {
-        to_rgba(p.get_facecolor()) for p in _patches(fig) if p.get_gid() == ids.zone(k)
-    }
-    assert len(colours) == 1
-    return colours.pop()
+def _zone_colour(chart: Chart, k: int) -> str:
+    """The colour of the band of zone `k`."""
+    (colour,) = {b["style"]["color"] for b in _bands(chart) if _zone(b) == k}
+    return colour
 
 
-def _area(patch: PathPatch) -> float:
-    """The area of a compound patch by the shoelace formula over its wedges."""
-    total = 0.0
-    for wedge in patch.get_path().to_polygons(closed_only=True):
-        v = np.asarray(wedge)
-        x, y = v[:, 0], v[:, 1]
-        total += 0.5 * abs(float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
-    return total
+def _colorbar(chart: Chart) -> dict[str, Any]:
+    """The one colour bar of the plot of a chart."""
+    plot = _plot(chart)
+    assert "colorbars" not in plot
+    return plot["colorbar"]
 
 
-def _areas_per_zone(fig: Figure) -> list[float]:
+def _area(band: dict[str, Any]) -> float:
+    """The area of a band by the shoelace formula over its wedges."""
+    return sum(_shoelace(ring) for ring in _rings(band))
+
+
+def _areas_per_zone(chart: Chart) -> list[float]:
     """The share of the area of the hexagon of every zone."""
     total = dict.fromkeys(range(1, N + 1), 0.0)
-    for p in _patches(fig):
-        total[int(str(p.get_gid())[1:])] += _area(p)
+    for band in _bands(chart):
+        total[_zone(band)] += _area(band)
     s = sum(total.values())
     return [a / s for a in total.values()]
 
 
 def test_the_hexagon_maps_zone_one_to_the_rim_and_zone_n_to_the_centre() -> None:
     fig = lobule_map(_result(), "drg", time=60, zones=N)
-    assert _colour_at(fig, _rim_point()) == pytest.approx(_zone_colour(fig, 1))
-    assert _colour_at(fig, (0.0, 0.0)) == pytest.approx(_zone_colour(fig, N))
-    assert _zone_colour(fig, 1) != pytest.approx(_zone_colour(fig, N))
+    assert _colour_at(fig, _rim_point()) == _zone_colour(fig, 1)
+    assert _colour_at(fig, (0.0, 0.0)) == _zone_colour(fig, N)
+    assert _zone_colour(fig, 1) != _zone_colour(fig, N)
 
 
 def test_the_colours_are_the_scale_of_the_values() -> None:
     """The value of zone `k` is `k`, the scale runs from the smallest value to the largest."""
     fig = lobule_map(_result(), "drg", time=60, zones=N)
-    cmap = colormaps["viridis"]
     for k in (1, 5, N):
-        assert _zone_colour(fig, k) == pytest.approx(cmap((k - 1) / (N - 1)))
+        (expected,) = sbmlsim_core.color_scale("viridis", 0.0, 1.0, [(k - 1) / (N - 1)])
+        assert _zone_colour(fig, k) == expected
 
 
 def _band_areas(**sampling: int) -> list[float]:
@@ -161,7 +180,11 @@ def test_every_point_of_the_hexagon_lies_in_exactly_one_patch() -> None:
             continue
         if abs(y) * 0.5 + abs(x) * np.sqrt(3.0) / 2.0 >= np.sqrt(3.0) / 2.0 - 1e-9:
             continue
-        held = [p for p in _patches(fig) if p.get_path().contains_point((x, y))]
+        held = [
+            band
+            for band in _bands(fig)
+            if any(_inside(ring, (x, y)) for ring in _rings(band))
+        ]
         assert len(held) == 1
         checked += 1
     assert checked > 500
@@ -169,56 +192,48 @@ def test_every_point_of_the_hexagon_lies_in_exactly_one_patch() -> None:
 
 def test_the_hexagon_is_the_unit_hexagon_with_its_corners_on_the_axis() -> None:
     fig = lobule_map(_result(), "drg", time=60, zones=N)
-    v = np.vstack([p.get_path().vertices for p in _patches(fig)])
+    v = np.vstack([ring for band in _bands(fig) for ring in _rings(band)])
     assert v[:, 0].max() == pytest.approx(1.0)
     assert np.hypot(v[:, 0], v[:, 1]).max() == pytest.approx(1.0)
-    total = sum(_area(p) for p in _patches(fig))
+    total = sum(_area(band) for band in _bands(fig))
     assert total == pytest.approx(3.0 * np.sqrt(3.0) / 2.0, rel=1e-6)
 
 
 def test_the_map_names_its_ends_and_the_unit_and_has_one_colorbar() -> None:
     fig = lobule_map(_result(), "drg", time=60, zones=N, unit="uM", name="Drug")
-    (ax,) = data_axes(fig)
-    text = ax.get_xlabel() + ax.get_title()
+    plot = _plot(fig)
+    text = plot["x"]["label"] + plot["title"]
     assert "periportal" in text
     assert "pericentral" in text
     assert "t = 60 min" in text
-    bars = [a for a in fig.axes if a.get_gid() == COLORBAR]
-    assert len(bars) == 1
-    assert "[uM]" in bars[0].get_ylabel()
-    assert "Drug" in bars[0].get_ylabel()
+    bar = _colorbar(fig)
+    assert "[uM]" in bar["label"]
+    assert "Drug" in bar["label"]
 
 
 def test_the_map_of_a_layer_reads_that_layer() -> None:
     result = _result(Layer.PLASMA)
     fig = lobule_map(result, "drg", time=60, zones=N, layer=Layer.PLASMA)
-    assert len(_patches(fig)) > 0
+    assert len(_bands(fig)) == N
     with pytest.raises(KeyError, match="column"):
         lobule_map(result, "drg", time=60, zones=N)
 
 
-def test_the_map_is_vector_and_uses_no_pyplot(tmp_path: Path) -> None:
-    import matplotlib.pyplot as plt
-
-    before = plt.get_fignums()
+def test_the_map_is_a_vector_chart(tmp_path: Path) -> None:
     fig = lobule_map(_result(), "drg", time=60, zones=N)
-    assert isinstance(fig, Figure)
-    assert plt.get_fignums() == before
-    fig.savefig(tmp_path / "lobule.svg")
+    assert isinstance(fig, Chart)
+    fig.save(tmp_path / "lobule.svg")
     text = (tmp_path / "lobule.svg").read_text(encoding="utf-8")
     assert "<image" not in text
-    assert text.count("<path") >= N
+    assert text.count("sbmlsim-polygon") >= N
 
 
 def test_one_zone_is_one_colour() -> None:
     fig = lobule_map(_result(n=1), "drg", time=60, zones=1)
-    assert {to_rgba(p.get_facecolor()) for p in _patches(fig)} == {
-        _zone_colour_one(fig)
-    }
-
-
-def _zone_colour_one(fig: Figure) -> tuple[float, ...]:
-    return _zone_colour(fig, 1)
+    assert {b["style"]["color"] for b in _bands(fig)} == {_zone_colour(fig, 1)}
+    # one value is no degenerate scale: the bar runs from zero to the value
+    scale = _colorbar(fig)["scale"]
+    assert (scale["low"], scale["high"]) == (0.0, 1.0)
 
 
 def _shoelace(ring: np.ndarray) -> float:
@@ -359,20 +374,17 @@ def test_one_zone_has_one_peclet_number_of_two_and_constant_profiles() -> None:
 
 def test_the_caption_is_whole_and_clear_of_the_colorbar() -> None:
     fig = lobule_map(_result(), "drg", time=60, zones=N)
-    FigureCanvasAgg(fig).draw()
-    (ax,) = data_axes(fig)
-    renderer = fig.canvas.get_renderer()  # ty: ignore[unresolved-attribute]
-    caption = ax.xaxis.label.get_window_extent(renderer)
-    bar = next(a for a in fig.axes if a.get_gid() == COLORBAR)
-    bar_box = bar.get_tightbbox(renderer)
-    assert ax.get_xlabel().count("\n") == 1
-    assert "portal triads (0, periportal)" in ax.get_xlabel()
-    assert "central vein (1, pericentral)" in ax.get_xlabel()
-    assert fig.bbox.x0 <= caption.x0
-    assert caption.x1 <= fig.bbox.x1
-    assert caption.y0 >= fig.bbox.y0
-    assert bar_box is not None
-    assert not caption.overlaps(bar_box)
+    label = _plot(fig)["x"]["label"]
+    assert label.count("\n") == 1
+    assert "portal triads (0, periportal)" in label
+    assert "central vein (1, pericentral)" in label
+    # the caption is under the panel, the colour bar right of it, and the
+    # widest line of the caption is no wider than the figure
+    geometry = sbmlsim_core.figure_geometry(fig.to_json())
+    (rect,) = [p["rect"] for p in geometry["plots"]]
+    widest = max(sbmlsim_core.text_width(line, 13.0) for line in label.split("\n"))
+    assert widest < geometry["width"]
+    assert rect["y"] + rect["height"] + 40.0 < geometry["height"]
 
 
 def test_the_colour_scale_spans_the_range_of_the_values() -> None:
@@ -381,30 +393,35 @@ def test_the_colour_scale_spans_the_range_of_the_values() -> None:
     for k, sid in enumerate(observers.profile_ids("drg", Layer.CELL, N)):
         result[sid] = 0.078 + 0.012 * k / (N - 1)
     fig = lobule_map(result, "drg", time=60, zones=N)
-    bar = next(a for a in fig.axes if a.get_gid() == COLORBAR)
-    assert bar.get_ylim() == pytest.approx((0.078, 0.090))
+    scale = _colorbar(fig)["scale"]
+    assert (scale["low"], scale["high"]) == pytest.approx((0.078, 0.090))
     heat = space_time(result, "drg", layers=(Layer.CELL,))
-    assert data_axes(heat)[0].collections[0].get_clim() == pytest.approx((0.078, 0.090))
-    assert min(bar.get_yticks()) >= 0.0
+    scale = json.loads(heat.to_json())["plots"][0]["colorbar"]["scale"]
+    assert (scale["low"], scale["high"]) == pytest.approx((0.078, 0.090))
+    # the two ends of the scale are two colours, the gradient is not one shade
+    ends = ColorScale(0.078, 0.090).colors([0.078, 0.090])
+    assert _zone_colour(fig, 1) == ends[0]
+    assert _zone_colour(fig, N) == ends[1]
 
 
 def test_vmin_and_vmax_override_the_data_range_and_default_to_it() -> None:
     """A caller clips a scale which a spike dominates; leaving them out keeps the data range."""
     result = _result()
     values = (1.0, 10.0)  # zone 1 and zone 10 at time 60
-    fig = lobule_map(result, "drg", time=60, zones=N)
-    bar = next(a for a in fig.axes if a.get_gid() == COLORBAR)
-    assert bar.get_ylim() == pytest.approx(values)
+
+    def ends(chart: Chart) -> tuple[float, float]:
+        scale = json.loads(chart.to_json())["plots"][0]["colorbar"]["scale"]
+        return (scale["low"], scale["high"])
+
+    assert ends(lobule_map(result, "drg", time=60, zones=N)) == pytest.approx(values)
     clipped = lobule_map(result, "drg", time=60, zones=N, vmin=2.0, vmax=6.0)
-    bar = next(a for a in clipped.axes if a.get_gid() == COLORBAR)
-    assert bar.get_ylim() == pytest.approx((2.0, 6.0))
+    assert ends(clipped) == pytest.approx((2.0, 6.0))
     half = lobule_map(result, "drg", time=60, zones=N, vmax=5.0)
-    bar = next(a for a in half.axes if a.get_gid() == COLORBAR)
-    assert bar.get_ylim() == pytest.approx((1.0, 5.0))
+    assert ends(half) == pytest.approx((1.0, 5.0))
     heat = space_time(result, "drg", layers=(Layer.CELL,), vmin=0.0, vmax=3.0)
-    assert data_axes(heat)[0].collections[0].get_clim() == (0.0, 3.0)
+    assert ends(heat) == (0.0, 3.0)
     default = space_time(result, "drg", layers=(Layer.CELL,))
-    assert data_axes(default)[0].collections[0].get_clim()[1] == pytest.approx(20.0)
+    assert ends(default)[1] == pytest.approx(20.0)
     with pytest.raises(ValueError, match="no range"):
         lobule_map(result, "drg", time=60, zones=N, vmin=5.0, vmax=5.0)
 
@@ -414,7 +431,7 @@ def test_a_vmin_at_a_constant_raises_where_the_default_has_a_fallback() -> None:
     for sid in observers.profile_ids("drg", Layer.CELL, N):
         result[sid] = 0.25
     fig = lobule_map(result, "drg", time=60, zones=N)
-    bar = next(a for a in fig.axes if a.get_gid() == COLORBAR)
-    assert bar.get_ylim() == pytest.approx((0.0, 0.25))
+    scale = _colorbar(fig)["scale"]
+    assert (scale["low"], scale["high"]) == pytest.approx((0.0, 0.25))
     with pytest.raises(ValueError, match="no range"):
         lobule_map(result, "drg", time=60, zones=N, vmin=0.25)

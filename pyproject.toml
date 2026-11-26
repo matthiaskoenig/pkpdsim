@@ -99,8 +99,13 @@ dependencies = [
     # concentration as a form of the request instead of folding it into the
     # number of the point it was built at; 0.41.0 walks a profile at the scale
     # of its parameter and corrects its step by the curvature, on the floor
-    # `sbmlsim-core>=0.26.0`, which takes the first steps of a request
-    "sbmlsim>=0.41.0",
+    # `sbmlsim-core>=0.26.0`, which takes the first steps of a request; 0.42.0 draws
+    # every figure with the renderer of `sbmlsim-core>=0.29.0` (svg, png, json) and
+    # imports no matplotlib; 0.42.1 takes every colour name of matplotlib (`tab:grey`)
+    "sbmlsim>=0.42.1",
+    # imported directly: the scripts and tests of the browser examples and, at runtime,
+    # `pkpdsim.zonation.figures` (`color_scale`, `figure_geometry`)
+    "sbmlsim-core>=0.29.0",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`)
     "pkpdutils>=1.7.1",
     # the study folders of format 2 of PK-DB, read as `pkdb check` reads them (`pkpdsim.data`)
@@ -112,10 +117,8 @@ dependencies = [
     "scipy>=1.18.1",
     # the blocks of the credibility report (`pkpdsim.credibility.blocks`)
     "jinja2>=3.1.6",
-    "matplotlib>=3.11.2",
-    # the raster of the bodies of the figures (`pkpdsim.pbpk.visual`), also the images
-    # of matplotlib; 13.0.0 fixes the advisories of 12.3.0, among them the critical
-    # GHSA-5x8w-8jj5-q52h
+    # the raster of the bodies of the figures (`pkpdsim.pbpk.visual`); 13.0.0 fixes
+    # the advisories of 12.3.0, among them the critical GHSA-5x8w-8jj5-q52h
     "pillow>=13.0.0",
     # the outlines of the layers of a body traced on its raster (`pkpdsim.pbpk.visual.body`)
     "contourpy>=1.4.0",
@@ -154,6 +157,9 @@ dev = [
     "zensical>=0.0.69",
     "mkdocstrings-python>=2.0.9",
     "pyyaml>=6.0.3",
+    # the tests of the outlines of the bodies (`matplotlib.path`) and of the hook
+    # `figures_mpl()` of a simulation experiment; no module of pkpdsim imports it
+    "matplotlib>=3.11.2",
 ]
 
 [project.scripts]

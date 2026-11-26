@@ -135,6 +135,7 @@ def test_simulate_runs_the_kind_into_the_folder_of_the_group(tmp_path: Path) -> 
     assert files == {
         "ToyDecay/ToyDecay.html",
         "ToyDecay/ToyDecay.json",
+        "ToyDecay/ToyDecay_fig_decay.json",
         "ToyDecay/ToyDecay_fig_decay.png",
         "ToyDecay/datasets/ToyDecay_data_decay.tsv",
         "_figures/ToyDecay_fig_decay.png",
