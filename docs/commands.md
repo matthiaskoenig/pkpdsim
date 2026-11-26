@@ -8,7 +8,7 @@ pkpdsim installs eight commands which work with every model package. The model i
 - `run_identifiability` analyses the identifiability of a stored parameter set.
 - `run_credibility` assesses the contexts of use of a model against its adopted fits.
 - `run_sensitivity` runs the sensitivity analyses of a model over the groups of its simulations.
-- `run_pipeline` runs the pipeline of a model, its commands one after the other, timed and logged.
+- `run_pipeline` runs the pipeline of a model, its commands side by side where they may, timed and logged.
 - `pkpd_release` makes the complete release of the repository of a model.
 
 ```bash
@@ -204,7 +204,7 @@ The analyses are the names of the analyses of the runner (`analyses`), its `defa
 
 ## run_pipeline
 
-The analysis of a model is a sequence of these commands: the experiments, their bands over the draws of the fitted parameters, the sensitivity analyses, the credibility, the refits of the adopted fits, the check of the factory. Which of them a model runs, in which order and with which options differs between models, so a model package declares its pipeline (`pkpdsim.pipeline.Pipeline`, `PIPELINE` in its `pipeline.py`) and its model object references it, `pipeline=".pipeline:PIPELINE"`:
+The analysis of a model is a set of these commands: the experiments, their bands over the draws of the fitted parameters, the sensitivity analyses, the credibility, the refits of the adopted fits, the check of the factory. Which of them a model runs, with which options and on how much of the machine differs between models, so a model package declares its pipeline (`pkpdsim.pipeline.Pipeline`, `PIPELINE` in its `pipeline.py`) and its model object references it, `pipeline=".pipeline:PIPELINE"`:
 
 ```python
 # not executed
@@ -213,50 +213,63 @@ from pkpdsim.pipeline import Pipeline, Step
 PIPELINE = Pipeline(
     description="The complete analysis of the model from its adopted fits.",
     steps=(
+        Step("factory", "run_simulation", ("--action", "factory"), cores=1),
+        Step(
+            "fit_PK",
+            "run_fit",
+            ("--subset", "PK", "--cores", "{cores}", "-o", "{results}/fit"),
+            after=("factory",),
+            cores=10,
+            memory_gb=1,
+        ),
         Step(
             "simulate",
             "run_simulation",
-            (
-                "--action",
-                "simulate",
-                "--experiments",
-                "all",
-                "--workers",
-                "{cores}",
-                "-r",
-                "{results}",
-            ),
+            ("--action", "simulate", "--experiments", "all", "-r", "{results}"),
+            after=("factory",),
+            cores=4,
+            memory_gb=6,
         ),
         Step(
             "sensitivity",
             "run_sensitivity",
             ("--workers", "{cores}", "-o", "{results}/sensitivity"),
+            after=("factory",),
+            cores=6,
+            memory_gb=1,
         ),
         Step(
             "credibility",
             "run_credibility",
             ("--uncertainty", "-o", "{results}/credibility"),
-        ),
-        Step(
-            "fit_PK",
-            "run_fit",
-            ("--subset", "PK", "--cores", "{cores}", "-o", "{results}/fit"),
+            after=("factory",),
         ),
     ),
 )
 ```
 
+The factory builds the models of the package, which the other steps read, so they run after it; then the fit, the experiments and the sensitivity analysis run side by side on 20 cores, and the credibility, which declares no cores, runs alone when they ended.
+
 ```bash
-run_pipeline pkdb_models.models.hctz --list                  # the steps and their command lines
+run_pipeline pkdb_models.models.hctz --list                  # the steps, their command lines and their needs
 run_pipeline pkdb_models.models.hctz                         # every step
 run_pipeline pkdb_models.models.hctz --cores 12 --skip fit_PK
+run_pipeline pkdb_models.models.hctz --jobs 1                # one step at a time, to time the steps alone
 run_pipeline pkdb_models.models.hctz --from credibility      # continue a run which failed
 run_pipeline pkdb_models.models.hctz -r /scratch/hctz        # the results elsewhere
 ```
 
-A step is a command of pkpdsim with its arguments after the model package. `{cores}` in an argument is the number of processes of a step (`--cores`, `-c`, the CPUs available to the process by default) and `{results}` the results (`--results-dir`, `-r`, the results of the model by default); a pipeline whose steps write below `{results}` and run their pools on `{cores}` states where it parallelizes and lets the machine decide how wide. `--steps` and `--skip` (comma separated names) and `--from` select the steps, `--list` prints them with their command lines.
+A step is a command of pkpdsim with its arguments after the model package. `{cores}` in an argument is the cores of the step and `{results}` the results (`--results-dir`, `-r`, the results of the model by default); a pipeline whose steps write below `{results}` and run their pools on `{cores}` states where it parallelizes and lets the machine decide how wide. `--steps` and `--skip` (comma separated names) and `--from` select the steps, `--list` prints them with their command lines and their needs.
 
-The steps run one after the other, each in a process of its own (`python -m pkpdsim.cli <command> <package> ...`): a command parallelizes internally (the runs of a fit and the scans of its profiles, the experiments of a simulation, the points of a sensitivity design), so every step has the machine to itself, and a step which fails or runs out of memory leaves the runner and the results of the steps before it intact. The steps after a failed step are skipped, with `--keep-going` (`-k`) they run; the command exits with 1 if a step failed. The console shows a table of the steps with their status, time, cores and peak memory and the last line of progress of the running step (a line every 30 s, the steps run with `--progress log`). A run writes into `pipeline/<time>/` of the results (`--output_dir` replaces `pipeline`): the output of every step in `logs/<nn>_<step>.log`, `timings.tsv` (per step the status, the exit code, the wall time, the CPU time of its process and of every process it started, the cores this is on average, and the peak memory of its processes, sampled every second) and `pipeline.json` (the command lines, the versions of the packages, the machine and the cores), written again after every step.
+Every step runs in a process of its own (`python -m pkpdsim.cli <command> <package> ...`), so a step which fails or runs out of memory leaves the runner and the results of the other steps intact. A command parallelizes internally (the runs of a fit and the scans of its profiles, the experiments of a simulation, the points of a sensitivity design), but rarely over the whole machine all the time: it has serial phases, and a pool waits for its longest task. So the runner starts a step as soon as its steps `after` ended and its cores and its memory fit into what the running steps leave of the budget, `--cores` (`-c`, the CPUs available to the process by default) and `--memory` (in GB, the memory available at the start by default, `MemAvailable` on linux):
+
+- `cores` of a step is the cores it is given: `{cores}` of its arguments and the CPUs its processes see (`PYTHON_CPU_COUNT`, so a pool which sizes itself by the CPUs takes these and not the machine), and the running steps are given no more cores than the run has: pools which together ask for more processes than there are CPUs slow the step which takes longest, and with it the run. A step without `cores` is given the whole budget and runs alone, so a pipeline which declares no `cores` runs its steps one after the other in their order. Running steps side by side is a declaration of the pipeline, since only the pipeline knows how much of the machine a step uses: the cores a step used on average in `timings.tsv` tell. A step with more cores than the budget is given the budget, so a pipeline tuned on a large machine runs on a small one, its large steps alone.
+- `memory_gb` of a step is its peak memory, an estimate (the peak memory of a step in `timings.tsv`), which the running steps do not exceed together.
+- `after` of a step is the steps whose output it reads, declared before it: it starts after they ended and is skipped if one of them failed. A step without `after` reads the output of no other step; a step `after` which does not run (`--skip`, `--from`) counts as ended, its output is the one of an earlier run.
+
+A step whose needs exceed the budget runs when no other step runs, so every pipeline runs on every machine. The steps start in their order, and a step which fits starts before an earlier one which does not, so the longest steps first is the order which packs the machine best. `--jobs` (`-j`) bounds the steps which run at the same time; `--jobs 1` runs one step at a time, each on the cores it is given, which times the steps alone.
+
+After a step failed no other step starts and the running steps end; with `--keep-going` (`-k`) the steps run which do not run after the failed one, and the steps after it are skipped. The command exits with 1 if a step failed. Ctrl-C (or `SIGTERM`, `SIGHUP`) stops the running steps: each step is a process group of its own, which gets the interrupt and, after 10 s, the kill, so the pools of the steps end as well; the command exits with 130. The console shows a table of the steps with their status, time, the cores they used of the cores they were given, their peak memory and the last line of progress of the running steps (a line every 30 s, the steps run with `--progress log`), and the wall clock of the run against the sum of the times of the steps. A run writes into `pipeline/<time>/` of the results (`--output_dir` replaces `pipeline`): the output of every step in `logs/<nn>_<step>.log`, `timings.tsv` (per step in the order of the pipeline the status, the exit code, the start in the run, the wall time, the CPU time of its processes and of every process they started, the cores it was given and the cores it used on average, and the peak memory of its processes, sampled every second; the CPU time and the memory are of the processes of the step alone, also beside other steps) and `pipeline.json` (the command lines and the needs of the steps, the versions of the packages, the machine and the budget, the wall clock of the run and the sum of the times of the steps), written again after every step.
 
 ## pkpd_release
 
