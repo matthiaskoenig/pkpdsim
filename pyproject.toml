@@ -103,6 +103,8 @@ dependencies = [
     # every figure with the renderer of `sbmlsim-core>=0.29.0` (svg, png, json) and
     # imports no matplotlib
     "sbmlsim>=0.42.0",
+    # imported directly by the scripts and tests of the browser examples (`sbmlsim_core`)
+    "sbmlsim-core>=0.29.0",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`)
     "pkpdutils>=1.7.1",
     # the study folders of format 2 of PK-DB, read as `pkdb check` reads them (`pkpdsim.data`)

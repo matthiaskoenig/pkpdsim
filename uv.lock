@@ -1631,6 +1631,7 @@ dependencies = [
     { name = "python-libsbml" },
     { name = "rich" },
     { name = "sbmlsim" },
+    { name = "sbmlsim-core" },
     { name = "sbmlutils" },
     { name = "scipy" },
 ]
@@ -1683,6 +1684,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17.3" },
     { name = "sbmlsim", specifier = ">=0.42.0" },
     { name = "sbmlsim", extras = ["amici"], marker = "extra == 'amici'" },
+    { name = "sbmlsim-core", specifier = ">=0.29.0" },
     { name = "sbmlutils", specifier = ">=0.18.0" },
     { name = "scipy", specifier = ">=1.18.1" },
     { name = "tox", marker = "extra == 'dev'", specifier = ">=4.65.0,!=4.67.5" },
