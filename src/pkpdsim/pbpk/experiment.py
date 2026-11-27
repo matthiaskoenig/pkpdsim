@@ -432,6 +432,7 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
     lobe_map: ClassVar[Mapping[str, Mapping[str, float]]] = {}
 
     @classmethod
+    @override
     def preload_in_forkserver(cls) -> None:
         """Compile the builds of the class once for all workers of a pool.
 
