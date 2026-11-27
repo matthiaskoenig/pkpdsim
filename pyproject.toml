@@ -120,8 +120,9 @@ dependencies = [
     # of stops, fixed ticks, the markers of matplotlib and legend columns; 0.32.0 reads
     # the reductions of a curve of a fit; 0.33.0 is the renderer of sbmlsim 0.47.0;
     # 0.34.0 carries the chart builder (`sbmlsim_core.chart`), 0.35.0 thins in rust,
-    # 0.37.0 the sensitivity analysis, compact markers and caps of matplotlib's capsize
-    "sbmlsim-core>=0.37.0",
+    # 0.37.0 the sensitivity analysis, compact markers and caps of matplotlib's capsize;
+    # 0.38.0 reads and evaluates a PEtab v2 problem in rust (`sbmlsim_core.petab`)
+    "sbmlsim-core>=0.38.0",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`); 2.0.0
     # draws its figures with sbmlsim-core and no longer pulls in matplotlib; 2.0.1 the
     # error caps of matplotlib's capsize
