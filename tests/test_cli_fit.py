@@ -22,7 +22,9 @@ from pkpdsim_toy import MODEL
 
 type AsModel = Callable[[PKPDModel], PKPDModel]
 
-#: the files of the records and the report of a fit, which the old command wrote
+#: the files of the records and the report of a fit, which the old command wrote;
+#: a fit of the engine core has no trajectories, so its report has no figure of
+#: the traces (sbmlsim 0.53.0)
 FIT_FILES = {
     "datapoints.tsv",
     "figures.js",
@@ -52,9 +54,6 @@ FIT_FILES = {
     "plots/profiles.svg",
     "plots/residual_boxplot.json",
     "plots/residual_boxplot.svg",
-    "plots/traces.json",
-    "plots/traces.png",
-    "plots/traces.svg",
     "references.bib",
     "references.csl",
     "report.pdf",

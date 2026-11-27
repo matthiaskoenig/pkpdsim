@@ -111,8 +111,9 @@ dependencies = [
     # starts the pool of a run before its experiments and reads an SBML once; 0.49.0
     # takes the chart builder from sbmlsim-core 0.34.0, 0.50.0 the curves of a scan
     # between its points, the forkserver hook `preload_in_forkserver` and pkpdutils 2.0.0;
-    # 0.52.0 the sensitivity analysis in sbmlsim-core (no SALib) and the PEtab export
-    "sbmlsim>=0.52.0",
+    # 0.52.0 the sensitivity analysis in sbmlsim-core (no SALib) and the PEtab export;
+    # 0.53.0 reads and evaluates a PEtab problem in sbmlsim-core
+    "sbmlsim>=0.53.0",
     # imported directly: the scripts and tests of the browser examples and, at runtime,
     # `pkpdsim.zonation.figures` (`color_scale`, `figure_geometry`); 0.29.1 no longer
     # reports a stall at a step which leaves the time unchanged; 0.30.0 keeps a legend
@@ -121,8 +122,9 @@ dependencies = [
     # the reductions of a curve of a fit; 0.33.0 is the renderer of sbmlsim 0.47.0;
     # 0.34.0 carries the chart builder (`sbmlsim_core.chart`), 0.35.0 thins in rust,
     # 0.37.0 the sensitivity analysis, compact markers and caps of matplotlib's capsize;
-    # 0.38.0 reads and evaluates a PEtab v2 problem in rust (`sbmlsim_core.petab`)
-    "sbmlsim-core>=0.38.0",
+    # 0.38.0 reads and evaluates a PEtab v2 problem in rust (`sbmlsim_core.petab`),
+    # 0.39.0 in JavaScript as well
+    "sbmlsim-core>=0.39.0",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`); 2.0.0
     # draws its figures with sbmlsim-core and no longer pulls in matplotlib; 2.0.1 the
     # error caps of matplotlib's capsize

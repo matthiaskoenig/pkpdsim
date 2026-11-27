@@ -1,4 +1,4 @@
-// sbmlsim-core 0.38.0, the inline build of its JavaScript host (js/inline.mjs, js/build.mjs).
+// sbmlsim-core 0.39.0, the inline build of its JavaScript host (js/inline.mjs, js/build.mjs).
 // Generated, do not edit. MIT AND BSD-3-Clause AND LGPL-2.1-or-later, see LICENSE and THIRD_PARTY.md.
 var sbmlsimCore = (() => {
   var __defProp = Object.defineProperty;
@@ -24,17 +24,22 @@ var sbmlsimCore = (() => {
   __export(inline_exports, {
     BUNDLE_CONTRACT: () => BUNDLE_CONTRACT,
     CORE_VERSION: () => CORE_VERSION,
+    CompileError: () => CompileError,
     ENGINE: () => ENGINE,
     FigureHandle: () => FigureHandle,
+    PetabError: () => PetabError,
     Plot: () => Plot,
     PlotError: () => PlotError,
     WORKER_SOURCE: () => WORKER_SOURCE,
     attachFigure: () => attachFigure,
     blobWorkers: () => blobWorkers,
+    createCompiler: () => createCompiler,
     createInlineEndpoint: () => createInlineEndpoint,
+    createRuntime: () => createRuntime,
     formatValue: () => formatValue,
     hydrateFigures: () => hydrateFigures,
-    loadPlot: () => loadPlot
+    loadPlot: () => loadPlot,
+    openPetab: () => openPetab
   });
 
   // loader.mjs
@@ -995,7 +1000,7 @@ var sbmlsimCore = (() => {
   }
 
   // panels.mjs
-  var CORE_VERSION = "0.38.0";
+  var CORE_VERSION = "0.39.0";
   var ENGINE = `sbmlsim-core ${CORE_VERSION}`;
   var BUNDLE_CONTRACT = "panelbundle/1";
   var PANEL_CONTRACT = "panel/1";
@@ -2820,6 +2825,535 @@ var sbmlsimCore = (() => {
       }
     }
     return handles;
+  }
+
+  // compile.mjs
+  var COMPILER_EXPORTS = ["allocate", "compile", "deallocate", "memory"];
+  var JACOBIAN = { auto: 0, "difference-quotient": 1, analytic: 2 };
+  var CompileError = class extends Error {
+    constructor(message) {
+      super(message);
+      this.name = "CompileError";
+    }
+  };
+  async function moduleOf(source) {
+    const module = source instanceof WebAssembly.Module ? source : await WebAssembly.compile(source);
+    const exports = new Set(WebAssembly.Module.exports(module).map((entry) => entry.name));
+    const missing = COMPILER_EXPORTS.filter((name) => !exports.has(name));
+    if (missing.length > 0) {
+      throw new Error(`compiler.wasm does not export ${missing.join(", ")}`);
+    }
+    if (WebAssembly.Module.imports(module).length > 0) {
+      throw new Error("compiler.wasm imports from its host, which this host does not provide");
+    }
+    return module;
+  }
+  var Compiler = class {
+    /**
+     * @param {WebAssembly.Module} module the compiled `compiler.wasm`
+     * @param {WebAssembly.Instance} instance its instance
+     */
+    constructor(module, instance) {
+      this.module = module;
+      this.exports = instance.exports;
+    }
+    /** The memory of the module, read again after every call: it grows while a model compiles. */
+    bytes() {
+      return new Uint8Array(this.exports.memory.buffer);
+    }
+    /**
+     * Compiles an SBML Level 3 Version 2 document.
+     *
+     * @param {string} sbml the text of the document
+     * @param {{optimize?: boolean, jacobian?: "auto"|"difference-quotient"|"analytic", parameterJacobian?: boolean}} options
+     *   `optimize` runs the optimizer of the compiler (the default, the results are the same
+     *   without it), `jacobian` is the source of the state Jacobian, and
+     *   `parameterJacobian: false` omits analytic parameter derivatives and their constants
+     * @returns {{wasm: Uint8Array, description: object}} `model.wasm` and `model.json`
+     * @throws {CompileError} for a document the compiler refuses
+     */
+    compile(sbml, { optimize = true, jacobian = "auto", parameterJacobian = true } = {}) {
+      if (typeof sbml !== "string") {
+        throw new TypeError("the document of a compilation is text");
+      }
+      const choice = JACOBIAN[jacobian];
+      if (choice === void 0) {
+        throw new TypeError(`the Jacobian ${jacobian} is none of ${Object.keys(JACOBIAN)}`);
+      }
+      if (typeof parameterJacobian !== "boolean") {
+        throw new TypeError("parameterJacobian must be a boolean");
+      }
+      if (!parameterJacobian && typeof this.exports.compile_with_options !== "function") {
+        throw new Error("compiler.wasm does not support parameterJacobian: false");
+      }
+      const { allocate, compile, deallocate } = this.exports;
+      const document_ = new TextEncoder().encode(sbml);
+      const input = allocate(document_.length);
+      const words = allocate(4 * 4);
+      try {
+        if (document_.length > 0) {
+          this.bytes().set(document_, input);
+        }
+        const status = parameterJacobian ? compile(input, document_.length, optimize ? 1 : 0, choice, words) : this.exports.compile_with_options(
+          input,
+          document_.length,
+          optimize ? 1 : 0,
+          choice,
+          0,
+          words
+        );
+        const header = new Uint32Array(this.exports.memory.buffer, words, 4);
+        const [textPointer, textLength, wasmPointer, wasmLength] = header;
+        try {
+          const text = this.read(textPointer, textLength);
+          if (status !== 1) {
+            throw new CompileError(
+              new TextDecoder().decode(text) || "the compiler refused the document"
+            );
+          }
+          return {
+            wasm: this.read(wasmPointer, wasmLength).slice(),
+            description: JSON.parse(new TextDecoder().decode(text))
+          };
+        } finally {
+          deallocate(textPointer, textLength);
+          deallocate(wasmPointer, wasmLength);
+        }
+      } finally {
+        deallocate(words, 4 * 4);
+        deallocate(input, document_.length);
+      }
+    }
+    /**
+     * The bytes of a buffer of the module, as a view on its memory.
+     *
+     * @param {number} pointer the address of the buffer
+     * @param {number} length its length in bytes
+     * @returns {Uint8Array} the view, empty when the buffer is
+     */
+    read(pointer, length) {
+      if (pointer === 0 || length === 0) {
+        return new Uint8Array(0);
+      }
+      return new Uint8Array(this.exports.memory.buffer, pointer, length);
+    }
+    /**
+     * Generate standalone ODE code or a document, without a server or simulation runtime.
+     * @param {string|BufferSource} sbml source text or bytes
+     * @param {"python"|"diffrax"|"julia"|"r"|"markdown"|"latex"|"typst"} format
+     * @param {{simulator?:boolean,standalone?:boolean,symbols?:"id"|"name",source?:string,
+     * documents?:Record<string,string>,location?:string,maxExpandedElements?:number}} options
+     * @returns {{filename:string,content:string}}
+     */
+    exportOde(sbml, format, {
+      simulator = true,
+      standalone = true,
+      symbols = "id",
+      source,
+      documents = {},
+      location = "./model.xml",
+      maxExpandedElements = 1e4
+    } = {}) {
+      if (typeof this.exports.export_ode !== "function") {
+        throw new Error("compiler.wasm does not support ODE exports");
+      }
+      if (typeof simulator !== "boolean" || typeof standalone !== "boolean") {
+        throw new TypeError("simulator and standalone must be booleans");
+      }
+      if (!Number.isSafeInteger(maxExpandedElements) || maxExpandedElements < 0) {
+        throw new TypeError("maxExpandedElements must be a non-negative integer");
+      }
+      if (typeof sbml !== "string" && !ArrayBuffer.isView(sbml) && !(sbml instanceof ArrayBuffer)) {
+        throw new TypeError("SBML source must be text or a BufferSource");
+      }
+      if (typeof format !== "string" || typeof location !== "string" || source !== void 0 && typeof source !== "string") {
+        throw new TypeError("format, location and source must be strings");
+      }
+      if (!documents || typeof documents !== "object" || Array.isArray(documents) || Object.values(documents).some((value) => typeof value !== "string")) {
+        throw new TypeError("documents must map source locations to XML strings");
+      }
+      const encoder2 = new TextEncoder();
+      const bytes = typeof sbml === "string" ? encoder2.encode(sbml) : ArrayBuffer.isView(sbml) ? new Uint8Array(sbml.buffer, sbml.byteOffset, sbml.byteLength) : new Uint8Array(sbml);
+      const config = encoder2.encode(JSON.stringify({
+        format,
+        location,
+        documents,
+        max_expanded_elements: maxExpandedElements,
+        render: { simulator, standalone, symbols, source }
+      }));
+      if (bytes.byteLength > 100 * 1024 * 1024 || config.byteLength > 100 * 1024 * 1024) {
+        throw new RangeError("The source or options exceed 100 MB");
+      }
+      const { allocate, deallocate, export_ode } = this.exports;
+      const input = allocate(bytes.length);
+      const options = allocate(config.length);
+      const words = allocate(16);
+      try {
+        this.bytes().set(bytes, input);
+        this.bytes().set(config, options);
+        const status = export_ode(input, bytes.length, options, config.length, words);
+        const [pointer, length] = new Uint32Array(this.exports.memory.buffer, words, 4);
+        try {
+          const text = new TextDecoder().decode(this.read(pointer, length));
+          if (status !== 1) throw new CompileError(text || "The source export failed");
+          return JSON.parse(text);
+        } finally {
+          deallocate(pointer, length);
+        }
+      } finally {
+        deallocate(words, 16);
+        deallocate(options, config.length);
+        deallocate(input, bytes.length);
+      }
+    }
+  };
+  async function createCompiler({ compiler }) {
+    if (!compiler) {
+      throw new TypeError("createCompiler needs compiler.wasm");
+    }
+    const module = await moduleOf(compiler);
+    const instance = await WebAssembly.instantiate(module, {});
+    return new Compiler(module, instance);
+  }
+
+  // petab.mjs
+  var PETAB_EXPORTS = [
+    "allocate",
+    "deallocate",
+    "memory",
+    "petab_open",
+    "petab_model",
+    "petab_requests",
+    "petab_evaluate",
+    "petab_close"
+  ];
+  var POOL_WINDOW = 256;
+  var PetabError = class extends Error {
+    constructor(message) {
+      super(message);
+      this.name = "PetabError";
+    }
+  };
+  function number(value) {
+    return typeof value === "number" ? value : Number(value);
+  }
+  function numbers(values) {
+    return Float64Array.from(values, number);
+  }
+  function fileText(name, content) {
+    if (typeof content === "string") return content;
+    if (content instanceof ArrayBuffer || ArrayBuffer.isView(content)) {
+      return new TextDecoder("utf-8", { fatal: true }).decode(content);
+    }
+    throw new TypeError(`the file ${name} is neither text nor bytes`);
+  }
+  function yamlName(names, yaml) {
+    if (yaml !== void 0) {
+      if (!names.includes(yaml)) throw new PetabError(`the files have no ${yaml}`);
+      return yaml;
+    }
+    const candidates = names.filter((name) => /\.ya?ml$/i.test(name));
+    if (candidates.length !== 1) {
+      throw new PetabError(
+        `name the YAML file of the problem (yaml), the files have ${candidates.length} of them`
+      );
+    }
+    return candidates[0];
+  }
+  function openOptions({ relativeTolerance, absoluteTolerance, dataAtChange, extension, ...rest }) {
+    const unknown = Object.keys(rest);
+    if (unknown.length > 0) throw new TypeError(`unknown options ${unknown.join(", ")}`);
+    const options = {};
+    if (relativeTolerance !== void 0) options.relative_tolerance = relativeTolerance;
+    if (absoluteTolerance !== void 0) options.absolute_tolerance = absoluteTolerance;
+    if (dataAtChange !== void 0) options.data_at_change = dataAtChange;
+    if (extension !== void 0) options.extension = extension;
+    return options;
+  }
+  var Interface = class {
+    constructor(compiler) {
+      const exports = compiler?.exports;
+      const missing = PETAB_EXPORTS.filter((name) => exports?.[name] === void 0);
+      if (missing.length > 0) {
+        throw new Error(
+          `compiler.wasm does not export ${missing.join(", ")}: it is built without the feature petab`
+        );
+      }
+      this.exports = exports;
+    }
+    /** Copies bytes into a new buffer of the module: `[pointer, length]`, `[0, 0]` for none. */
+    put(bytes) {
+      if (bytes.length === 0) return [0, 0];
+      const pointer = this.exports.allocate(bytes.length);
+      new Uint8Array(this.exports.memory.buffer, pointer, bytes.length).set(bytes);
+      return [pointer, bytes.length];
+    }
+    /** The bytes of a buffer the module gave, copied, and the buffer freed. */
+    take(pointer, length) {
+      if (pointer === 0 || length === 0) return new Uint8Array(0);
+      const bytes = new Uint8Array(this.exports.memory.buffer, pointer, length).slice();
+      this.exports.deallocate(pointer, length);
+      return bytes;
+    }
+    /**
+     * Calls a function of the module which writes `words` words of buffers to `out`, with the
+     * arguments `head` and the buffers of `inputs`; gives the status and the buffers it wrote.
+     */
+    call(name, head, inputs, words) {
+      const { allocate, deallocate } = this.exports;
+      const buffers = inputs.map((bytes) => this.put(bytes));
+      const out = allocate(4 * words);
+      try {
+        const status = this.exports[name](...head, ...buffers.flat(), out);
+        const header = Array.from(new Uint32Array(this.exports.memory.buffer, out, words));
+        const answers = [];
+        for (let k = 0; k < words; k += 2) answers.push(this.take(header[k], header[k + 1]));
+        return { status, answers };
+      } finally {
+        deallocate(out, 4 * words);
+        for (const [pointer, length] of buffers) if (pointer !== 0) deallocate(pointer, length);
+      }
+    }
+    /** A call of a JSON answer: the parsed answer, or the message as a `PetabError`. */
+    json(name, head, inputs) {
+      const { status, answers } = this.call(name, head, inputs, 2);
+      const text = new TextDecoder().decode(answers[0]);
+      if (status !== 1) throw new PetabError(text || `${name} failed`);
+      return JSON.parse(text);
+    }
+  };
+  async function windowed(items, window, work) {
+    const results = new Array(items.length);
+    let next = 0;
+    const lane = async () => {
+      while (next < items.length) {
+        const k = next;
+        next += 1;
+        results[k] = await work(items[k], k);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(window, items.length) }, lane));
+    return results;
+  }
+  function isFailure(error) {
+    return error instanceof EngineError || error?.name === "EngineError";
+  }
+  var nextPoolKey = 0;
+  var PetabProblem = class {
+    constructor(api, summary, engine) {
+      this.api = api;
+      this.handle = summary.handle;
+      this.models = summary.models;
+      this.parameters = summary.parameters;
+      this.nominal = numbers(summary.nominal);
+      this.lower = numbers(summary.lower);
+      this.upper = numbers(summary.upper);
+      this.nSimulations = summary.simulations;
+      this.nMeasurements = summary.measurements;
+      this.engine = engine;
+      this.closed = false;
+    }
+    /** Throws for a closed problem. */
+    checkOpen() {
+      if (this.closed) throw new Error("the problem is closed");
+    }
+    /** The JSON of a point: `null` for the nominal values. */
+    point(x) {
+      if (x === void 0 || x === null) return null;
+      const values = Array.from(x);
+      if (values.length !== this.parameters.length) {
+        throw new TypeError(
+          `the problem estimates ${this.parameters.length} parameters and the point has ${values.length} values`
+        );
+      }
+      if (values.some((value) => typeof value !== "number" || !Number.isFinite(value))) {
+        throw new TypeError("the values of a point are finite numbers");
+      }
+      return values;
+    }
+    /**
+     * The requests of `simulation/1` of the simulations at a point (the nominal values without
+     * one), each `{ model, request }` with the index of its model.
+     */
+    requests(x) {
+      this.checkOpen();
+      const point = this.point(x);
+      const text = point === null ? "" : JSON.stringify(point);
+      return this.api.json("petab_requests", [this.handle], [new TextEncoder().encode(text)]);
+    }
+    /**
+     * Simulates every simulation of the problem at a point (the nominal values without one):
+     * `[{ model, request, result }]` in the order of the simulations, the result
+     * `{ columns, nRows, values }` of the loader or `{ error }`, the message of an engine which
+     * failed. `signal` aborts the simulations not yet done.
+     */
+    async simulations(x, { signal } = {}) {
+      const planned = this.requests(x);
+      const results = await this.engine.simulate(planned, signal);
+      return planned.map(({ model, request }, k) => ({ model, request, result: results[k] }));
+    }
+    /**
+     * Evaluates the problem at a point (the nominal values without one), from the simulations of
+     * `simulations` at that point when given, else from its own: `llh`, `chi2`, `logPrior`,
+     * `logPriors` (by parameter), `unnormLogPosterior`, `simulated` and `sigma` (per measurement,
+     * `Float64Array`s), `failures` (`[{ simulation, message }]`) and `simulationTable`, the text
+     * of the simulation table of PEtab. A simulation which failed gives `NaN` for its
+     * measurements, and so a log-likelihood of `NaN`.
+     */
+    async evaluate(x, { simulations, signal } = {}) {
+      const point = this.point(x);
+      const done = simulations ?? await this.simulations(point ?? void 0, { signal });
+      return this.evaluateSimulations(point, done);
+    }
+    /** The evaluation from the simulations at a point, see `evaluate`; synchronous. */
+    evaluateSimulations(x, simulations) {
+      this.checkOpen();
+      const point = this.point(x);
+      if (!Array.isArray(simulations) || simulations.length !== this.nSimulations) {
+        throw new TypeError(`the problem has ${this.nSimulations} simulations`);
+      }
+      let n = 0;
+      const results = simulations.map(({ result }) => {
+        if (result.error !== void 0) return { error: String(result.error) };
+        n += result.values.length;
+        return { columns: result.columns, n_rows: result.nRows };
+      });
+      const values = new Float64Array(n);
+      let at = 0;
+      for (const { result } of simulations) {
+        if (result.error === void 0) {
+          values.set(result.values, at);
+          at += result.values.length;
+        }
+      }
+      const bytes = new Uint8Array(values.buffer);
+      if (!LITTLE_ENDIAN2) {
+        const view = new DataView(values.buffer);
+        for (let k = 0; k < values.length; k += 1) view.setFloat64(8 * k, values[k], true);
+      }
+      const input = new TextEncoder().encode(JSON.stringify({ x: point, results }));
+      const answer = this.api.json("petab_evaluate", [this.handle], [input, bytes]);
+      return {
+        llh: number(answer.llh),
+        chi2: number(answer.chi2),
+        logPrior: number(answer.log_prior),
+        logPriors: Object.fromEntries(answer.log_priors.map(([id, value]) => [id, number(value)])),
+        unnormLogPosterior: number(answer.unnorm_log_posterior),
+        simulated: numbers(answer.simulated),
+        sigma: numbers(answer.sigma),
+        failures: answer.failures.map(([simulation, message]) => ({ simulation, message })),
+        simulationTable: answer.simulation_table
+      };
+    }
+    /** Drops the problem, its plan in `compiler.wasm` and its models in the engine. */
+    close() {
+      if (this.closed) return;
+      this.closed = true;
+      this.api.exports.petab_close(this.handle);
+      this.engine.close();
+    }
+  };
+  var LITTLE_ENDIAN2 = new Uint8Array(new Float64Array([1]).buffer)[7] === 63;
+  var RuntimeEngine = class {
+    constructor(runtime, compiled) {
+      this.runtime = runtime;
+      this.compiled = compiled;
+      this.instances = [];
+    }
+    async open() {
+      for (const { wasm, description } of this.compiled) {
+        this.instances.push(await this.runtime.instantiate(wasm, description));
+      }
+    }
+    async simulate(planned, signal) {
+      const results = [];
+      for (const { model, request } of planned) {
+        signal?.throwIfAborted();
+        let instance = this.instances[model];
+        if (instance.trapped) {
+          const { wasm, description } = this.compiled[model];
+          instance = await this.runtime.instantiate(wasm, description);
+          this.instances[model] = instance;
+        }
+        try {
+          results.push(instance.simulate(request));
+        } catch (error) {
+          if (!isFailure(error)) throw error;
+          results.push({ error: error.message });
+        }
+      }
+      return results;
+    }
+    close() {
+      this.instances = [];
+    }
+  };
+  var PoolEngine = class {
+    constructor(pool, compiled) {
+      this.pool = pool;
+      this.compiled = compiled;
+      const id = nextPoolKey;
+      nextPoolKey += 1;
+      this.keys = compiled.map((_, k) => `petab-${id}-${k}`);
+    }
+    async open() {
+      for (const [k, { wasm, description }] of this.compiled.entries()) {
+        await this.pool.addModel(this.keys[k], wasm, description);
+      }
+    }
+    async simulate(planned, signal) {
+      return windowed(planned, POOL_WINDOW, async ({ model, request }) => {
+        try {
+          return await this.pool.simulate(this.keys[model], request, { signal });
+        } catch (error) {
+          if (!isFailure(error)) throw error;
+          return { error: error.message };
+        }
+      });
+    }
+    close() {
+      for (const key of this.keys) {
+        try {
+          this.pool.removeModel(key);
+        } catch {
+        }
+      }
+    }
+  };
+  async function openPetab({ compiler, runtime, pool, files, yaml, options = {} }) {
+    const api = new Interface(compiler);
+    if (runtime === void 0 === (pool === void 0)) {
+      throw new TypeError("openPetab simulates with a runtime or a pool, one of them");
+    }
+    if (!files || typeof files !== "object") throw new TypeError("openPetab needs the files");
+    const entries = files instanceof Map ? [...files.entries()] : Object.entries(files);
+    const texts = Object.fromEntries(entries.map(([name, content]) => [name, fileText(name, content)]));
+    const request = {
+      yaml: yamlName(Object.keys(texts), yaml),
+      files: texts,
+      options: openOptions(options)
+    };
+    const summary = api.json("petab_open", [], [new TextEncoder().encode(JSON.stringify(request))]);
+    const compiled = [];
+    try {
+      for (let k = 0; k < summary.models.length; k += 1) {
+        const { status, answers } = api.call("petab_model", [summary.handle, k], [], 4);
+        const text = new TextDecoder().decode(answers[0]);
+        if (status !== 1) throw new PetabError(text || `the model ${summary.models[k]} does not compile`);
+        compiled.push({ wasm: answers[1], description: JSON.parse(text) });
+      }
+      const engine = runtime !== void 0 ? new RuntimeEngine(runtime, compiled) : new PoolEngine(pool, compiled);
+      try {
+        await engine.open();
+      } catch (error) {
+        engine.close();
+        throw error;
+      }
+      return new PetabProblem(api, summary, engine);
+    } catch (error) {
+      api.exports.petab_close(summary.handle);
+      throw error;
+    }
   }
 
   // inline.mjs
