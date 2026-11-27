@@ -1,4 +1,4 @@
-// sbmlsim-core 0.31.1, the inline build of its JavaScript host (js/inline.mjs, js/build.mjs).
+// sbmlsim-core 0.33.0, the inline build of its JavaScript host (js/inline.mjs, js/build.mjs).
 // Generated, do not edit. MIT AND BSD-3-Clause AND LGPL-2.1-or-later, see LICENSE and THIRD_PARTY.md.
 var sbmlsimCore = (() => {
   var __defProp = Object.defineProperty;
@@ -995,7 +995,7 @@ var sbmlsimCore = (() => {
   }
 
   // panels.mjs
-  var CORE_VERSION = "0.31.1";
+  var CORE_VERSION = "0.33.0";
   var ENGINE = `sbmlsim-core ${CORE_VERSION}`;
   var BUNDLE_CONTRACT = "panelbundle/1";
   var PANEL_CONTRACT = "panel/1";
