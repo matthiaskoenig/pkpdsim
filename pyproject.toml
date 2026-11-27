@@ -107,8 +107,9 @@ dependencies = [
     # 0.44.0 the colour bars, ticks, markers, legends and texts of sbmlsim-core 0.31.1
     # 0.45.0 `display.relocated`, which names the folders of a staged run, 0.46.0 the
     # reductions and PK parameters of a fit in the engine and 0.47.0 the chart builder of
-    # the renderer of sbmlsim-core 0.33.0
-    "sbmlsim>=0.47.0",
+    # the renderer of sbmlsim-core 0.33.0; 0.48.0 fits a scan group in the engine,
+    # starts the pool of a run before its experiments and reads an SBML once
+    "sbmlsim>=0.48.0",
     # imported directly: the scripts and tests of the browser examples and, at runtime,
     # `pkpdsim.zonation.figures` (`color_scale`, `figure_geometry`); 0.29.1 no longer
     # reports a stall at a step which leaves the time unchanged; 0.30.0 keeps a legend
