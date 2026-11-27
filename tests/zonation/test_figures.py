@@ -1410,9 +1410,20 @@ def test_draw_lobule_draws_the_thirds_only_when_asked() -> None:
     thirds = _curves(_lobule(thirds=True))
     assert len(thirds) == 2
     for line, position in zip(thirds, (1.0 / 3.0, 2.0 / 3.0), strict=True):
-        assert np.column_stack([_x(line), _y(line)]) == pytest.approx(
-            lobule_isoline(position)
-        )
+        # the spec of a chart thins the points of a line which lie on the
+        # straight segments of the ring (sbmlsim 0.45): the points it keeps
+        # are points of the isoline, in its order, from its first to its last,
+        # which closes the ring on the first
+        isoline = lobule_isoline(position)
+        points = np.column_stack([_x(line), _y(line)])
+        kept = [
+            int(np.argmin(np.linalg.norm(isoline[:-1] - p, axis=1)))
+            for p in points[:-1]
+        ]
+        assert points[:-1] == pytest.approx(isoline[kept])
+        assert points[-1] == pytest.approx(isoline[-1])
+        assert kept == sorted(set(kept))
+        assert kept[0] == 0
         assert line["style"]["line"] == {"type": "dotted", "width": 0.7}
         assert line["style"]["color"] == "#404040"
     # the ring of 1/3 lies wholly outside the ring of 2/3, in that order
