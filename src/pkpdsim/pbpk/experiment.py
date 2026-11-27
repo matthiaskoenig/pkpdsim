@@ -58,6 +58,7 @@ from pkpdsim.pbpk.equilibration import (
     EQUILIBRATION_TOLERANCES,
     equilibrated_simulation,
 )
+from pkpdsim.pbpk.flat_model import preload
 from pkpdsim.pbpk.kidney_validity import (
     changes_text,
     covariate_changes,
@@ -429,6 +430,26 @@ class PBPKSimulationExperiment(PKPDSimulationExperiment):
     cardiac_colors: ClassVar[Mapping[str, str]] = impairment.HEART_FAILURE_COLORS
     renal_function_range: ClassVar[tuple[float, float] | None] = None
     lobe_map: ClassVar[Mapping[str, Mapping[str, float]]] = {}
+
+    @classmethod
+    def preload_in_forkserver(cls) -> None:
+        """Compile the builds of the class once for all workers of a pool.
+
+        The forkserver of a pool of sbmlsim calls it after it imported the
+        experiments (`SimulationExperiment.preload_in_forkserver`): it loads
+        the build of every sex the class simulates (`sex`,
+        `simulation_sexes`) into the cache of the flat models
+        (`pkpdsim.pbpk.flat_model.preload`), which the equilibration and the
+        validity of the kidney outflow read, so a worker inherits the
+        compiled model instead of compiling it (1 to 2 s of every worker of
+        a run of the HCTZ model of pkdb_models). A class without a model
+        object preloads nothing.
+        """
+        if not hasattr(cls, "pkpd_model"):
+            return
+        sexes = {Sex(cls.sex), *(Sex(s) for s in cls.simulation_sexes.values())}
+        for sex in sorted(sexes):
+            preload(cls.pkpd_model.model_path_of(sex))
 
     @override
     def initialize(self) -> None:

@@ -10,6 +10,7 @@ the steady state of the healthy condition `f = 1` (`X = 100`); a condition
 import dataclasses
 from collections.abc import Callable
 from pathlib import Path
+from types import MappingProxyType
 from typing import assert_type, cast
 
 import libsbml
@@ -55,6 +56,8 @@ from pkpdsim.pbpk import (
     build,
     ids,
 )
+from pkpdsim.pbpk import experiment as pbpk_experiment
+from pkpdsim.pbpk import flat_model as flat_model_module
 from pkpdsim.pbpk.builder import BuildResult
 from pkpdsim.pbpk.equilibration import (
     Equilibration,
@@ -63,6 +66,7 @@ from pkpdsim.pbpk.equilibration import (
     equilibrated_simulation,
 )
 from pkpdsim.pbpk.experiment import PBPKSimulationExperiment
+from pkpdsim.pbpk.flat_model import flat_model, loaded_model, preload
 from pkpdsim.sbml.domains import NONNEGATIVE
 
 from .conftest import definition, endogenous_reference_definition
@@ -1084,3 +1088,51 @@ def test_a_depot_dose_survives_the_equilibration(tmp_path: Path) -> None:
             rtol=1e-6,
             atol=1e-6 * values["plain"].max(),
         ), sid
+
+
+def test_the_forkserver_preloads_the_build_of_every_sex_of_an_experiment(
+    builds: dict[str, BuildResult], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The class of a study of men with a group of women preloads both builds."""
+    preloaded: list[Path] = []
+    monkeypatch.setattr(pbpk_experiment, "preload", preloaded.append)
+
+    class Mixed(PBPKSimulationExperiment):
+        pkpd_model = _model(builds["sink"], builds["sink_female"])
+        simulation_sexes = MappingProxyType({"women": Sex.FEMALE})
+
+    Mixed.preload_in_forkserver()
+    assert preloaded == [builds["sink_female"].flat_path, builds["sink"].flat_path]
+
+
+def test_a_class_without_a_model_object_preloads_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(pbpk_experiment, "preload", pytest.fail)
+
+    PBPKSimulationExperiment.preload_in_forkserver()
+
+
+def test_a_preloaded_model_is_taken_from_the_cache(
+    builds: dict[str, BuildResult],
+) -> None:
+    """A worker forked after the preload compiles nothing."""
+    path = builds["homeostasis"].flat_path
+    preload(path)
+    before = flat_model_module._loaded.cache_info()
+
+    loaded_model(path)
+    after = flat_model_module._loaded.cache_info()
+    assert (after.hits, after.misses) == (before.hits + 1, before.misses)
+
+
+def test_a_model_with_algebraic_rules_is_parsed_only(
+    builds: dict[str, BuildResult], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The core engine starts threads, the forkserver must not run any."""
+    path = builds["homeostasis"].flat_path
+    parsed = dataclasses.replace(flat_model(path), algebraic=True)
+    monkeypatch.setattr(flat_model_module, "flat_model", lambda _: parsed)
+    monkeypatch.setattr(flat_model_module, "loaded_model", pytest.fail)
+
+    preload(path)

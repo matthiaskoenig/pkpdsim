@@ -9,7 +9,8 @@ and modification time, so a file which is built again is read again) and
 gives all of it as a `FlatModel`; `loaded_model` compiles the model once
 (roadrunner at LLJIT `O0`, or the sbmlsim core engine for algebraic rules) with the
 selections of both, so a model with two builds compiles each build once for
-both checks. `math_names` is the one walker of the names a formula of the
+both checks. `preload` loads both in the forkserver of a pool, whose workers
+inherit them. `math_names` is the one walker of the names a formula of the
 model reads.
 
 The module imports sbmlsim and libsbml; it is internal to the library.
@@ -181,6 +182,23 @@ def loaded_model(model_path: Path) -> SBMLModel:
     """
     path = Path(model_path)
     return _loaded(path, path.stat().st_mtime_ns)
+
+
+def preload(model_path: Path) -> None:
+    """Load a flat model file into the caches of the process, for its child processes.
+
+    The forkserver of a pool loads the model once and the workers it forks
+    inherit `flat_model` and `loaded_model` of it, see
+    `pkpdsim.pbpk.experiment.PBPKSimulationExperiment.preload_in_forkserver`.
+    A model with algebraic rules is parsed only: the core engine starts
+    threads when it loads a model, and a fork of a process which runs threads
+    may deadlock.
+
+    Args:
+        model_path: the flat SBML model.
+    """
+    if not flat_model(model_path).algebraic:
+        loaded_model(model_path)
 
 
 @lru_cache(maxsize=4)
