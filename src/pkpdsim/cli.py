@@ -2598,7 +2598,9 @@ def pipeline_command(model: PKPDModel, args: Sequence[str] | None = None) -> Pat
                 soft_wrap=True,
             )
             needs = [
-                "every core" if step.cores is None else f"{given} cores",
+                "every core"
+                if step.cores is None
+                else f"{given} core{'' if given == 1 else 's'}",
                 *([f"{step.memory_gb:g} GB"] if step.memory_gb else []),
                 *([f"after {', '.join(step.after)}"] if step.after else []),
             ]
