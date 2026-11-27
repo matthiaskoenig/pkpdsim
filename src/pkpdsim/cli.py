@@ -21,6 +21,7 @@ run_sensitivity pkdb_models.models.hctz
 run_sensitivity pkdb_models.models.hctz sampling --workers 8
 run_pipeline pkdb_models.models.hctz --list
 run_pipeline pkdb_models.models.hctz --cores 12
+run_pipeline pkdb_models.models.hctz --jobs 1
 ```
 
 The package is imported and its model object `MODEL` gives everything which
@@ -98,9 +99,10 @@ per analysis next to the records of the run.
 
 `run_pipeline` (`pipeline_command`) runs the pipeline of the model
 (`pipeline` of the model object, see `pkpdsim.pipeline`): the commands of its
-steps one after the other, each in a process of its own, with the times, the
-cores and the memory of every step and the output of its process in a folder
-of the run below `pipeline/` of the results.
+steps, each in a process of its own and side by side as far as their steps
+`after`, their cores and their memory allow, with the times, the cores and the
+memory of every step and the output of its process in a folder of the run
+below `pipeline/` of the results.
 
 `--profile` anywhere after the model package runs a command under the
 sampling profiler of python 3.15 and writes its flame graph and statistics
@@ -2452,11 +2454,12 @@ def pipeline_parser(model: PKPDModel, steps: Sequence[str]) -> argparse.Argument
         prog=f"run_pipeline {model.package}",
         description=(
             "Run the pipeline of the model (`pipeline` of the model object, a "
-            "`pkpdsim.pipeline.Pipeline`): its steps, commands of pkpdsim, one "
-            "after the other, each in a process of its own, with the progress "
-            "on the console and the output, the times and the machine in a "
-            f"folder of the run below `{PIPELINE_DIR}/` of the results. The steps "
-            f"are {', '.join(steps) or 'none'}."
+            "`pkpdsim.pipeline.Pipeline`): its steps, commands of pkpdsim, each "
+            "in a process of its own and side by side as far as their steps "
+            "`after`, their cores and their memory allow, with the progress on "
+            "the console and the output, the times and the machine in a folder "
+            f"of the run below `{PIPELINE_DIR}/` of the results. The steps are "
+            f"{', '.join(steps) or 'none'}."
         ),
     )
     p.add_argument(
@@ -2464,8 +2467,25 @@ def pipeline_parser(model: PKPDModel, steps: Sequence[str]) -> argparse.Argument
         "--cores",
         type=int,
         default=available_cpus(),
-        help="the processes of a step, `{cores}` of the arguments of a step "
-        "(default: the CPUs available to the process, %(default)s)",
+        help="the cores the running steps share by their `cores`, `{cores}` of "
+        "the arguments of a step without `cores` (default: the CPUs available "
+        "to the process, %(default)s)",
+    )
+    p.add_argument(
+        "--memory",
+        type=float,
+        default=None,
+        help="the memory in GB the running steps share by their `memory_gb` "
+        "(default: the memory available at the start, `MemAvailable` on linux)",
+    )
+    p.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=None,
+        help="the most steps which run at the same time; 1 runs them one after "
+        "the other, each on the cores it is given, to time them alone (default: "
+        "as many as the cores and the memory allow)",
     )
     p.add_argument(
         "--steps",
@@ -2489,7 +2509,8 @@ def pipeline_parser(model: PKPDModel, steps: Sequence[str]) -> argparse.Argument
         "-k",
         "--keep-going",
         action="store_true",
-        help="run the steps after a step which failed, which are skipped without",
+        help="after a step failed, run the steps which are not `after` it; "
+        "without, every step which did not start is skipped",
     )
     p.add_argument(
         "-r",
@@ -2527,9 +2548,9 @@ def pipeline_command(model: PKPDModel, args: Sequence[str] | None = None) -> Pat
         The folder of the run.
 
     Raises:
-        SystemExit: with 1 if a step failed.
+        SystemExit: with 1 if a step failed, with 130 on an interrupt.
     """
-    from pkpdsim.pipeline import run_pipeline
+    from pkpdsim.pipeline import available_memory_gb, run_pipeline
 
     arguments = sys.argv[1:] if args is None else list(args)
     try:
@@ -2543,6 +2564,10 @@ def pipeline_command(model: PKPDModel, args: Sequence[str] | None = None) -> Pat
     options = p.parse_args(arguments)
     if options.cores < 1:
         p.error("--cores is at least 1")
+    if options.jobs is not None and options.jobs < 1:
+        p.error("--jobs is at least 1")
+    if options.memory is not None and not options.memory > 0:
+        p.error("--memory is more than 0")
     commands = [name for name in COMMANDS if name != "run_pipeline"]
     for step in pipeline.steps:
         if step.command not in commands:
@@ -2558,19 +2583,30 @@ def pipeline_command(model: PKPDModel, args: Sequence[str] | None = None) -> Pat
     if not steps:
         p.error("no step runs")
     results_dir = options.results_dir.resolve()
-    values = {"cores": options.cores, "results": results_dir}
     if options.list:
         display.section("Pipeline", icon=":gear:")
         for step in pipeline.steps:
             mark = "" if step in steps else "  (skipped)"
+            given = step.given_cores(options.cores)
+            values = {"cores": given, "results": results_dir}
             console.print(
                 f"[bold]{step.name}[/bold]{mark}: {step.command} {model.package} "
                 f"{' '.join(step.arguments(values))}",
                 soft_wrap=True,
             )
-            if step.description:
-                console.print(f"    {step.description}", style="dim")
+            needs = [
+                "every core" if step.cores is None else f"{given} cores",
+                *([f"{step.memory_gb:g} GB"] if step.memory_gb else []),
+                *([f"after {', '.join(step.after)}"] if step.after else []),
+            ]
+            console.print(
+                f"    {', '.join(needs)}"
+                + (f": {step.description}" if step.description else ""),
+                style="dim",
+                highlight=False,
+            )
         return results_dir / PIPELINE_DIR
+    memory = available_memory_gb() if options.memory is None else options.memory
     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     out = (options.output_dir or results_dir / PIPELINE_DIR) / stamp
     display.section(model.title, icon=":pill:")
@@ -2579,18 +2615,29 @@ def pipeline_command(model: PKPDModel, args: Sequence[str] | None = None) -> Pat
             "pipeline": pipeline.description or model.package,
             "steps": ", ".join(step.name for step in steps),
             "cores": options.cores,
+            "memory": f"{memory:.1f} GB" if math.isfinite(memory) else "no bound",
+            "jobs": options.jobs or "no bound",
         }
     )
     display.link("run", out)
-    results = run_pipeline(
-        model.package,
-        "Pipeline",
-        steps,
-        results_dir,
-        out,
-        cores=options.cores,
-        keep_going=options.keep_going,
-    )
+    try:
+        results = run_pipeline(
+            model.package,
+            "Pipeline",
+            steps,
+            results_dir,
+            out,
+            cores=options.cores,
+            memory_gb=memory,
+            jobs=options.jobs,
+            keep_going=options.keep_going,
+        )
+    except KeyboardInterrupt:
+        console.print(
+            f"The pipeline was interrupted, see the logs in {out / 'logs'}.",
+            style="error",
+        )
+        sys.exit(130)
     display.link("timings", out / "timings.tsv")
     failed = [result.step.name for result in results if result.status == "failed"]
     if failed:
@@ -2717,8 +2764,8 @@ COMMANDS: dict[str, Command] = {
         ),
         Command(
             name="run_pipeline",
-            description="Run the pipeline of a model: its commands one after "
-            "the other, timed and logged.",
+            description="Run the pipeline of a model: its commands, side by "
+            "side where they may, timed and logged.",
             function=pipeline_command,
             fits=False,
         ),
