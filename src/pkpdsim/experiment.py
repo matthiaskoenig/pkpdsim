@@ -37,9 +37,10 @@ gives every experiment the setting `uncertainty`, a
 `SimulationExperiment` runs every simulation over the draws and turns the curves
 of the simulations into bands (`sbmlsim.experiment.draws.apply_uncertainty`), so
 an experiment needs no code of its own for it. A figure which an experiment draws
-itself (`figures_mpl`) reads `uncertainty` and draws the bands of the draws, e.g.
-with `sbmlsim.result.scan.point_band(result, ..., across=self.across())`; a
-function of the results (`add_function`) is a band of the draws as well.
+itself (a `Chart` of `figures_mpl`) reads `uncertainty` and draws the bands of
+the draws, e.g. with `sbmlsim.result.scan.point_band(result, ...,
+across=self.across())`; a function of the results (`add_function`) is a band of
+the draws as well.
 
 A dose after the first one adds to its dose state (`add_doses`): the rest of the
 earlier doses which is not yet dissolved, absorbed or infused stays, which a

@@ -2,10 +2,11 @@
 
 import numpy as np
 import pytest
-from matplotlib.path import Path as MplPath
 
 from pkpdsim.pbpk.visual.body import Body, Individual, body_strip, reference_body
 from pkpdsim.sex import Sex
+
+from .polygon import contains_points
 
 
 def _area(subs: list[np.ndarray]) -> float:
@@ -59,10 +60,9 @@ def test_a_smaller_liver_is_drawn_smaller() -> None:
 )
 def test_the_organs_stay_in_the_body(individual: Individual) -> None:
     body = Body(individual)
-    outline = MplPath(body.outline)
     for key, pieces in body.organs.items():
         for piece in pieces:
-            assert outline.contains_points(piece).all(), key
+            assert contains_points(body.outline, piece).all(), key
 
 
 def test_obesity_widens_the_trunk_not_the_organs() -> None:

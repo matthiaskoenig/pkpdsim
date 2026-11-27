@@ -6,8 +6,8 @@ checks of the registry do not see them; `BROKEN` is a registry with them.
 
 from types import MappingProxyType
 
-from matplotlib.figure import Figure as FigureMPL
 from sbmlsim.experiment import SimulationExperiment
+from sbmlsim.plot import Chart
 from sbmlsim.simulation import Simulation
 
 from pkpdsim_toy.experiments.decay import ToyDecay
@@ -16,7 +16,7 @@ from pkpdsim_toy.experiments.decay import ToyDecay
 class ToyFigureFails(ToyDecay):
     """The decay, whose own figures fail when they are drawn."""
 
-    def figures_mpl(self) -> dict[str, FigureMPL]:
+    def figures_mpl(self) -> dict[str, Chart]:
         """Fail when the figures are drawn."""
         raise RuntimeError("the figures of ToyFigureFails fail")
 

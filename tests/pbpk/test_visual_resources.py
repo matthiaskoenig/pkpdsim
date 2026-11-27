@@ -3,9 +3,10 @@
 import re
 
 import pytest
-from matplotlib.path import Path as MplPath
 
 from pkpdsim.pbpk.visual.resources import anatomy, parse_d
+
+from .polygon import contains_points
 
 ORGANS = (
     "br",
@@ -53,10 +54,9 @@ def test_the_uberon_ids_are_terms_of_uberon(species: str, sex: str) -> None:
 @pytest.mark.parametrize("sex", ["male", "female"])
 def test_the_cavities_lie_inside_the_outline(sex: str) -> None:
     a = anatomy("human", sex)
-    body = MplPath(a.outline)
     for cavity in ("thorax", "abdomen"):
         for poly in a.cavities[cavity]:
-            assert body.contains_points(poly).all(), cavity
+            assert contains_points(a.outline, poly).all(), cavity
 
 
 def test_the_attribution_names_the_source_and_the_license() -> None:

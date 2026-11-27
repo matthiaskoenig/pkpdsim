@@ -57,7 +57,7 @@ run_simulation pkdb_models.models.hctz --action simulate --experiments all --unc
 run_simulation pkdb_models.models.hctz --action simulate --experiments all -u --draws 200 --seed 1 --quantiles 0.025 0.975
 ```
 
-The run reads the distribution of every parameter of `model_path`, the default variant, and draws them once in a Latin hypercube (100 draws, seed 1234, the quantiles 0.05 and 0.95 by default, `sbmlsim.experiment.draws.UncertaintySettings`). Every experiment gets the draws as its setting `uncertainty` and the `initialize` of `SimulationExperiment`, which `PKPDSimulationExperiment` derives from, turns its simulations into scans over the draws and its curves into bands, see [Running over the draws](https://matthiaskoenig.github.io/sbmlsim/uncertainty/#running-over-the-draws) of sbmlsim; an experiment therefore needs no code of its own for the bands. A figure which an experiment draws itself with matplotlib (`figures_mpl`) reads `self.uncertainty` (`None` without draws) and draws the bands with `point_band`:
+The run reads the distribution of every parameter of `model_path`, the default variant, and draws them once in a Latin hypercube (100 draws, seed 1234, the quantiles 0.05 and 0.95 by default, `sbmlsim.experiment.draws.UncertaintySettings`). Every experiment gets the draws as its setting `uncertainty` and the `initialize` of `SimulationExperiment`, which `PKPDSimulationExperiment` derives from, turns its simulations into scans over the draws and its curves into bands, see [Running over the draws](https://matthiaskoenig.github.io/sbmlsim/uncertainty/#running-over-the-draws) of sbmlsim; an experiment therefore needs no code of its own for the bands. A figure which an experiment draws itself (a `Chart` of `figures_mpl`) reads `self.uncertainty` (`None` without draws) and draws the bands with `point_band`, here into a plot `plot` of the chart:
 
 ```python
 # not executed
@@ -66,13 +66,12 @@ from sbmlsim.result.scan import point_band, point_timecourse
 run = self.uncertainty
 if run is None:
     time, values = point_timecourse(res, "[Cve_hctz]", dim_scan=k)
-    ax.plot(time, values, color=color)
+    plot.curve(time, values, color=color)
 else:
     time, lower, median, upper = point_band(
         res, "[Cve_hctz]", across=run.id, quantiles=run.quantiles, dim_scan=k
     )
-    ax.fill_between(time, lower, upper, color=color, alpha=0.2)
-    ax.plot(time, median, color=color)
+    plot.band(time, lower, upper, median=median, color=color)
 ```
 
 An extra action of `run_simulation` gets the settings of `--uncertainty` as `options.uncertainty`, and `PKPDModel.run_experiments(..., uncertainty=UncertaintySettings())` (`from sbmlsim.experiment.draws import UncertaintySettings`) runs experiments over the draws from a script, `sbmlsim.project.Project.run_experiments` with the settings and the result directories of the model.
