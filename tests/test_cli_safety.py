@@ -550,3 +550,36 @@ def test_the_report_of_an_identifiability_names_its_analysis(
     )
     spec = json.loads((report / "report" / "spec.json").read_text(encoding="utf-8"))
     assert spec["fit"] == str((report / "analysis").resolve())
+
+
+@pytest.mark.parametrize("inner", [None, "PK_1"])
+def test_the_links_of_a_staged_run_name_the_folder_of_the_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, inner: str | None
+) -> None:
+    """The links printed during the run name the folder it ends up in (sbmlsim#669).
+
+    A link to the staging folder no longer exists after the swap, and neither
+    does one to the folder of the result which is moved up out of it.
+    """
+    from io import StringIO
+
+    from rich.console import Console
+    from sbmlsim import display
+
+    from pkpdsim.cli import _staged
+
+    buffer = StringIO()
+    monkeypatch.setattr(display, "console", Console(file=buffer, width=400))
+    target = tmp_path / "all"
+
+    def run(staging: Path) -> None:
+        folder = staging if inner is None else staging / inner
+        folder.mkdir(parents=True)
+        (folder / "index.html").write_text("report", encoding="utf-8")
+        display.link("report", folder / "index.html")
+
+    _staged(target, run, kind="simulate", inner=inner)
+
+    uri = (target / "index.html").resolve().as_uri()
+    assert uri in buffer.getvalue()
+    assert (target / "index.html").is_file()

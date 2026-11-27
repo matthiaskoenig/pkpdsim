@@ -579,8 +579,14 @@ def _swap_result[T](target: Path, run: Callable[[Path], T], *, inner: str | None
     """Run and publish a result with its lock already held."""
     token = uuid.uuid4().hex
     staging = target.parent / f".{target.name}.{token}"
+    # the links the run prints name the folders the result ends up in, the
+    # result folder `inner` is moved up into the staging folder (sbmlsim#669)
+    moves: dict[Path | str, Path | str] = {staging: target}
+    if inner is not None:
+        moves[staging / inner] = target
     try:
-        result = run(staging)
+        with display.relocated(moves):
+            result = run(staging)
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise
@@ -1534,7 +1540,10 @@ def _fit(
         "mapping_figures": not options.no_mapping_figures,
     }
     try:
-        _execute(parser, "fit", spec, out, workers=options.cores)
+        # the links of the run name the folder the records are moved up into
+        # (sbmlsim#669)
+        with display.relocated({out / opid: out}):
+            _execute(parser, "fit", spec, out, workers=options.cores)
     finally:
         # the records of the fit where they were, in the folder of the fit id,
         # also of a fit which failed, so `--start <fit id>` finds them
@@ -1547,8 +1556,6 @@ def _fit(
                     style="error",
                     markup=False,
                 )
-    # the report of the kind named its folder before it was moved
-    display.link("results", out / "index.html")
     return {opid: out}
 
 
@@ -1899,8 +1906,6 @@ def report_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
         kind="report",
         inner=REPORT_NAME,
     )
-    # the report of the kind named its folder before it was moved
-    display.link("results", out / "index.html")
     return out
 
 
@@ -2066,8 +2071,6 @@ def identifiability_command(
         _relocated_input(report_run / SPEC_FILE, analysis, out / ANALYSIS_DIR)
 
     _staged(out, run, kind="identifiability", inner=f"{REPORT_RUN_DIR}/{REPORT_NAME}")
-    # the report of the kind named its folder before it was moved
-    display.link("results", out / "index.html")
     return out
 
 

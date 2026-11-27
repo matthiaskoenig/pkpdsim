@@ -105,7 +105,8 @@ dependencies = [
     # 0.43.0 places a legend inside where matplotlib would (`legend_loc`) and draws
     # the axis lines, caps, aspects, edges and colour maps of `sbmlsim-core>=0.30.0`;
     # 0.44.0 the colour bars, ticks, markers, legends and texts of sbmlsim-core 0.31.1
-    "sbmlsim>=0.44.0",
+    # and 0.45.0 `display.relocated`, which names the folders of a staged run
+    "sbmlsim>=0.45.0",
     # imported directly: the scripts and tests of the browser examples and, at runtime,
     # `pkpdsim.zonation.figures` (`color_scale`, `figure_geometry`); 0.29.1 no longer
     # reports a stall at a step which leaves the time unchanged; 0.30.0 keeps a legend
