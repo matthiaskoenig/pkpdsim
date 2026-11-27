@@ -168,9 +168,6 @@ dev = [
     "zensical>=0.0.69",
     "mkdocstrings-python>=2.0.9",
     "pyyaml>=6.0.3",
-    # the tests of the outlines of the bodies (`matplotlib.path`) and of the hook
-    # `figures_mpl()` of a simulation experiment; no module of pkpdsim imports it
-    "matplotlib>=3.11.2",
 ]
 
 [project.scripts]

@@ -1641,7 +1641,6 @@ amici = [
 ]
 dev = [
     { name = "bump-my-version" },
-    { name = "matplotlib" },
     { name = "mkdocstrings-python" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -1666,7 +1665,6 @@ requires-dist = [
     { name = "contourpy", specifier = ">=1.4.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "libroadrunner", specifier = ">=2.12.0.dev714", index = "https://matthiaskoenig.github.io/roadrunner-wheels/simple/" },
-    { name = "matplotlib", marker = "extra == 'dev'", specifier = ">=3.11.2" },
     { name = "mkdocstrings-python", marker = "extra == 'dev'", specifier = ">=2.0.9" },
     { name = "numpy", specifier = ">=2.5.3" },
     { name = "pandas", specifier = ">=3.0.6" },
