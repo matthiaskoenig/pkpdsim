@@ -581,7 +581,7 @@ def _swap_result[T](target: Path, run: Callable[[Path], T], *, inner: str | None
     staging = target.parent / f".{target.name}.{token}"
     # the links the run prints name the folders the result ends up in, the
     # result folder `inner` is moved up into the staging folder (sbmlsim#669)
-    moves = {staging: target}
+    moves: dict[Path | str, Path | str] = {staging: target}
     if inner is not None:
         moves[staging / inner] = target
     try:
