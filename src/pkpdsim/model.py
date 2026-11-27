@@ -82,9 +82,9 @@ if TYPE_CHECKING:
 #: the actions of the `run` command of a model, see `pkpdsim.cli`
 RUN_ACTIONS: tuple[str, ...] = ("simulate", "list_experiments", "factory", "all")
 
-#: the processes of the scans of a run of the experiments of a model by
-#: default: serially, the experiments in a pool (a worker per four experiments,
-#: at most one per CPU, see `PKPDModel.run_experiments`)
+#: the processes of an extra action of a run of the option `--workers model`:
+#: serially (the experiments of the run itself in a pool of a worker per four
+#: experiments, at most one per CPU, see `pkpdsim.cli.run_workers`)
 RUN_WORKERS = 1
 
 #: the settings of the simulator of a model which does not give its own
@@ -978,7 +978,7 @@ class PKPDModel(Project):
         figure_formats: Sequence[str] | None = None,
         simulator: SimulatorSettings | None = None,
         n_workers: int | None = None,
-        scan_workers: int | None = RUN_WORKERS,
+        scan_workers: int | None = None,
         uncertainty: UncertaintySettings | None = None,
     ) -> Path:
         """Run simulation experiments and create their report.
@@ -1007,9 +1007,13 @@ class PKPDModel(Project):
                 (`None`), `1` runs every experiment in this process, see
                 `Project.run_experiments`. A pool needs the guard
                 `if __name__ == "__main__":` in the script of the run.
-            scan_workers: the processes of the scans of an experiment,
-                serially by default (`RUN_WORKERS`); `None` takes `n_workers`,
-                the processes of the whole run as sbmlsim counts them.
+            scan_workers: the workers of the scans of an experiment, the
+                choice of sbmlsim by default (`None`, see
+                `Project.run_experiments`): the engine core runs a scan on
+                threads, a worker of the pool on its share of the CPUs, and
+                another engine on `n_workers`, the processes of the whole run
+                as sbmlsim counts them; `1` runs every scan serially, on one
+                thread of the engine core.
             uncertainty: run the experiments over the draws of the fitted
                 parameters of the model (`sbmlsim.experiment.draws`), `None`
                 runs them once.
@@ -1046,7 +1050,7 @@ class PKPDModel(Project):
         figure_formats: Sequence[str] | None = None,
         simulator: SimulatorSettings | None = None,
         n_workers: int | None = None,
-        scan_workers: int | None = RUN_WORKERS,
+        scan_workers: int | None = None,
         uncertainty: UncertaintySettings | None = None,
     ) -> Path:
         """Run simulation experiments and collect their figures.

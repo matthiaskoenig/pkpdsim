@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 from sbmlsim.experiment import ExperimentRunError
-from sbmlsim.project import SimulatorSettings
+from sbmlsim.project import Project, SimulatorSettings
 
 from pkpdsim_toy import MODEL
 from pkpdsim_toy.broken import ToyCannotInitialize, ToyFigureFails, ToyRefusedUnit
@@ -63,14 +63,37 @@ def test_a_run_takes_other_simulator_settings(
     monkeypatch.setattr(SimulatorSettings, "simulator", create)
     other = SimulatorSettings(relative_tolerance=1e-9)
     MODEL.run_experiments(
-        ToyDecay, output_dir=tmp_path, simulator=other, n_workers=2, scan_workers=None
+        ToyDecay, output_dir=tmp_path, simulator=other, n_workers=2, scan_workers=3
     )
-    assert seen == [(other, 2)]
-    # the scans serially by default, the experiments in a pool
+    assert seen == [(other, 3)]
+    # the scans serially on request
+    MODEL.run_experiments(
+        ToyDecay, output_dir=tmp_path / "serial", n_workers=2, scan_workers=1
+    )
+    assert seen[-1] == (MODEL.simulator, 1)
+
+
+def test_the_scans_of_a_run_are_the_choice_of_sbmlsim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run of a model does not hold the scans to one worker.
+
+    `scan_workers=1` held every worker of the engine core to one thread; by
+    default sbmlsim chooses, which gives the engine core the share of a
+    worker of the CPUs.
+    """
+    given: list[dict[str, object]] = []
+
+    def run_experiments(self: object, *args: object, **kwargs: object) -> None:
+        given.append(kwargs)
+
+    monkeypatch.setattr(Project, "run_experiments", run_experiments)
     MODEL.run_experiments(ToyDecay, output_dir=tmp_path / "pool", n_workers=2)
-    assert seen[-1] == (MODEL.simulator, 1)
-    MODEL.run_experiments(ToyDecay, output_dir=tmp_path / "model")
-    assert seen[-1] == (MODEL.simulator, 1)
+    MODEL.run_simulation_experiments([ToyDecay], output_dir=tmp_path / "all")
+    assert [(g["n_workers"], g["scan_workers"]) for g in given] == [
+        (2, None),
+        (None, None),
+    ]
 
 
 def test_a_failing_experiment_is_reported_after_the_run(tmp_path: Path) -> None:
