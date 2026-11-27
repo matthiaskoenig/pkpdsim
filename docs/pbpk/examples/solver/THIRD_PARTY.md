@@ -13,7 +13,7 @@ The code of sbmlsim-core is MIT licensed (`LICENSE`). `engine.wasm`, which `sbml
 
 So `engine.wasm` is under `MIT AND BSD-3-Clause AND LGPL-2.1-or-later`, and so are the packages which build or contain it: the crate `sbmlsim-csolvers`, which compiles the libraries, the crates `sbmlsim-host` and `sbmlsim-cli`, which embed `engine.wasm`, and the JavaScript package, whose runtime is `engine.wasm`. A native build which links `sbmlsim-csolvers` (the native engine, its tests) contains the libraries as well.
 
-`plot.wasm` (the crate `sbmlsim-plot-wasm`, the renderer of the figures of sbmlsim) contains the crate charton 0.9.1 (Apache-2.0) and permissive crates whose Apache-2.0 or MIT option is used (section Figures below), so the packages which carry it, `sbmlsim-host`, `sbmlsim-cli` and the JavaScript package, are under `MIT AND BSD-3-Clause AND LGPL-2.1-or-later AND Apache-2.0`. The python package also links the crate `sbmlsim-plot` natively with its feature `png` (resvg and the crates of the section PNG of the figures, among them arrayref under BSD-2-Clause, slotmap and zlib-rs under Zlib, yoke and zerofrom under Unicode-3.0) and embeds the font Inter (OFL-1.1), so its wheel is under `MIT AND BSD-3-Clause AND LGPL-2.1-or-later AND Apache-2.0 AND BSD-2-Clause AND Zlib AND Unicode-3.0 AND OFL-1.1`; this file, which the wheel carries, has every one of these license texts.
+`plot.wasm` (the crate `sbmlsim-plot-wasm`, the renderer of the figures of sbmlsim) contains the crate charton 0.9.1 (Apache-2.0) and permissive crates whose Apache-2.0 or MIT option is used (section Figures below), so the packages which carry it, `sbmlsim-host`, `sbmlsim-cli` and the JavaScript package, are under `MIT AND BSD-3-Clause AND LGPL-2.1-or-later AND Apache-2.0`. The python package also links the crate `sbmlsim-plot` natively with its feature `png` (resvg and the crates of the section PNG of the figures, among them arrayref under BSD-2-Clause, slotmap and zlib-rs under Zlib, yoke and zerofrom under Unicode-3.0) and embeds the fonts Inter, Noto Sans Mono and Noto Sans Math (OFL-1.1), so its wheel is under `MIT AND BSD-3-Clause AND LGPL-2.1-or-later AND Apache-2.0 AND BSD-2-Clause AND Zlib AND Unicode-3.0 AND OFL-1.1`; this file, which the wheel carries, has every one of these license texts.
 
 KLU and BTF are under the GNU Lesser General Public License 2.1 or later and are linked statically into `engine.wasm`. Their complete source is in the submodule at the commit above, and the complete source of `engine.wasm` and its build are in this repository (`cargo build`, see the README: the build script of `sbmlsim-host`, or `SBMLSIM_CORE_WASM_DIR` for an `engine.wasm` built otherwise), so a recipient can modify KLU or BTF, build `engine.wasm` again and use it with the hosts in place of the distributed one.
 
@@ -1128,10 +1128,111 @@ The feature `png` of the crate `sbmlsim-plot` (native builds only, never in a wa
 
 The PNG is drawn with the font Inter 4.001, which the binary embeds: `crates/plot/fonts/Inter-Regular.ttf` is the copy of Inter 4.001 which the crate charton 0.9.1 ships (`assets/fonts/Inter-Regular.ttf`) and `crates/plot/fonts/Inter-Bold.ttf` is of the release v4.1 of https://github.com/rsms/inter (font version 4.001). Inter is under the SIL Open Font License 1.1, whose text is `crates/plot/fonts/LICENSE` and is copied below.
 
+Since 0.31.1 the binary also embeds subsets of Noto Sans Mono 2.006 (Regular and Bold, `crates/plot/fonts/NotoSansMono-Regular.ttf` and `NotoSansMono-Bold.ttf`, the monospace text of a figure) and of Noto Sans Math 2.001 (`crates/plot/fonts/NotoSansMath-Regular.ttf`, the arrows and the mathematical operators Inter has not), written by `crates/plot/fonts/subset.py` from the fonts of https://github.com/notofonts. They are under the SIL Open Font License 1.1 as well, with the notice `crates/plot/fonts/LICENSE-Noto`, copied below.
+
 ### Inter: `crates/plot/fonts/LICENSE`
 
 ```text
 Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/inter)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+http://scripts.sil.org/OFL
+
+-----------------------------------------------------------
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+-----------------------------------------------------------
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font creation
+efforts of academic and linguistic communities, and to provide a free and
+open framework in which fonts may be shared and improved in partnership
+with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded,
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under this license does not apply
+to any document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software components as
+distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to a
+new environment.
+
+"Author" refers to any designer, engineer, programmer, technical
+writer or other person who contributed to the Font Software.
+
+PERMISSION AND CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components,
+in Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+redistributed and/or sold with any software, provided that each copy
+contains the above copyright notice and this license. These can be
+included either as stand-alone text files, human-readable headers or
+in the appropriate machine-readable metadata fields within text or
+binary files as long as those fields can be easily viewed by the user.
+
+3) No Modified Version of the Font Software may use the Reserved Font
+Name(s) unless explicit written permission is granted by the corresponding
+Copyright Holder. This restriction only applies to the primary font name as
+presented to the users.
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+Software shall not be used to promote, endorse or advertise any
+Modified Version, except to acknowledge the contribution(s) of the
+Copyright Holder(s) and the Author(s) or with their explicit written
+permission.
+
+5) The Font Software, modified or unmodified, in part or in whole,
+must be distributed entirely under this license, and must not be
+distributed under any other license. The requirement for fonts to
+remain under this license does not apply to any document created
+using the Font Software.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.
+```
+
+### Noto Sans Mono and Noto Sans Math: `crates/plot/fonts/LICENSE-Noto`
+
+```text
+Copyright 2015 Google LLC. All Rights Reserved. (Noto Sans Mono 2.006)
+Copyright 2018 Google LLC. All Rights Reserved. (Noto Sans Math 2.001)
+Copyright 2022 The Noto Project Authors (https://github.com/notofonts)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
