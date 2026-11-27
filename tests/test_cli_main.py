@@ -17,6 +17,7 @@ from pkpdsim.cli import (
     run_credibility_main,
     run_fit_main,
     run_identifiability_main,
+    run_petab_main,
     run_pipeline_main,
     run_report_main,
     run_sensitivity_main,
@@ -33,6 +34,7 @@ MAINS: dict[str, Main] = {
     "run_identifiability": run_identifiability_main,
     "run_credibility": run_credibility_main,
     "run_sensitivity": run_sensitivity_main,
+    "run_petab": run_petab_main,
     "run_pipeline": run_pipeline_main,
 }
 
@@ -152,7 +154,8 @@ def test_a_command_without_a_model_is_a_usage_error(
 
 
 @pytest.mark.parametrize(
-    "name", ["run_fit", "run_report", "run_identifiability", "run_credibility"]
+    "name",
+    ["run_fit", "run_report", "run_identifiability", "run_credibility", "run_petab"],
 )
 def test_the_fit_commands_need_fit_definitions(
     packages: Path, name: str, capsys: pytest.CaptureFixture[str]
