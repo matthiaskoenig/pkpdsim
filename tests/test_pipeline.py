@@ -373,6 +373,11 @@ def test_a_failed_step_skips_the_steps_which_did_not_start(tmp_path: Path) -> No
     assert [r.status for r in results] == ["failed", "ok", "skipped", "ok"]
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="the CPU time of a step is measured where its processes can be read, "
+    "not on Windows",
+)
 def test_the_cpu_time_of_steps_side_by_side_is_their_own(tmp_path: Path) -> None:
     steps = [
         fake("busy", "--burn", "1.0", cores=1),
