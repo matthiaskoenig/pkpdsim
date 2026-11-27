@@ -100,6 +100,26 @@ def test_the_pipeline_lists_its_steps(capsys: pytest.CaptureFixture[str]) -> Non
     assert "every core: the local sensitivity per sex" in text
 
 
+def test_the_pipeline_lists_the_cores_of_its_steps(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import dataclasses
+
+    import pkpdsim_sexes.pipeline as module
+
+    steps = tuple(
+        dataclasses.replace(step, cores=cores)
+        for step, cores in zip(module.PIPELINE.steps, (1, 2), strict=True)
+    )
+    monkeypatch.setattr(
+        module, "PIPELINE", dataclasses.replace(module.PIPELINE, steps=steps)
+    )
+    run_pipeline_main(["pkpdsim_sexes", "--list", "-c", "3", "-r", "/results"])
+    lines = capsys.readouterr().out.splitlines()
+    needs = [line.strip().split(":")[0] for line in lines if line.startswith("    ")]
+    assert needs == ["1 core", "2 cores"]
+
+
 def test_the_pipeline_runs_its_steps_timed_and_logged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
