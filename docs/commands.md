@@ -1,6 +1,6 @@
 # Commands
 
-pkpdsim installs eight commands which work with every model package. The model is the first argument of a command, the dotted name of its package; everything after it are the options of the command for that model:
+pkpdsim installs nine commands which work with every model package. The model is the first argument of a command, the dotted name of its package; everything after it are the options of the command for that model:
 
 - `run_simulation` creates the models with the factory, runs the simulation experiments and the extra actions of the model.
 - `run_fit` fits the parameters of a fit problem, analyses their identifiability, or adopts a finished fit.
@@ -8,6 +8,7 @@ pkpdsim installs eight commands which work with every model package. The model i
 - `run_identifiability` analyses the identifiability of a stored parameter set.
 - `run_credibility` assesses the contexts of use of a model against its adopted fits.
 - `run_sensitivity` runs the sensitivity analyses of a model over the groups of its simulations.
+- `run_petab` writes the fit problems of a model as PEtab v2, the training and the validation problem of each, with a README.
 - `run_pipeline` runs the pipeline of a model, its commands side by side where they may, timed and logged.
 - `pkpd_release` makes the complete release of the repository of a model.
 
@@ -18,6 +19,7 @@ run_report pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameter
 run_identifiability pkdb_models.models.hctz --subset PK results/fit/PK_<fit id>/parameters.json
 run_credibility pkdb_models.models.hctz
 run_sensitivity pkdb_models.models.hctz
+run_petab pkdb_models.models.hctz
 run_pipeline pkdb_models.models.hctz
 pkpd_release pkdb_models.models.hctz --version 0.8.0 --no-publish
 ```
@@ -26,7 +28,7 @@ A model package registers no commands of its own: the commands are defined once,
 
 ## The run layer of sbmlsim
 
-`run_simulation`, `run_fit`, `run_report`, `run_identifiability`, `run_credibility` and `run_sensitivity` are wrappers of the run layer of sbmlsim, `python -m sbmlsim.run` (see [Analyses, the run layer and simrun](https://matthiaskoenig.github.io/sbmlsim/run/) of sbmlsim, which describes the kinds, the output directory, the records of a run and the exit codes): they keep their options and defaults, translate them into the spec of a kind and run it with `sbmlsim.run.execute` on the model object of the package, the project `<package>:MODEL` (`pkpdsim.cli.project_reference`). A kind runs into an empty output directory and writes the records of the run next to its results: `run.json` (the kind, the versions, the host, the status), `spec.json` (the planned spec), `summary.json` and `progress.jsonl`. A command therefore runs the kind into the folder of its result below the folder it always wrote into. The run writes into a hidden staging directory next to that folder, `.<name>.<id>`, and replaces an earlier result only after it succeeded (the earlier result is renamed aside, the new one renamed into place, the earlier one removed); a run or a plan which fails leaves the earlier result available. Each staged output uses a persistent hidden `.<name>.lock` file next to the result. A concurrent command targeting that result exits with 1 and can be retried after the writer finishes. The next writer restores the sole backup of an interrupted publication if the result is missing and removes abandoned staging directories. A nonempty output must hold a recognizable result of the same kind. An error of the run itself keeps its traceback. A result which is not moved into its place exits with 1 and names the backup if it could not be restored. An output which equals, contains or lies inside an input (the fit records being read, the adopted fits `MODEL.fits_dir`, the factory directory, a build or a dedicated model data directory) is a usage error before anything runs, as is an output which equals or contains the model package. For example, `run_report --name <fit id> -o results/fit results/fit/<fit id>/parameters.json` would write the report to the fit it is reading. A spec which does not plan is a usage error (exit 2), a configuration error of the run itself exits with 1:
+`run_simulation`, `run_fit`, `run_report`, `run_identifiability`, `run_credibility`, `run_sensitivity` and `run_petab` are wrappers of the run layer of sbmlsim, `python -m sbmlsim.run` (see [Analyses, the run layer and simrun](https://matthiaskoenig.github.io/sbmlsim/run/) of sbmlsim, which describes the kinds, the output directory, the records of a run and the exit codes): they keep their options and defaults, translate them into the spec of a kind and run it with `sbmlsim.run.execute` on the model object of the package, the project `<package>:MODEL` (`pkpdsim.cli.project_reference`). A kind runs into an empty output directory and writes the records of the run next to its results: `run.json` (the kind, the versions, the host, the status), `spec.json` (the planned spec), `summary.json` and `progress.jsonl`. A command therefore runs the kind into the folder of its result below the folder it always wrote into. The run writes into a hidden staging directory next to that folder, `.<name>.<id>`, and replaces an earlier result only after it succeeded (the earlier result is renamed aside, the new one renamed into place, the earlier one removed); a run or a plan which fails leaves the earlier result available. Each staged output uses a persistent hidden `.<name>.lock` file next to the result. A concurrent command targeting that result exits with 1 and can be retried after the writer finishes. The next writer restores the sole backup of an interrupted publication if the result is missing and removes abandoned staging directories. A nonempty output must hold a recognizable result of the same kind. An error of the run itself keeps its traceback. A result which is not moved into its place exits with 1 and names the backup if it could not be restored. An output which equals, contains or lies inside an input (the fit records being read, the adopted fits `MODEL.fits_dir`, the factory directory, a build or a dedicated model data directory) is a usage error before anything runs, as is an output which equals or contains the model package. For example, `run_report --name <fit id> -o results/fit results/fit/<fit id>/parameters.json` would write the report to the fit it is reading. A spec which does not plan is a usage error (exit 2), a configuration error of the run itself exits with 1:
 
 | command | kind | output of the run | the spec |
 |---------|------|-------------------|----------|
@@ -38,6 +40,7 @@ A model package registers no commands of its own: the commands are defined once,
 | `run_report --adopted` | `report` | `results/report/<fit id>` | `{project, subset, adopted: true, mapping_figures}` |
 | `run_identifiability <parameters.json>` | `identifiability`, `report` | `results/identifiability/<name>/analysis`, `.../report` | the profile settings, `pids`, `fisher`; the report of the analysis |
 | `run_sensitivity` | `sensitivity` | `results/sensitivity` | `{project, analysis, analyses}` |
+| `run_petab` | `petab` | `results/petab/<subset>`, once per fit problem | `{project, subset, required_extension, split, unsupported}`, the input `fit` the record of the adopted fit of the subset |
 | `run_credibility` | `credibility` | `results/credibility` | `{project, verification, lock, uncertainty, draws, seed, variability, subjects, studies, source_commit}`, the input `record` the file of `--from-json` |
 
 The same run from the command line of sbmlsim, e.g. for a fit:
@@ -202,6 +205,25 @@ run_sensitivity pkdb_models.models.hctz --list                 # the analyses an
 
 The analyses are the names of the analyses of the runner (`analyses`), its `default` without one; an analysis the runner does not have is a usage error. `--name` (`-n`) selects the runner of a model which declares several, the only one or the one named `sensitivity` without it. The command runs the kind `sensitivity` of the run layer into `results/<name>` (`--output_dir` replaces it): the table of the parameters (`parameters.tsv`) and a folder per analysis with its tables and figures, next to the records of the run. `--workers` (`-w`) is the number of processes of the pool of the simulations; sbmlsim chooses without, every CPU for a large design.
 
+## run_petab
+
+Writes the fit problems of the model as problems of [PEtab v2](https://petab.readthedocs.io), the exchange format of parameter estimation problems, with the kind `petab` of the run layer (see [PEtab](https://matthiaskoenig.github.io/sbmlsim/petab/) of sbmlsim):
+
+```bash
+run_petab pkdb_models.models.hctz                              # every fit problem
+run_petab pkdb_models.models.hctz --subset PK                  # one fit problem
+run_petab pkdb_models.models.hctz --portable -o /tmp/petab     # for other tools
+```
+
+Every fit problem of the model (or those of `--subset`, repeatable) is written into `results/petab/<subset>` (`--output_dir` replaces `results/petab`) as two problems, next to the records of its run:
+
+- `training/problem.yaml`: the training data, the data the fit optimizes, with the parameters to estimate,
+- `validation/problem.yaml`: the validation data at the values of the fit, the parameters not estimated (`estimate=false`), the problem the fit is evaluated with. A fit problem without validation data has no validation problem.
+
+The values are the ones of the adopted fit of the subset (`MODEL.fits`, its record in `MODEL.fits_dir` is the input `fit` of the run); a fit problem without an adopted fit is written at the start values of its parameters, which the command prints and the README says. The outliers are in neither problem and the excluded data is no part of the fit.
+
+Each problem has a `README.md`: the fit and the values it starts from, its settings and parameters, the files, the data which is written and the data which is not by name (the other kind in the other problem, the outliers, the excluded data and the mappings PEtab cannot express), every gap between the fit and PEtab v2 with what it means for a tool other than sbmlsim, the measurements at the time of a change and how the problem is read back with `sbmlsim.fit.petab_v2.from_petab`. A fit mapping which PEtab cannot express, e.g. a PK parameter of a simulation or the points of a scan, is left out of the problem and named in its README (`--unsupported skip`, the default), so the fit problems of every model are written; `--unsupported raise` fails instead. `--portable` writes the extension `sbmlsim` as not required, for tools which fit the problem with the objective of PEtab; `--no-split` writes the one problem of every kind of data, `<subset>/problem.yaml`, whose extension says the kind of every mapping.
+
 ## run_pipeline
 
 The analysis of a model is a set of these commands: the experiments, their bands over the draws of the fitted parameters, the sensitivity analyses, the credibility, the refits of the adopted fits, the check of the factory. Which of them a model runs, with which options and on how much of the machine differs between models, so a model package declares its pipeline (`pkpdsim.pipeline.Pipeline`, `PIPELINE` in its `pipeline.py`) and its model object references it, `pipeline=".pipeline:PIPELINE"`:
@@ -322,6 +344,7 @@ Every command writes into the folders of the model object unless an option names
 - `run_identifiability`: `MODEL.identifiability_dir` (`results/identifiability/identifiability`, `--name` names the last folder), `--output_dir` replaces it.
 - `run_credibility`: `MODEL.credibility_dir` (`results/credibility`), `--output_dir` replaces it.
 - `run_sensitivity`: `results/<name>` (`results/sensitivity`), `--output_dir` replaces it.
+- `run_petab`: `results/petab/<subset>`, `--output_dir` replaces `results/petab`.
 - `run_pipeline`: `results/pipeline/<time>`, `--output_dir` replaces `results/pipeline`; its steps write where their arguments say.
 
 `results` is `MODEL.results_dir`, the folder `results` of the model package unless the model object sets `results_path`; so every result stays in the folder of its model.

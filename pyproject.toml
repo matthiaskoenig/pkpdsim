@@ -184,6 +184,7 @@ run_report = "pkpdsim.cli:run_report_main"
 run_identifiability = "pkpdsim.cli:run_identifiability_main"
 run_credibility = "pkpdsim.cli:run_credibility_main"
 run_sensitivity = "pkpdsim.cli:run_sensitivity_main"
+run_petab = "pkpdsim.cli:run_petab_main"
 run_pipeline = "pkpdsim.cli:run_pipeline_main"
 # the release of a model repository
 pkpd_release = "pkpdsim.release.cli:main"

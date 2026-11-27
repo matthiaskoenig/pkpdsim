@@ -1,6 +1,6 @@
 """The commands of the models, wrappers of the run layer of sbmlsim.
 
-pkpdsim installs seven console scripts which take the dotted name of a model
+pkpdsim installs eight console scripts which take the dotted name of a model
 package first and the options of the command for that model after it
 (`main`, `resolve_model`):
 
@@ -19,6 +19,8 @@ run_credibility pkdb_models.models.hctz
 run_credibility pkdb_models.models.hctz --from-json results/credibility/credibility.json -o /tmp/credibility
 run_sensitivity pkdb_models.models.hctz
 run_sensitivity pkdb_models.models.hctz sampling --workers 8
+run_petab pkdb_models.models.hctz
+run_petab pkdb_models.models.hctz --subset PK --portable -o /tmp/petab
 run_pipeline pkdb_models.models.hctz --list
 run_pipeline pkdb_models.models.hctz --cores 12
 run_pipeline pkdb_models.models.hctz --jobs 1
@@ -96,6 +98,15 @@ sensitivity analysis of the model over the groups of its simulations
 `sbmlsim.sensitivity.runner` or a reference to one) into the folder of its
 name in the results (`sensitivity/`), the table of its parameters and a folder
 per analysis next to the records of the run.
+
+`run_petab` (`petab_command`) runs the kind `petab` for every fit problem of
+the model (or those of `--subset`) into `petab/<subset>` of the results: the
+training problem `training/` and the validation problem `validation/`, each
+with its README (`sbmlsim.fit.petab_v2.to_petab_problems`), at the values of
+the adopted fit of the subset (its record is the input `fit`) or at the start
+values of a subset without one. A fit mapping PEtab cannot express is left
+out and named in the README (`--unsupported skip`, the default of the kind),
+so every model is written.
 
 `run_pipeline` (`pipeline_command`) runs the pipeline of the model
 (`pipeline` of the model object, see `pkpdsim.pipeline`): the commands of its
@@ -2445,6 +2456,146 @@ def sensitivity_command(model: PKPDModel, args: Sequence[str] | None = None) -> 
 
 
 # ----------------------------------------------------------------------------
+# run_petab
+# ----------------------------------------------------------------------------
+#: the folder of the PEtab problems in the results of a model
+PETAB_NAME = "petab"
+
+#: the folder of the problems in the output of the kind `petab`
+PETAB_RUN_DIR = "petab"
+
+
+def petab_parser(
+    model: PKPDModel, definitions: Mapping[str, FitDefinition]
+) -> argparse.ArgumentParser:
+    """Get the parser of the `petab` command of a model."""
+    keys = list(definitions)
+    p = argparse.ArgumentParser(
+        prog=f"run_petab {model.package}",
+        description=(
+            "Write the fit problems of the model as PEtab v2 with the kind "
+            "`petab` of the run layer: per fit problem the training problem "
+            "and the validation problem at the values of its adopted fit, the "
+            "start values of a fit problem without one, each with a README of "
+            "what it holds and what PEtab does not express."
+        ),
+    )
+    p.add_argument(
+        "-x",
+        "--subset",
+        action="append",
+        choices=keys,
+        default=None,
+        help="the fit problem to write, repeatable; every fit problem of the "
+        f"model by default ({', '.join(keys)})",
+    )
+    p.add_argument(
+        "-o",
+        "--output_dir",
+        type=Path,
+        default=model.results_dir / PETAB_NAME,
+        help="directory of the problems, a folder per fit problem, replaced if "
+        "it holds an earlier run (default: %(default)s)",
+    )
+    p.add_argument(
+        "--portable",
+        action="store_true",
+        help="write the extension `sbmlsim` as not required, i.e. problems "
+        "which other tools fit with the objective of PEtab",
+    )
+    p.add_argument(
+        "--no-split",
+        action="store_true",
+        help="write the one problem of every kind of data of a fit problem "
+        "instead of its training and its validation problem",
+    )
+    p.add_argument(
+        "--unsupported",
+        choices=("skip", "raise"),
+        default="skip",
+        help="what the export does about a fit mapping PEtab v2 cannot "
+        "express, e.g. a PK parameter: skip (the default) writes the problem "
+        "without it and names it in the README, raise fails the command",
+    )
+    return p
+
+
+def petab_command(model: PKPDModel, args: Sequence[str] | None = None) -> Path:
+    """Write the fit problems of a model as PEtab v2 problems.
+
+    Runs the kind `petab` of `sbmlsim.run` for every fit problem of the model
+    (or those of `--subset`) into `<output_dir>/<subset>` through a staged
+    swap: the training problem in `training/` and the validation problem in
+    `validation/` (`sbmlsim.fit.petab_v2.to_petab_problems`), each a
+    `problem.yaml` with its tables, its model and its `README.md`, next to the
+    records of the run. A fit problem with an adopted fit (`fits` of the
+    model object) is written at the values of its record, one without at the
+    start values of its parameters, which its README says.
+
+    Args:
+        model: the model, the model object of its package.
+        args: command line arguments, `sys.argv[1:]` by default.
+
+    Returns:
+        The directory of the problems.
+    """
+    arguments = sys.argv[1:] if args is None else list(args)
+    definitions = model.load_fit_definitions()
+    p = petab_parser(model, definitions)
+    options = p.parse_args(arguments)
+    subsets = list(dict.fromkeys(options.subset or definitions))
+    try:
+        adopted = model.adopted_fits()
+    except ValueError as err:
+        _failed(f"The adopted fits of '{model.name}' are not read: {err}")
+    records: dict[str, Path] = {}
+    for subset in subsets:
+        if subset not in adopted:
+            continue
+        try:
+            records[subset] = model.adopted_record(adopted[subset])
+        except (ValueError, FileNotFoundError) as err:
+            _failed(f"The adopted fit '{adopted[subset]}' is not read: {err}")
+    out = options.output_dir
+    directories = {subset: out / subset for subset in subsets}
+    for subset, directory in directories.items():
+        _check_out(p, model, directory, [records[subset]] if subset in records else [])
+    log.enable_rich_logging()
+    display.section(model.title, icon=":package:")
+    display.key_values(
+        {
+            subset: f"the adopted fit {adopted[subset]}"
+            if subset in records
+            else "the start values, no adopted fit"
+            for subset in subsets
+        }
+    )
+    reference = project_reference(model)
+    for subset, directory in directories.items():
+        spec: dict[str, Any] = {
+            "project": reference,
+            "subset": subset,
+            "required_extension": not options.portable,
+            "split": not options.no_split,
+            "unsupported": options.unsupported,
+        }
+        inputs = {"fit": records[subset]} if subset in records else None
+        _staged(
+            directory,
+            lambda staging, spec=spec, inputs=inputs: _execute(
+                p, "petab", spec, staging, inputs=inputs
+            ),
+            kind="petab",
+            inner=PETAB_RUN_DIR,
+        )
+    for directory in directories.values():
+        for readme in sorted(directory.glob("**/README.md")):
+            name = readme.parent.relative_to(out).as_posix()
+            display.link(name, readme)
+    return out
+
+
+# ----------------------------------------------------------------------------
 # run_pipeline
 # ----------------------------------------------------------------------------
 #: the folder of the runs of the pipeline in the results of a model
@@ -2768,6 +2919,13 @@ COMMANDS: dict[str, Command] = {
             fits=False,
         ),
         Command(
+            name="run_petab",
+            description="Write the fit problems of a model as PEtab v2, its "
+            "training and its validation problems, each with a README.",
+            function=petab_command,
+            fits=True,
+        ),
+        Command(
             name="run_pipeline",
             description="Run the pipeline of a model: its commands, side by "
             "side where they may, timed and logged.",
@@ -2955,6 +3113,11 @@ def run_credibility_main(argv: Sequence[str] | None = None) -> None:
 def run_sensitivity_main(argv: Sequence[str] | None = None) -> None:
     """The console script `run_sensitivity`, see `sensitivity_command`."""
     main("run_sensitivity", argv)
+
+
+def run_petab_main(argv: Sequence[str] | None = None) -> None:
+    """The console script `run_petab`, see `petab_command`."""
+    main("run_petab", argv)
 
 
 def run_pipeline_main(argv: Sequence[str] | None = None) -> None:

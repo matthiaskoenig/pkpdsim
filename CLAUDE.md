@@ -4,7 +4,7 @@ This file provides guidance when working with code in this repository.
 
 ## Project
 
-`pkpdsim` is a python package with the building blocks shared by physiologically based pharmacokinetic and pharmacodynamic (PBPK/PD) models in SBML, i.e., the models of [pkdb_models](https://github.com/matthiaskoenig/pkdb_models): what these models share moves here, so that the folder of a model imports nothing but itself and released packages ([pkdb_models#95](https://github.com/matthiaskoenig/pkdb_models/issues/95)). The five model commands take the dotted name of a model package first.
+`pkpdsim` is a python package with the building blocks shared by physiologically based pharmacokinetic and pharmacodynamic (PBPK/PD) models in SBML, i.e., the models of [pkdb_models](https://github.com/matthiaskoenig/pkdb_models): what these models share moves here, so that the folder of a model imports nothing but itself and released packages ([pkdb_models#95](https://github.com/matthiaskoenig/pkdb_models/issues/95)). The model commands (`pkpdsim.cli.COMMANDS`) take the dotted name of a model package first.
 
 ## Commands
 
