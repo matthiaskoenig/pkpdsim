@@ -105,14 +105,17 @@ dependencies = [
     # 0.43.0 places a legend inside where matplotlib would (`legend_loc`) and draws
     # the axis lines, caps, aspects, edges and colour maps of `sbmlsim-core>=0.30.0`;
     # 0.44.0 the colour bars, ticks, markers, legends and texts of sbmlsim-core 0.31.1
-    # and 0.45.0 `display.relocated`, which names the folders of a staged run
-    "sbmlsim>=0.45.0",
+    # 0.45.0 `display.relocated`, which names the folders of a staged run, 0.46.0 the
+    # reductions and PK parameters of a fit in the engine and 0.47.0 the chart builder of
+    # the renderer of sbmlsim-core 0.33.0
+    "sbmlsim>=0.47.0",
     # imported directly: the scripts and tests of the browser examples and, at runtime,
     # `pkpdsim.zonation.figures` (`color_scale`, `figure_geometry`); 0.29.1 no longer
     # reports a stall at a step which leaves the time unchanged; 0.30.0 keeps a legend
     # inside where matplotlib would and draws the axes darker; 0.31.1 draws colour bars
-    # of stops, fixed ticks, the markers of matplotlib and legend columns
-    "sbmlsim-core>=0.31.1",
+    # of stops, fixed ticks, the markers of matplotlib and legend columns; 0.32.0 reads
+    # the reductions of a curve of a fit; 0.33.0 is the renderer of sbmlsim 0.47.0
+    "sbmlsim-core>=0.33.0",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`)
     "pkpdutils>=1.7.1",
     # the study folders of format 2 of PK-DB, read as `pkdb check` reads them (`pkpdsim.data`)
