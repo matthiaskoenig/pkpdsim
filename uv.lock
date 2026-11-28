@@ -1471,7 +1471,7 @@ requires-dist = [
     { name = "pkdb", specifier = ">=0.12.20" },
     { name = "pkpdutils", specifier = ">=2.0.1" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.6.2" },
-    { name = "pymetadata", specifier = ">=0.9.0" },
+    { name = "pymetadata", specifier = ">=0.9.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.1.1" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.8.0" },
@@ -1736,7 +1736,7 @@ wheels = [
 
 [[package]]
 name = "pymetadata"
-version = "0.9.0"
+version = "0.9.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -1746,9 +1746,9 @@ dependencies = [
     { name = "rich" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/fe/f1/c9aef526ba02d63cad61d9e9d0d2707a1551d43e090610ad9b660a05f362/pymetadata-0.9.0.tar.gz", hash = "sha256:b000a445964bb6ccf8500421cfe07c8a986e076dfe0c56f4fb5ce19cdd8c3a2b", size = 5927656, upload-time = "2026-11-24T01:24:30.742Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1c/9f/063e0e208fa07f7ebffd4b3c3f8875aa1cc705089ced144716286f950bbe/pymetadata-0.9.1.tar.gz", hash = "sha256:f2974dc4ad0def4669e1327853b46652733ba35007f22c95be71aeadced7a445", size = 5929765, upload-time = "2026-11-28T12:20:37.983Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/22/95/8aa83a22e50ed2f10982d1f080820f0f0a2489c79a6ba2781292ee79c550/pymetadata-0.9.0-py3-none-any.whl", hash = "sha256:b2060f408c0a31929b0ddc30d7d2de1f6b643ec4bfcb2ec17e2b15d6b3ca3b44", size = 343070, upload-time = "2026-11-24T01:24:29.051Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/ab/501f9e38222080cba52f4f3078f78147c3211ab9defdc37194bf4d7b28f4/pymetadata-0.9.1-py3-none-any.whl", hash = "sha256:625639347469c33d01dd4df601ceadea6d7987af768f915b5a6e6b66a902d753", size = 343833, upload-time = "2026-11-28T12:20:36.353Z" },
 ]
 
 [[package]]

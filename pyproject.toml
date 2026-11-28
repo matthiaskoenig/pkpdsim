@@ -47,8 +47,10 @@ dependencies = [
     # pkpdsim reaches through `sbmlsim.release.archive`. 0.9.0 reads and writes
     # an archive through the Rust `pymetadata-core` and is therefore no longer
     # pure python: a platform without an abi3 wheel of the core needs a Rust
-    # toolchain, see the installation page and the release notes of 0.36.0
-    "pymetadata>=0.9.0",
+    # toolchain, see the installation page and the release notes of 0.36.0;
+    # 0.9.1 writes an ontology term as the url which resolves it
+    # (`OntologyTerm.url`, a bioregistry.io url for PBPKO)
+    "pymetadata>=0.9.1",
     # the simulator, the initial values are selections of a roadrunner model.
     # sbmlsim simulates with a build of the branch `develop` of libroadrunner,
     # which is not on PyPI, so every install names the index of its wheels, see

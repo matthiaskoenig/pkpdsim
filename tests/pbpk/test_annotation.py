@@ -12,6 +12,7 @@ Every compartment, species, parameter and reaction of the comp model and of
 the flat model has an SBO term and at least one ontology term.
 """
 
+import dataclasses
 import logging
 import re
 from pathlib import Path
@@ -425,6 +426,43 @@ def test_build_logs_no_annotation_errors(
         if r.levelno >= logging.ERROR or "MIRIAM" in r.getMessage()
     ]
     assert not errors, errors[:5]
+
+
+@pytest.mark.uncached_build
+def test_an_ontology_term_of_a_substance_is_written_as_its_url(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A term of pymetadata in the annotations of a substance is its url.
+
+    The species of the substance carry the url which resolves the term (COB,
+    which identifiers.org does not register, by bioregistry.io), not the bare
+    identifier `COB_0000013`, and the build logs no annotation error.
+    """
+    d = _variants()
+    substances = [
+        dataclasses.replace(s, annotations=[*s.annotations, (BQB.IS, PBPKO.MOLECULE)])
+        if s.sid == "drg"
+        else s
+        for s in d.substances
+    ]
+    with caplog.at_level(logging.WARNING):
+        result = build(dataclasses.replace(d, substances=substances), tmp_path)
+    errors = [
+        f"{r.name}: {r.getMessage()}"
+        for r in caplog.records
+        if r.levelno >= logging.ERROR
+    ]
+    assert not errors, errors[:5]
+
+    doc = libsbml.readSBMLFromFile(str(result.comp_path))
+    urls = {
+        url
+        for model in _models(doc)
+        for species in model.getListOfSpecies()
+        for url in _resources(species)
+    }
+    assert "https://bioregistry.io/COB:0000013" in urls
+    assert all(url.startswith("https://") for url in urls), sorted(urls)[:5]
 
 
 def test_requested_terms_documented() -> None:
