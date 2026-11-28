@@ -5,8 +5,8 @@ writes next to the SBML the differential equations as markdown, the antimony
 of the flat model, the two license texts and the COMBINE archive.
 `create_archive` does all of it, so the factory of a model is one call: it
 builds the definition and writes the rest with the archive writer of sbmlsim,
-`sbmlsim.release.archive.write_archive`, which imports `sbmlode` and
-`pymetadata` when it writes.
+`sbmlsim.release.archive.write_archive`, which writes the ODEs with
+`sbmlsim_core.OdeSystem` and the archive with `pymetadata`.
 
 A model with a build per sex builds the one definition for every sex
 (`sexes`): the build of the sex of the definition keeps its id (`<sid>.xml`,
@@ -159,7 +159,7 @@ def create_archive(
     """Build a definition and write its files and the COMBINE archive.
 
     Builds the definition into `model_output_dir` (`build`), writes the ODEs of
-    the flat model as markdown (`sbmlode`) and its antimony, the texts of CC
+    the flat model as markdown (`sbmlsim_core.OdeSystem`) and its antimony, the texts of CC
     BY-SA 4.0 and MIT (with the copyright) into the parent of the directory and
     the archive `<model>_model.omex` there, with the README, the licenses, the
     comp model, the flat model (the master entry), the markdown, the antimony,

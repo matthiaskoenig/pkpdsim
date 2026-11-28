@@ -109,7 +109,6 @@ VERSIONS = (
     "sbmlsim",
     "sbmlsim-core",
     "sbmlutils",
-    "sbmlode",
     "pymetadata",
     "pkpdutils",
     "libroadrunner",

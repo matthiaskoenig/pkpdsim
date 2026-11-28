@@ -39,8 +39,9 @@ dependencies = [
     # the wide math of sbmlode 0.3.3, which `sbmlutils.converters.ode`
     # re-exports module for module, see the floor of sbmlsim below; 0.18.0
     # drops the integrations which are not about SBML, none of which pkpdsim
-    # uses, and prints its output on a rich console)
-    "sbmlutils>=0.18.0",
+    # uses, and prints its output on a rich console; 0.19.0 writes the ODEs of a model
+    # with the generator of sbmlsim-core and no longer depends on sbmlode)
+    "sbmlutils>=0.19.0",
     # the PBPKO terms of the annotations of a library model (`pkpdsim.pbpk.annotation`);
     # its `pymetadata.omex` also writes the COMBINE archive of a model, which
     # pkpdsim reaches through `sbmlsim.release.archive`. 0.9.0 reads and writes
@@ -112,8 +113,9 @@ dependencies = [
     # takes the chart builder from sbmlsim-core 0.34.0, 0.50.0 the curves of a scan
     # between its points, the forkserver hook `preload_in_forkserver` and pkpdutils 2.0.0;
     # 0.52.0 the sensitivity analysis in sbmlsim-core (no SALib) and the PEtab export;
-    # 0.53.0 reads and evaluates a PEtab problem in sbmlsim-core
-    "sbmlsim>=0.53.0",
+    # 0.53.0 reads and evaluates a PEtab problem in sbmlsim-core, 0.54.0 every problem
+    # of the PEtab benchmark collection in sbmlsim-core 0.40.0
+    "sbmlsim>=0.54.0",
     # imported directly: the scripts and tests of the browser examples and, at runtime,
     # `pkpdsim.zonation.figures` (`color_scale`, `figure_geometry`); 0.29.1 no longer
     # reports a stall at a step which leaves the time unchanged; 0.30.0 keeps a legend
@@ -123,8 +125,10 @@ dependencies = [
     # 0.34.0 carries the chart builder (`sbmlsim_core.chart`), 0.35.0 thins in rust,
     # 0.37.0 the sensitivity analysis, compact markers and caps of matplotlib's capsize;
     # 0.38.0 reads and evaluates a PEtab v2 problem in rust (`sbmlsim_core.petab`),
-    # 0.39.0 in JavaScript as well
-    "sbmlsim-core>=0.39.0",
+    # 0.39.0 in JavaScript as well; 0.40.0 flattens `comp` and fits a PEtab problem in a
+    # page, 0.41.0 compiles the batched kernel and 0.42.0 holds the statistics of the
+    # analyses of sbmlsim (`sbmlsim_core.stats`)
+    "sbmlsim-core>=0.42.0",
     # the non-compartmental analysis of the scans of a model (`pkpdsim.pk`); 2.0.0
     # draws its figures with sbmlsim-core and no longer pulls in matplotlib; 2.0.1 the
     # error caps of matplotlib's capsize
