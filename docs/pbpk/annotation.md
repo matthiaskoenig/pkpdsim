@@ -28,7 +28,7 @@ The model carries `PHYSIOLOGICALLY_BASED_PHARMACOKINETIC_MODEL` and `WHOLE_BODY_
 
 ## Resource format
 
-Every resource of a collection which identifiers.org registers is written as its identifiers.org `collection/term`, the format of `pkpdsim.annotations`: `uberon/UBERON:0002107`, `uniprot/P08684`; sbmlutils writes the identifiers.org url. identifiers.org does not register PBPKO, so pymetadata cannot parse `pbpko/PBPKO:00558` (it logs a MIRIAM error and writes an identifiers.org url which does not resolve). A PBPKO term is therefore written as its bioregistry url, `https://bioregistry.io/PBPKO:00558`, which resolves and which sbmlutils writes as given (as the apixaban model of pkdb_models does). A build logs no annotation error.
+Every resource of a collection which identifiers.org registers is written as its identifiers.org `collection/term`, the format of `pkpdsim.annotations`: `uberon/UBERON:0002107`, `uniprot/P08684`; sbmlutils writes the identifiers.org url. identifiers.org does not register PBPKO, so a PBPKO term is written as the url which resolves it, the `url` of the term of pymetadata (`PBPKO.LIVER_COMPARTMENT.url`), which is its bioregistry url, `https://bioregistry.io/PBPKO:00558`; sbmlutils writes it as given. A model which annotates with a term of pymetadata directly, `(BQB.IS, PBPKO.MOLECULE)`, gets the same url, since pymetadata 0.9.1 takes a term as its `url`. A build logs no annotation error.
 
 ## Terms requested upstream
 

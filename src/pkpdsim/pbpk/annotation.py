@@ -16,9 +16,11 @@ broader PBPKO term and names the missing one (`requested`); every missing
 term is listed in `docs/pbpk/annotation.md` ("terms requested upstream",
 `requested_terms`).
 
-Every resource is written in one format, the identifiers.org
-`collection/term` of `pkpdsim.annotations`: `pbpko/PBPKO:00558`,
-`uberon/UBERON:0002107`, `uniprot/P08684`.
+Every resource of a collection which identifiers.org registers is written
+in the `collection/term` of `pkpdsim.annotations`: `uberon/UBERON:0002107`,
+`uniprot/P08684`. identifiers.org does not register PBPKO, so a PBPKO term
+is the url which resolves it, `PBPKO.<name>.url` of pymetadata:
+`https://bioregistry.io/PBPKO:00558`.
 
 The qualifiers: `BQB.IS` for what the element is (the PBPKO term, the kind's
 terms, the protein of a process, the substance of a species); the location
@@ -89,9 +91,6 @@ __all__ = [
     "requested_terms",
 ]
 
-PBPKO_URL = "https://bioregistry.io/"
-"""The prefix of the resources of PBPKO terms, `https://bioregistry.io/PBPKO:00558`."""
-
 Term = tuple[BQB, str]
 """An annotation: the qualifier and the resource, `collection/term`."""
 
@@ -103,17 +102,14 @@ def pbpko(name: str) -> str:
         name: the name of the term in the pymetadata enum, `LIVER_COMPARTMENT`.
 
     Returns:
-        The resource `https://bioregistry.io/PBPKO:00558`: identifiers.org
-        does not register PBPKO, so pymetadata cannot parse a
-        `pbpko/PBPKO:00558` (it logs a MIRIAM error and writes an
-        identifiers.org url which does not resolve); the bioregistry url is
-        written as given and resolves.
+        The url which resolves the term (`OntologyTerm.url`),
+        `https://bioregistry.io/PBPKO:00558`: identifiers.org does not
+        register PBPKO, so the url is the one of bioregistry.io.
 
     Raises:
         AttributeError: if PBPKO has no term of the name.
     """
-    term = getattr(PBPKO, name)
-    return f"{PBPKO_URL}{term.curie}"
+    return getattr(PBPKO, name).url
 
 
 def _has(name: str) -> bool:
@@ -1531,7 +1527,7 @@ def annotate[S: Sbase](
         terms.append((BQB.IS, pbpko(term)))
     terms += k.terms
     if substance is not None:
-        terms += [(q, str(r)) for q, r in substance.annotations]
+        terms += substance.annotations
     where = BQB.IS if k.is_place else _location(element)
     places = [p for p in (place, POOLS.get(pool) if pool else None) if p is not None]
     if segment is not None:
