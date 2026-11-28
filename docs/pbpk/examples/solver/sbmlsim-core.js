@@ -1,4 +1,4 @@
-// sbmlsim-core 0.39.0, the inline build of its JavaScript host (js/inline.mjs, js/build.mjs).
+// sbmlsim-core 0.42.0, the inline build of its JavaScript host (js/inline.mjs, js/build.mjs).
 // Generated, do not edit. MIT AND BSD-3-Clause AND LGPL-2.1-or-later, see LICENSE and THIRD_PARTY.md.
 var sbmlsimCore = (() => {
   var __defProp = Object.defineProperty;
@@ -1000,7 +1000,7 @@ var sbmlsimCore = (() => {
   }
 
   // panels.mjs
-  var CORE_VERSION = "0.39.0";
+  var CORE_VERSION = "0.42.0";
   var ENGINE = `sbmlsim-core ${CORE_VERSION}`;
   var BUNDLE_CONTRACT = "panelbundle/1";
   var PANEL_CONTRACT = "panel/1";
@@ -2886,7 +2886,46 @@ var sbmlsimCore = (() => {
       if (!parameterJacobian && typeof this.exports.compile_with_options !== "function") {
         throw new Error("compiler.wasm does not support parameterJacobian: false");
       }
-      const { allocate, compile, deallocate } = this.exports;
+      const { compile, compile_with_options } = this.exports;
+      const flag = optimize ? 1 : 0;
+      return this.run(
+        sbml,
+        (input, length, words) => parameterJacobian ? compile(input, length, flag, choice, words) : compile_with_options(input, length, flag, choice, 0, words)
+      );
+    }
+    /**
+     * Compiles an SBML Level 3 Version 2 document into a batched kernel (`kernel/1`, since
+     * 0.41.0): the model with its RODAS4 integrator in one module, which `kernel.mjs` instantiates
+     * and which advances many points (the cells of a tissue) per call. The bytes and the description are those of
+     * `sbmlsim-core compile --kernel`.
+     *
+     * @param {string} sbml the text of the document
+     * @returns {{wasm: Uint8Array, description: object}} `kernel.wasm` and `kernel.json`
+     * @throws {CompileError} for a document the compiler refuses, e.g. a model with events
+     */
+    compileKernel(sbml) {
+      if (typeof sbml !== "string") {
+        throw new TypeError("the document of a compilation is text");
+      }
+      const { compile_kernel } = this.exports;
+      if (typeof compile_kernel !== "function") {
+        throw new Error("compiler.wasm does not compile kernels");
+      }
+      return this.run(sbml, (input, length, words) => compile_kernel(input, length, words));
+    }
+    /**
+     * Runs a compilation of the module: the document into a buffer, `call(input, length, words)`
+     * of a function which writes its result to four words (the description or the message, and
+     * the module), the result out of the memory and every buffer freed.
+     *
+     * @param {string} sbml the text of the document
+     * @param {(input: number, length: number, words: number) => number} call the compilation,
+     *   1 for a document it compiled
+     * @returns {{wasm: Uint8Array, description: object}} the module and the description
+     * @throws {CompileError} for a document the compiler refuses
+     */
+    run(sbml, call) {
+      const { allocate, deallocate } = this.exports;
       const document_ = new TextEncoder().encode(sbml);
       const input = allocate(document_.length);
       const words = allocate(4 * 4);
@@ -2894,14 +2933,7 @@ var sbmlsimCore = (() => {
         if (document_.length > 0) {
           this.bytes().set(document_, input);
         }
-        const status = parameterJacobian ? compile(input, document_.length, optimize ? 1 : 0, choice, words) : this.exports.compile_with_options(
-          input,
-          document_.length,
-          optimize ? 1 : 0,
-          choice,
-          0,
-          words
-        );
+        const status = call(input, document_.length, words);
         const header = new Uint32Array(this.exports.memory.buffer, words, 4);
         const [textPointer, textLength, wasmPointer, wasmLength] = header;
         try {
@@ -3026,6 +3058,13 @@ var sbmlsimCore = (() => {
     "petab_requests",
     "petab_evaluate",
     "petab_close"
+  ];
+  var FIT_EXPORTS = [
+    "petab_fit_open",
+    "petab_fit_ask",
+    "petab_fit_tell",
+    "petab_fit_stop",
+    "petab_fit_close"
   ];
   var POOL_WINDOW = 256;
   var PetabError = class extends Error {
@@ -3212,25 +3251,7 @@ var sbmlsimCore = (() => {
       if (!Array.isArray(simulations) || simulations.length !== this.nSimulations) {
         throw new TypeError(`the problem has ${this.nSimulations} simulations`);
       }
-      let n = 0;
-      const results = simulations.map(({ result }) => {
-        if (result.error !== void 0) return { error: String(result.error) };
-        n += result.values.length;
-        return { columns: result.columns, n_rows: result.nRows };
-      });
-      const values = new Float64Array(n);
-      let at = 0;
-      for (const { result } of simulations) {
-        if (result.error === void 0) {
-          values.set(result.values, at);
-          at += result.values.length;
-        }
-      }
-      const bytes = new Uint8Array(values.buffer);
-      if (!LITTLE_ENDIAN2) {
-        const view = new DataView(values.buffer);
-        for (let k = 0; k < values.length; k += 1) view.setFloat64(8 * k, values[k], true);
-      }
+      const { results, bytes } = encodeResults(simulations.map(({ result }) => result));
       const input = new TextEncoder().encode(JSON.stringify({ x: point, results }));
       const answer = this.api.json("petab_evaluate", [this.handle], [input, bytes]);
       return {
@@ -3245,6 +3266,143 @@ var sbmlsimCore = (() => {
         simulationTable: answer.simulation_table
       };
     }
+    /**
+     * Fits the estimated parameters: the maximum likelihood estimate of a problem without priors,
+     * the maximum a posteriori estimate of one with, by the optimizers of `sbmlsim-fit` in
+     * `compiler.wasm` whose simulations the engine of the problem runs. A fit from the nominal
+     * values with the default settings is the fit of `sbmlsim-core petab --fit`.
+     *
+     * The jacobian of a step is the forward differences of the simulations (`k + 1` evaluations
+     * at once), as on the command line: the tables of `engine.wasm` carry no sensitivities.
+     *
+     * @param {object} [options]
+     * @param {number|ArrayLike<number>[]} [options.starts] the points the fits start from, the
+     *   values of the estimated parameters, or their number: the nominal values and points drawn
+     *   uniformly in the space the optimizer searches (`log10` of a parameter of positive bounds)
+     *   with `seed`; the nominal values alone without it
+     * @param {number} [options.seed] the seed of the drawn starts (0)
+     * @param {"trustRegion"|"levenbergMarquardt"|{differentialEvolution: object}} [options.algorithm]
+     *   the optimizer, trust region reflective by default; a differential evolution takes
+     *   `{ seed, population, f, cr, polish }`
+     * @param {number} [options.maxIterations] the iterations of a fit (100)
+     * @param {number} [options.gradientTolerance] the tolerance of the scaled gradient (`gtol`)
+     * @param {number} [options.stepTolerance] the relative tolerance of the step (`xtol`)
+     * @param {number} [options.costTolerance] the relative tolerance of the cost (`ftol`); each
+     *   of the three tolerances is (since 0.41.0) the relative tolerance of the integrator of the
+     *   problem, at least `1e-8`, when it is not given, so a fit stops at the noise of its
+     *   simulations (`RelativeCostTolerance`, `RelativeParamTolerance`) instead of chasing it
+     * @param {number} [options.maxSeconds] the time the fits may take, measured by the page,
+     *   after which they stop at the best point they reached
+     * @param {AbortSignal} [options.signal] stops the fits at their next step, with the best
+     *   point they reached
+     * @param {(step: {start: number, step: number, simulations: number, seconds: number}) => void} [options.onStep]
+     *   called after the simulations of every step of every fit
+     * @returns {Promise<{x: Float64Array, objective: number, cost: number, iterations: number,
+     *   evaluations: number, jacobians: number, status: string, simulations: number,
+     *   seconds: number, start: Float64Array, runs: object[]}>} the best fit, the one of the
+     *   lowest `objective` (the negative log posterior, the negative log-likelihood of a problem
+     *   without priors), and every fit as `runs`, in the order of the starts
+     */
+    async fit(options = {}) {
+      this.checkOpen();
+      const missing = FIT_EXPORTS.filter((name) => this.api.exports[name] === void 0);
+      if (missing.length > 0) {
+        throw new Error(
+          `compiler.wasm does not export ${missing.join(", ")}: it is built without the feature fit`
+        );
+      }
+      const { starts, seed = 0, maxSeconds, signal, onStep, ...rest } = options;
+      const settings = fitSettings(rest);
+      const points = this.starts(starts, seed);
+      const began = performance.now();
+      const fits = [];
+      try {
+        for (const start of points) {
+          const input = new TextEncoder().encode(JSON.stringify({ settings, start: Array.from(start) }));
+          fits.push({ start, ...this.api.json("petab_fit_open", [this.handle], [input]) });
+        }
+      } catch (error) {
+        for (const { fit } of fits) this.api.exports.petab_fit_close(fit);
+        throw error;
+      }
+      const stopAll = () => {
+        for (const { fit } of fits) this.api.exports.petab_fit_stop(fit);
+      };
+      if (maxSeconds !== void 0 && !(maxSeconds >= 0)) {
+        throw new TypeError("maxSeconds is a number of seconds");
+      }
+      let stopped = false;
+      const check = () => {
+        const late = maxSeconds !== void 0 && performance.now() - began >= 1e3 * maxSeconds;
+        if (!stopped && (signal?.aborted || late)) {
+          stopped = true;
+          for (const { fit } of fits) this.api.exports.petab_fit_stop(fit);
+        }
+      };
+      try {
+        const runs = await Promise.all(fits.map((fit, k) => this.run(fit, k, { began, onStep, check })));
+        const best = runs.reduce((a, b) => b.objective < a.objective || Number.isNaN(a.objective) ? b : a);
+        return { ...best, seconds: (performance.now() - began) / 1e3, runs };
+      } finally {
+        for (const { fit } of fits) this.api.exports.petab_fit_close(fit);
+      }
+    }
+    /** The starts of a fit: the points given, or the nominal values and drawn points. */
+    starts(starts, seed) {
+      if (starts === void 0) return [this.nominal];
+      if (typeof starts === "number") {
+        if (!Number.isInteger(starts) || starts < 1) throw new TypeError("starts is a number of starts or a list of points");
+        const random = splitmix(seed);
+        const points = [this.nominal];
+        for (let n = 1; n < starts; n += 1) {
+          points.push(
+            Float64Array.from(this.parameters, (id, k) => {
+              const [lower, upper] = [this.lower[k], this.upper[k]];
+              if (!Number.isFinite(lower) || !Number.isFinite(upper)) {
+                throw new PetabError(`the parameter ${id} has a bound which is not finite: give the starts of its fits`);
+              }
+              const u = random();
+              return lower > 0 ? 10 ** (Math.log10(lower) + u * (Math.log10(upper) - Math.log10(lower))) : lower + u * (upper - lower);
+            })
+          );
+        }
+        return points;
+      }
+      if (!Array.isArray(starts) || starts.length === 0) throw new TypeError("starts is a number of starts or a list of points");
+      return starts.map((start) => Float64Array.from(this.point(start)));
+    }
+    /** Runs one fit to its end: asks, simulates on the engine of the problem, tells. */
+    async run({ fit, offset, start }, k, { began, onStep, check }) {
+      let simulations = 0;
+      for (let step = 1; ; step += 1) {
+        this.checkOpen();
+        check();
+        const answer = this.api.json("petab_fit_ask", [fit], []);
+        if (answer.done !== void 0) {
+          const done = answer.done;
+          return {
+            x: numbers(done.x),
+            objective: number(done.objective),
+            cost: number(done.cost),
+            offset: number(offset),
+            iterations: done.iterations,
+            evaluations: done.evaluations,
+            jacobians: done.jacobians,
+            status: done.status,
+            simulations,
+            start: Float64Array.from(start)
+          };
+        }
+        const results = await this.engine.simulate(answer.simulate);
+        simulations += results.length;
+        const encoded = encodeResults(results);
+        const input = new TextEncoder().encode(JSON.stringify({ results: encoded.results }));
+        const { status, answers } = this.api.call("petab_fit_tell", [fit], [input, encoded.bytes], 2);
+        if (status !== 1) throw new PetabError(new TextDecoder().decode(answers[0]) || "petab_fit_tell failed");
+        onStep?.({ start: k, step, simulations, seconds: (performance.now() - began) / 1e3 });
+        await yieldToHost();
+      }
+    }
     /** Drops the problem, its plan in `compiler.wasm` and its models in the engine. */
     close() {
       if (this.closed) return;
@@ -3254,6 +3412,62 @@ var sbmlsimCore = (() => {
     }
   };
   var LITTLE_ENDIAN2 = new Uint8Array(new Float64Array([1]).buffer)[7] === 63;
+  function encodeResults(simulated) {
+    let n = 0;
+    const results = simulated.map((result) => {
+      if (result.error !== void 0) {
+        return result.kind === void 0 ? { error: String(result.error) } : { error: String(result.error), kind: result.kind };
+      }
+      n += result.values.length;
+      return { columns: result.columns, n_rows: result.nRows };
+    });
+    const values = new Float64Array(n);
+    let at = 0;
+    for (const result of simulated) {
+      if (result.error === void 0) {
+        values.set(result.values, at);
+        at += result.values.length;
+      }
+    }
+    const bytes = new Uint8Array(values.buffer);
+    if (!LITTLE_ENDIAN2) {
+      const view = new DataView(values.buffer);
+      for (let k = 0; k < values.length; k += 1) view.setFloat64(8 * k, values[k], true);
+    }
+    return { results, bytes };
+  }
+  function fitSettings({ algorithm, maxIterations, gradientTolerance, stepTolerance, costTolerance, ...rest }) {
+    const unknown = Object.keys(rest);
+    if (unknown.length > 0) throw new TypeError(`unknown options ${unknown.join(", ")}`);
+    const settings = {};
+    if (algorithm === "trustRegion") settings.algorithm = "trust_region";
+    else if (algorithm === "levenbergMarquardt") settings.algorithm = "levenberg_marquardt";
+    else if (algorithm?.differentialEvolution !== void 0) {
+      settings.algorithm = { differential_evolution: algorithm.differentialEvolution };
+    } else if (algorithm !== void 0) {
+      throw new TypeError("algorithm is trustRegion, levenbergMarquardt or { differentialEvolution }");
+    }
+    if (maxIterations !== void 0) settings.max_iterations = maxIterations;
+    if (gradientTolerance !== void 0) settings.gradient_tolerance = gradientTolerance;
+    if (stepTolerance !== void 0) settings.step_tolerance = stepTolerance;
+    if (costTolerance !== void 0) settings.cost_tolerance = costTolerance;
+    return settings;
+  }
+  function yieldToHost() {
+    if (typeof globalThis.scheduler?.yield === "function") return globalThis.scheduler.yield();
+    return new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  function splitmix(seed) {
+    let state = BigInt.asUintN(64, BigInt(seed));
+    return () => {
+      state = BigInt.asUintN(64, state + 0x9e3779b97f4a7c15n);
+      let z = state;
+      z = BigInt.asUintN(64, (z ^ z >> 30n) * 0xbf58476d1ce4e5b9n);
+      z = BigInt.asUintN(64, (z ^ z >> 27n) * 0x94d049bb133111ebn);
+      z ^= z >> 31n;
+      return Number(z >> 11n) / 2 ** 53;
+    };
+  }
   var RuntimeEngine = class {
     constructor(runtime, compiled) {
       this.runtime = runtime;
@@ -3279,7 +3493,7 @@ var sbmlsimCore = (() => {
           results.push(instance.simulate(request));
         } catch (error) {
           if (!isFailure(error)) throw error;
-          results.push({ error: error.message });
+          results.push({ error: error.message, kind: error.kind });
         }
       }
       return results;
@@ -3307,7 +3521,7 @@ var sbmlsimCore = (() => {
           return await this.pool.simulate(this.keys[model], request, { signal });
         } catch (error) {
           if (!isFailure(error)) throw error;
-          return { error: error.message };
+          return { error: error.message, kind: error.kind };
         }
       });
     }

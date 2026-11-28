@@ -8,8 +8,8 @@ does all of it, as `pkpdsim.pbpk.archive.create_archive` does for a PBPK
 model: it builds the definition, writes the schematic
 (`pkpdsim.perfusion.figure.circuit_figure`) and the organ in its circuit
 (`pkpdsim.perfusion.anatomy.circuit_anatomy_figure`), and the rest with the
-archive writer of sbmlsim, `sbmlsim.release.archive.write_archive`, which imports
-`sbmlode` and `pymetadata` when it writes. The model of a liver is composed of
+archive writer of sbmlsim, `sbmlsim.release.archive.write_archive`, which writes
+the ODEs with `sbmlsim_core.OdeSystem` and the archive with `pymetadata`. The model of a liver is composed of
 the cell model of its zones, so the archive ships the three SBML files the
 build writes: the comp model, the cell model, which stays loadable alone (it is
 the model a mesh or another architecture couples to), and the flat model, the
@@ -55,7 +55,7 @@ def create_archive(
     schematic of the circuit there (`<sid>.svg`, panel B), the anatomical
     figure of the organ in its circuit (`<sid>_anatomy.svg`, panel A), the
     ODEs of the flat model as markdown (`<sid>.md`, `<sid>_flat.md` for a liver,
-    `sbmlode`) and its antimony (`<sid>.ant`, `<sid>_flat.ant`), the texts of CC BY-SA 4.0 and MIT (with the copyright)
+    `sbmlsim_core.OdeSystem`) and its antimony (`<sid>.ant`, `<sid>_flat.ant`), the texts of CC BY-SA 4.0 and MIT (with the copyright)
     into the parent of the directory and the archive `<model>_model.omex`
     there, with the README, the licenses, every model the build writes (the
     flat model the master entry, and for a liver the comp model and the cell

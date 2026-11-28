@@ -34,7 +34,11 @@ SuiteSparse_config states its license in the header of `third_party/SuiteSparse/
 The portable equation generator (`compiler.wasm` and the native extension) also links
 MiniJinja and minijinja-contrib (Apache-2.0), roxmltree (MIT OR Apache-2.0),
 indexmap and regex (MIT OR Apache-2.0), sha1 and its digest dependencies
-(MIT OR Apache-2.0), and their permissive dependencies. The lossless document
+(MIT OR Apache-2.0), and their permissive dependencies. The fit of a PEtab problem in
+`compiler.wasm` (the feature `fit` of `sbmlsim-wasm`) links basin, rand, rand_core,
+rand_chacha, rand_distr, ppv-lite86, num-traits and bitflags (MIT OR Apache-2.0), zerocopy
+(BSD-2-Clause OR Apache-2.0 OR MIT) and pkpdutils-core with pkpdutils-abi and
+pkpdutils-units (MIT, Matthias König), whose MIT option is used. The lossless document
 model, reader, equation analysis and source templates moved from sbml4humans-core
 and sbmlode (MIT, Matthias König). The historical generated files in `testdata/ode`
 are migration oracles, not runtime dependencies.
