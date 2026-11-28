@@ -99,7 +99,7 @@ Continue with [Installation](installation.md) and the [tutorial](pbpk/tutorial.m
 
 If you use `pkpdsim` please cite the archived software on [Zenodo](https://doi.org/10.5281/zenodo.23297325):
 
-> König, M. (2026). *pkpdsim: building blocks of physiologically based pharmacokinetic and pharmacodynamic models in SBML* (Version 0.41.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.24557395
+> König, M. (2026). *pkpdsim: building blocks of physiologically based pharmacokinetic and pharmacodynamic models in SBML* (Version 0.45.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.24626402
 
 ## License
 

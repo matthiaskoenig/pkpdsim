@@ -100,7 +100,7 @@ The [tutorial](https://matthiaskoenig.github.io/pkpdsim/pbpk/tutorial/) builds s
 
 If you use `pkpdsim` please cite the archived software on [Zenodo](https://doi.org/10.5281/zenodo.23297325):
 
-> König, M. (2026). *pkpdsim: building blocks of physiologically based pharmacokinetic and pharmacodynamic models in SBML* (Version 0.41.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.24557395
+> König, M. (2026). *pkpdsim: building blocks of physiologically based pharmacokinetic and pharmacodynamic models in SBML* (Version 0.45.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.24626402
 
 ```bibtex
 @software{konig_pkpdsim,
@@ -108,16 +108,16 @@ If you use `pkpdsim` please cite the archived software on [Zenodo](https://doi.o
   title     = {pkpdsim: building blocks of physiologically based pharmacokinetic and pharmacodynamic models in SBML},
   year      = {2026},
   month     = nov,
-  version   = {0.41.0},
+  version   = {0.45.0},
   publisher = {Zenodo},
-  doi       = {10.5281/zenodo.24557395},
-  url       = {https://doi.org/10.5281/zenodo.24557395},
+  doi       = {10.5281/zenodo.24626402},
+  url       = {https://doi.org/10.5281/zenodo.24626402},
 }
 ```
 
 ## Installation
 
-`pkpdsim` requires python >= 3.14, simulates with sbmlsim 0.38 (`sbmlsim>=0.38.0`, installed with it) and is available from [pypi](https://pypi.org/project/pkpdsim/). sbmlsim needs a build of the `develop` branch of libroadrunner, which the package index [roadrunner-wheels](https://github.com/matthiaskoenig/roadrunner-wheels) serves, see [Installation](https://matthiaskoenig.github.io/pkpdsim/installation/):
+`pkpdsim` requires python >= 3.14, simulates with sbmlsim 0.54 (`sbmlsim>=0.54.0`, installed with it) and is available from [pypi](https://pypi.org/project/pkpdsim/). sbmlsim needs a build of the `develop` branch of libroadrunner, which the package index [roadrunner-wheels](https://github.com/matthiaskoenig/roadrunner-wheels) serves, see [Installation](https://matthiaskoenig.github.io/pkpdsim/installation/):
 
 ```bash
 uv add pkpdsim
